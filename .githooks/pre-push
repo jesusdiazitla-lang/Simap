@@ -29,7 +29,7 @@ export PYTHONIOENCODING=utf-8 PYTHONUTF8=1
 remote="$1"
 pushing_main=0
 zero=0000000000000000000000000000000000000000
-range=""
+range=""; base_sha=""; head_sha=""
 
 # stdin: <local ref> <local sha> <remote ref> <remote sha>
 while read -r local_ref local_sha remote_ref remote_sha; do
@@ -40,6 +40,7 @@ while read -r local_ref local_sha remote_ref remote_sha; do
         range=""                      # primera subida: no hay rango que comparar
       else
         range="$remote_sha..$local_sha"
+        base_sha="$remote_sha"; head_sha="$local_sha"
       fi
       ;;
   esac
@@ -74,7 +75,15 @@ echo "-- [5/5] documentación actualizada junto al código"
 if [ -n "$range" ]; then
   changed="$(git diff --name-only "$range" 2>/dev/null || git show --pretty=format: --name-only "$range")"
   code_changed=$(printf '%s\n' "$changed" | grep -E '^(backend|frontend)/' | grep -vE '(^|/)(node_modules|\.next)/' | head -1 || true)
-  docs_changed=$(printf '%s\n' "$changed" | grep -E '^(README\.md|README_USER\.md|MANUAL_USUARIO\.md)$' | head -1 || true)
+  docs_changed=$(printf '%s\n' "$changed" | grep -E '^(README_USER\.md|MANUAL_USUARIO\.md)$' | head -1 || true)
+  # README.md solo cuenta si cambió FUERA de la sección auto-generada:
+  # lo que regenera `graph.py docs` no es documentación escrita por una persona.
+  if [ -z "$docs_changed" ] && printf '%s\n' "$changed" | grep -qx 'README.md'; then
+    strip='/<!-- graph:auto:start -->/,/<!-- graph:auto:end -->/d'
+    before="$(git show "$base_sha:README.md" 2>/dev/null | sed "$strip")"
+    after="$(git show "$head_sha:README.md" 2>/dev/null | sed "$strip")"
+    [ "$before" != "$after" ] && docs_changed="README.md"
+  fi
   if [ -n "$code_changed" ] && [ -z "$docs_changed" ]; then
     echo ""
     echo "!! Los commits modifican código ($code_changed ...) pero ninguno actualiza la documentación."

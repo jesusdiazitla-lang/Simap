@@ -123,7 +123,7 @@ npm run lint ; npm run graph:check
 <!-- graph:auto:start -->
 _Sección generada por `python tools/graph/graph.py docs`. No editar a mano; se sobrescribe en cada push a `main`._
 
-Última actualización: 2026-09-17 12:02 UTC
+Última actualización: 2026-09-17 12:08 UTC
 
 ### Estado del proyecto
 
