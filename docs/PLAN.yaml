@@ -1,30 +1,117 @@
-# Plan de trabajo de SIMAP.
+# Plan de trabajo de SIMAP — derivado de docs/contexto/03-requerimientos-casos-de-uso.md (sección 5).
 # `python tools/graph/graph.py status` lee este archivo y reporta el avance.
 #
-# status: pending | in_progress | done
-# modules: (opcional) ids del grafo; si todos existen y no son stubs,
-#          la tarea se marca "done (auto)" sin tocar este archivo.
+# status:  pending | in_progress | done
+# modules: ids del grafo (backend "app.x.y", frontend "src/x/y.tsx"). Si todos existen y no son
+#          stubs, la tarea se marca "done (auto)". Los nombres son la convención acordada: al
+#          crear el módulo úsalos tal cual para que el plan se actualice solo.
+# rf:      requerimientos que cubre (trazabilidad con el documento de requerimientos).
+
 milestones:
-  - name: "M0 - Infraestructura del proyecto"
+  - name: "F0 - Infraestructura del repositorio"
     tasks:
-      - name: "Repositorio, .gitignore y estructura de carpetas"
+      - name: "Repositorio, .gitignore, estructura backend/frontend"
         status: done
-      - name: "Backend FastAPI base con endpoint /health"
-        modules: [app.main, app.api.v1.routes.health, app.schemas.health]
-      - name: "Frontend Next.js base"
-        modules: [src/app/layout.tsx, src/app/page.tsx]
       - name: "Herramienta de grafo de dependencias (tools/graph)"
         status: done
       - name: "Hook pre-push + GitHub Action de documentación"
         status: done
       - name: "Documentación inicial (README, README_USER, MANUAL_USUARIO)"
         status: done
+      - name: "Documentos de contexto transcritos en docs/contexto y DDL en backend/db"
+        status: done
 
-  - name: "M1 - Dominio SIMAP (pendiente de definir con los documentos de contexto)"
+  - name: "F1 - Fundamentos: auth, multi-tenant y RLS (semanas 1-2)"
+    rf: [RF-01, RF-02, RF-03, RNF-01, RNF-07, RNF-08]
+    done_when: "Un usuario se registra e inicia sesión; el sistema deniega datos de otra empresa incluso por API directa."
     tasks:
-      - name: "Definir entidades y modelos de datos"
+      - name: "Dependencias del stack (SQLAlchemy async, asyncpg, Alembic, python-jose, argon2, redis, scipy, APScheduler, qrcode)"
+        status: done
+      - name: "docker-compose con postgres:16 y redis:7; Dockerfile del backend"
+        status: done
+      - name: "Sesión async de SQLAlchemy y dependencia get_db que fija app.empresa_id desde el JWT"
+        modules: [app.db.session, app.db.deps]
+      - name: "Modelos Empresa y Usuario + migración inicial Alembic (schema.sql + rls_policies.sql)"
+        modules: [app.models.empresa, app.models.usuario]
+      - name: "Registro e inicio de sesión: Argon2id, JWT 30 min + refresh token"
+        modules: [app.core.security, app.services.auth, app.api.v1.routes.auth, app.schemas.auth]
+      - name: "RBAC: dependencia require_roles verificada en cada endpoint"
+        modules: [app.core.rbac]
+      - name: "Test automatizado de aislamiento entre tenants (RNF-01)"
         status: pending
-      - name: "Definir endpoints de la API v1"
+      - name: "Frontend: login, cliente API con JWT, navegación básica por rol, base PWA"
+        modules: [src/app/login/page.tsx, src/lib/api.ts, src/lib/auth.ts]
+      - name: "CI: pytest + lint + pip-audit/npm audit en cada push"
         status: pending
-      - name: "Definir pantallas del frontend"
+
+  - name: "F2 - Activos y registro de campo (semanas 3-6)"
+    rf: [RF-04, RF-05, RF-06, RF-07, RF-08, RF-09, RF-10, RNF-03, RNF-05]
+    done_when: "Un operario escanea el QR y registra horómetro o alerta; el reporte llega aunque se hiciera offline."
+    tasks:
+      - name: "CRUD de activos con ficha técnica, ubicación y criticidad; baja lógica"
+        modules: [app.models.activo, app.schemas.activo, app.services.activos, app.api.v1.routes.activos]
+      - name: "Generación de QR único + código corto de respaldo al crear el activo"
+        modules: [app.services.qr]
+      - name: "Catálogo de componentes editable por el administrador"
+        modules: [app.models.componente, app.services.componentes, app.api.v1.routes.componentes]
+      - name: "Lecturas de horómetro"
+        modules: [app.models.lectura_horometro, app.services.lecturas, app.api.v1.routes.lecturas]
+      - name: "Alertas de campo (síntoma + nota) con estados"
+        modules: [app.models.alerta, app.services.alertas, app.api.v1.routes.alertas]
+      - name: "Frontend: escáner QR (html5-qrcode) y vista móvil del activo con acciones por rol"
+        modules: ["src/app/qr/[codigo]/page.tsx", src/components/EscanerQR.tsx]
+      - name: "Frontend: formularios de horómetro y alerta (react-hook-form + zod), máx. 3 pasos"
+        modules: [src/components/FormularioHorometro.tsx, src/components/FormularioAlerta.tsx]
+      - name: "Frontend: PWA offline con cola local y sincronización automática"
+        modules: [src/lib/offline-queue.ts]
+
+  - name: "F3 - Órdenes de trabajo (semanas 7-8)"
+    rf: [RF-11, RF-12, RF-13, RF-14, RF-15, RF-16, RNF-06]
+    done_when: "Una falla sigue su ciclo completo hasta cerrarse, con cada responsable visible en el historial."
+    tasks:
+      - name: "Reporte de falla del supervisor → crea orden en 'reportada' y actualiza el activo"
+        modules: [app.models.orden_trabajo, app.schemas.orden_trabajo, app.services.ordenes, app.api.v1.routes.ordenes]
+      - name: "Máquina de estados reportada→en_taller→reparada→cerrada con transiciones por rol"
+        modules: [app.services.ordenes_estados]
+      - name: "Trazabilidad reportado_por / reparado_por / autorizado_por y tiempo fuera de servicio"
+        status: pending
+      - name: "Vincular alerta previa a la orden (alerta_origen_id) y pre-llenar el formulario"
+        status: pending
+      - name: "Frontend: formulario de falla, detalle de orden y cambio de estado"
+        modules: [src/app/ordenes/page.tsx, "src/app/ordenes/[id]/page.tsx", src/components/FormularioFalla.tsx]
+
+  - name: "F4 - Predicción e inventario (semanas 9-12)"
+    rf: [RF-17, RF-18, RF-19, RF-20, RF-21, RF-22, RF-23, RF-24, RF-25, RF-26]
+    done_when: "Al cerrar una orden real el modelo se reajusta; un activo con fallas frecuentes muestra riesgo visiblemente mayor."
+    tasks:
+      - name: "Ajuste de Weibull por componente (scipy.stats.weibull_min.fit) sobre órdenes cerradas"
+        modules: [app.services.prediccion.weibull]
+      - name: "Riesgo condicional por activo 1 − R(T+Δt)/R(T), disparado por cada lectura de horómetro"
+        modules: [app.services.prediccion.riesgo]
+      - name: "Multiplicador por alertas recientes (≥2 en 15 días → ×1.30)"
+        status: pending
+      - name: "Alerta automática del sistema al superar RISK_THRESHOLD"
+        status: pending
+      - name: "Tarea diaria APScheduler: recalcular riesgo y reajustar β, η"
+        modules: [app.jobs.recalculo_riesgo]
+      - name: "Carga inicial con dataset público/simulado marcado como 'estimado'"
+        status: pending
+      - name: "CRUD de repuestos y detalle orden_repuesto; descuento de stock al cerrar; alerta de reorden"
+        modules: [app.models.repuesto, app.services.inventario, app.api.v1.routes.repuestos]
+      - name: "Frontend: inventario y riesgo visible en la ficha del activo"
+        modules: [src/app/inventario/page.tsx]
+
+  - name: "F5 - Dashboard y cierre (semanas 13-16)"
+    rf: [RF-27, RF-28, RNF-01, RNF-02, RNF-04]
+    done_when: "Los tres paneles muestran datos reales; las pruebas de aislamiento entre tenants pasan sin excepción."
+    tasks:
+      - name: "Endpoints de indicadores: disponibilidad, MTBF, costo de repuestos, activos de mayor riesgo"
+        modules: [app.services.indicadores, app.api.v1.routes.dashboard]
+      - name: "Frontend: panel de operario, supervisor y gerente según rol"
+        modules: [src/app/dashboard/page.tsx]
+      - name: "Auditoría de aislamiento entre tenants automatizada + pruebas e2e (Playwright) de flujos críticos"
+        status: pending
+      - name: "Checklist OWASP Top 10 y verificación de secretos"
+        status: pending
+      - name: "Documentación técnica y manual de usuario finales"
         status: pending

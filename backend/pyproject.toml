@@ -23,6 +23,7 @@ plugins = ["pydantic.mypy"]
 # ---------------------------------------------------------------------------
 # Reglas de arquitectura (import-linter). Se validan con `lint-imports`.
 # Las capas se listan de MAS ALTA a MAS BAJA: una capa solo puede importar
+# ('a | b' = capas hermanas del mismo nivel, independientes entre si).
 # de las que estan por debajo. Asi el grafo se mantiene aciclico y legible.
 # ---------------------------------------------------------------------------
 [tool.importlinter]
@@ -33,7 +34,7 @@ name = "Capas del backend"
 type = "layers"
 layers = [
     "app.main",
-    "app.api",
+    "app.api | app.jobs",
     "app.services",
     "app.db",
     "app.models",

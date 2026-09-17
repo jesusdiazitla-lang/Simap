@@ -420,6 +420,10 @@ def cmd_status(nodes: dict[str, Node]) -> None:
         done += ms_done
         pct = int(100 * ms_done / len(tasks)) if tasks else 0
         print(f"\n  {ms['name']}  ({ms_done}/{len(tasks)}, {pct}%)")
+        if ms.get("rf"):
+            print(f"    cubre: {', '.join(ms['rf'])}")
+        if ms.get("done_when"):
+            print(f"    hecho cuando: {ms['done_when']}")
         print("\n".join(lines))
     if total:
         print(f"\nAVANCE GLOBAL: {done}/{total} tareas ({int(100 * done / total)}%)")

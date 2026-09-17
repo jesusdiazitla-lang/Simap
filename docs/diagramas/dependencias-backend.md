@@ -21,6 +21,9 @@ graph LR
   subgraph db[db]
     app_db["db"]
   end
+  subgraph jobs[jobs]
+    app_jobs["jobs"]
+  end
   subgraph main[main]
     app_main["main"]
   end

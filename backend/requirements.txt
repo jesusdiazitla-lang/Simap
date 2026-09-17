@@ -1,6 +1,26 @@
 # Dependencias de ejecucion del backend SIMAP
+# (stack definido en docs/contexto/02-arquitectura.md, seccion 2.1)
 fastapi==0.115.6
 uvicorn[standard]==0.34.0
 pydantic==2.10.4
 pydantic-settings==2.7.0
 python-dotenv==1.0.1
+
+# Base de datos: SQLAlchemy 2.0 async + asyncpg + migraciones
+sqlalchemy[asyncio]==2.0.36
+asyncpg==0.30.0
+alembic==1.14.0
+
+# Seguridad: JWT y hash de contrasenas Argon2id
+python-jose[cryptography]==3.3.0
+argon2-cffi==23.1.0
+
+# Codigo QR por activo
+qrcode[pil]==8.0
+
+# Motor de prediccion (ajuste de Weibull) y tarea diaria de recalculo
+scipy==1.14.1
+apscheduler==3.11.0
+
+# Cache y sesiones
+redis==5.2.1
