@@ -121,9 +121,16 @@ TypeScript (dependency-cruiser) en `.graph/graph.json` y permite consultarlo:
 | `... status` | Métricas del código + avance de `docs/PLAN.yaml` |
 | `... check` | import-linter + dependency-cruiser + ciclos (usado por hook y CI) |
 | `... docs` | Reescribe la sección auto-generada de este README |
+| `... view` | Genera `.graph/graph.html` (visor interactivo: colores por capa, buscar, clic para ver deps/rdeps) y lo abre en el navegador. `--no-open` solo genera |
 
 `<mod>` acepta ids completos (`app.services.foo`, `src/lib/api.ts`) o un
 fragmento único (`services.foo`, `lib/api`).
+
+### Ver el grafo visualmente
+
+- **Interactivo:** `python tools/graph/graph.py view` (plantilla en `tools/graph/viewer.html`; vis-network desde CDN).
+- **Mermaid:** `docs/diagramas/*.md`, renderizado por GitHub y por VS Code con la extensión *Markdown Preview Mermaid Support*.
+- **SVG del frontend:** `cd frontend && npm run graph:svg` (requiere Graphviz en el PATH).
 
 ### Reglas de arquitectura
 

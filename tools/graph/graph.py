@@ -19,6 +19,7 @@ Uso (desde la raíz del repo, con el venv activo):
   python tools/graph/graph.py status             # avance del proyecto (plan + métricas del código)
   python tools/graph/graph.py check              # valida reglas de arquitectura (usado por hooks/CI)
   python tools/graph/graph.py docs               # refresca las secciones auto-generadas del README.md
+  python tools/graph/graph.py view               # abre un visor interactivo del grafo en el navegador
 
 <modulo> acepta identificadores completos ("app.services.foo", "src/lib/api.ts")
 o un fragmento único ("services.foo", "lib/api").
@@ -541,6 +542,28 @@ def cmd_docs(nodes: dict[str, Node]) -> int:
 
 
 # --------------------------------------------------------------------------- #
+# Visor interactivo (HTML autocontenido con vis-network)
+# --------------------------------------------------------------------------- #
+VIEWER_TEMPLATE = Path(__file__).with_name("viewer.html")
+VIEWER_OUT = GRAPH_DIR / "graph.html"
+
+
+def cmd_view(open_browser: bool = True) -> None:
+    """Inyecta .graph/graph.json en la plantilla y abre el resultado en el navegador."""
+    if not GRAPH_FILE.exists():
+        build()
+    template = VIEWER_TEMPLATE.read_text(encoding="utf-8")
+    data = GRAPH_FILE.read_text(encoding="utf-8")
+    html = template.replace("/*__GRAPH_JSON__*/{}", data, 1)
+    VIEWER_OUT.write_text(html, encoding="utf-8")
+    print(f"> Visor escrito en {VIEWER_OUT.relative_to(ROOT)}")
+    if open_browser:
+        import webbrowser
+
+        webbrowser.open(VIEWER_OUT.resolve().as_uri())
+
+
+# --------------------------------------------------------------------------- #
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -552,6 +575,7 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("status")
     sub.add_parser("check")
     sub.add_parser("docs")
+    sub.add_parser("view").add_argument("--no-open", action="store_true", help="solo generar el HTML")
     a = ap.parse_args(argv)
 
     if a.cmd == "build":
@@ -561,6 +585,9 @@ def main(argv: list[str] | None = None) -> int:
         if not GRAPH_FILE.exists():
             build()
         return cmd_check()
+    if a.cmd == "view":
+        cmd_view(open_browser=not a.no_open)
+        return 0
 
     nodes = load()
     if a.cmd == "deps":

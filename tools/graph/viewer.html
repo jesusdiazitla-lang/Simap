@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Grafo SIMAP</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="https://unpkg.com/vis-network@9.1.9/standalone/umd/vis-network.min.js"></script>
+<style>
+  :root {
+    --bg: #f6f7f9; --panel: #ffffff; --text: #1f2933; --muted: #6b7280; --border: #e5e7eb;
+    --accent: #2563eb; --edge: #b6bcc6; --edge-in: #16a34a; --edge-out: #dc2626;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0f1419; --panel: #161c24; --text: #e6e8eb; --muted: #9aa3ad; --border: #2a323d;
+      --accent: #60a5fa; --edge: #3d4652; --edge-in: #4ade80; --edge-out: #f87171;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.45 system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background: var(--bg); color: var(--text); height: 100vh; display: grid; grid-template-rows: auto 1fr; }
+  header { display: flex; gap: 12px; align-items: center; padding: 10px 16px; background: var(--panel); border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+  header h1 { font-size: 16px; margin: 0 8px 0 0; }
+  header .meta { color: var(--muted); font-size: 12px; }
+  input[type=search] { padding: 6px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--text); min-width: 220px; }
+  label.chk { display: inline-flex; gap: 6px; align-items: center; color: var(--muted); font-size: 13px; cursor: pointer; }
+  button { padding: 6px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--text); cursor: pointer; }
+  button:hover { border-color: var(--accent); }
+  main { display: grid; grid-template-columns: 1fr 340px; min-height: 0; }
+  #net { min-height: 0; }
+  aside { border-left: 1px solid var(--border); background: var(--panel); padding: 14px 16px; overflow: auto; }
+  aside h2 { font-size: 15px; margin: 0 0 4px; word-break: break-all; }
+  aside .path { color: var(--muted); font-size: 12px; margin-bottom: 10px; word-break: break-all; }
+  aside h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 14px 0 6px; }
+  aside ul { list-style: none; padding: 0; margin: 0; }
+  aside li { padding: 3px 0; cursor: pointer; word-break: break-all; }
+  aside li:hover { color: var(--accent); }
+  .badge { display: inline-block; padding: 1px 7px; border-radius: 999px; font-size: 11px; border: 1px solid var(--border); margin-right: 4px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 6px 12px; margin-top: 10px; font-size: 12px; color: var(--muted); }
+  .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
+  .hint { color: var(--muted); font-size: 12px; }
+  @media (max-width: 800px) { main { grid-template-columns: 1fr; grid-template-rows: 1fr 40vh; } aside { border-left: 0; border-top: 1px solid var(--border); } }
+</style>
+</head>
+<body>
+<header>
+  <h1>Grafo de dependencias · SIMAP</h1>
+  <input id="q" type="search" placeholder="Buscar módulo… (Enter)">
+  <label class="chk"><input id="py" type="checkbox" checked> backend</label>
+  <label class="chk"><input id="ts" type="checkbox" checked> frontend</label>
+  <label class="chk"><input id="init" type="checkbox"> mostrar __init__</label>
+  <button id="fit">Ajustar</button>
+  <span class="meta" id="meta"></span>
+</header>
+<main>
+  <div id="net"></div>
+  <aside id="side">
+    <h2>Haz clic en un módulo</h2>
+    <p class="hint">Verde = lo importan (quién depende de él, <b>rdeps</b>). Rojo = lo que importa (<b>deps</b>).
+    Doble clic centra el nodo. Arrastra para reorganizar.</p>
+    <div class="legend" id="legend"></div>
+  </aside>
+</main>
+<script>
+const DATA = /*__GRAPH_JSON__*/{};
+const PALETTE = {
+  main:'#7c3aed', api:'#2563eb', jobs:'#0891b2', services:'#059669', db:'#d97706', models:'#b45309',
+  schemas:'#0ea5e9', core:'#6b7280', app:'#2563eb', components:'#059669', lib:'#d97706', hooks:'#0891b2',
+};
+const colorFor = layer => PALETTE[layer] || '#9ca3af';
+
+const all = Object.values(DATA.nodes);
+document.getElementById('meta').textContent =
+  `${all.length} módulos · generado ${DATA.generated_at?.replace('T',' ').slice(0,16)} UTC`;
+
+const legend = document.getElementById('legend');
+[...new Set(all.map(n => n.layer))].sort().forEach(l => {
+  legend.insertAdjacentHTML('beforeend', `<span><i style="background:${colorFor(l)}"></i>${l}</span>`);
+});
+
+const nodes = new vis.DataSet(), edges = new vis.DataSet();
+function rebuild() {
+  const showPy = document.getElementById('py').checked, showTs = document.getElementById('ts').checked;
+  const showInit = document.getElementById('init').checked;
+  const visible = all.filter(n =>
+    (n.lang === 'python' ? showPy : showTs) && (showInit || !n.path.endsWith('__init__.py')));
+  const ids = new Set(visible.map(n => n.id));
+  nodes.clear(); edges.clear();
+  nodes.add(visible.map(n => ({
+    id: n.id,
+    label: n.lang === 'python' ? n.id.replace(/^app\./, '') : n.id.replace(/^src\//, ''),
+    title: `${n.id}\n${n.path}\nLOC ${n.loc} · importa ${n.imports.length} · importado por ${n.imported_by.length}`,
+    shape: n.lang === 'python' ? 'box' : 'ellipse',
+    color: { background: colorFor(n.layer), border: n.is_stub ? '#ef4444' : colorFor(n.layer) },
+    borderWidth: n.is_stub ? 3 : 1,
+    font: { color: '#fff', size: 13 },
+    group: n.lang,
+    value: 1 + n.imported_by.length,
+  })));
+  for (const n of visible) for (const d of n.imports) if (ids.has(d))
+    edges.add({ id: `${n.id}->${d}`, from: n.id, to: d, arrows: 'to', color: { color: cssVar('--edge') }, width: 1 });
+  network.stabilize();
+}
+const cssVar = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+
+const network = new vis.Network(document.getElementById('net'), { nodes, edges }, {
+  physics: { solver: 'forceAtlas2Based', forceAtlas2Based: { gravitationalConstant: -60, springLength: 120 }, stabilization: { iterations: 200 } },
+  interaction: { hover: true, tooltipDelay: 150 },
+  nodes: { scaling: { min: 14, max: 34 }, margin: 8 },
+  edges: { smooth: { type: 'continuous' } },
+});
+
+function select(id) {
+  const n = DATA.nodes[id]; if (!n) return;
+  edges.forEach(e => edges.update({ id: e.id, color: { color: cssVar('--edge') }, width: 1 }));
+  for (const d of n.imports) if (edges.get(`${id}->${d}`)) edges.update({ id: `${id}->${d}`, color: { color: cssVar('--edge-out') }, width: 3 });
+  for (const r of n.imported_by) if (edges.get(`${r}->${id}`)) edges.update({ id: `${r}->${id}`, color: { color: cssVar('--edge-in') }, width: 3 });
+  network.selectNodes([id]);
+  const li = arr => arr.length ? arr.map(x => `<li data-id="${x}">${x}</li>`).join('') : '<li class="hint">—</li>';
+  document.getElementById('side').innerHTML = `
+    <h2>${n.id}</h2><div class="path">${n.path}</div>
+    <span class="badge">${n.lang}</span><span class="badge">capa: ${n.layer}</span><span class="badge">LOC ${n.loc}</span>
+    ${n.has_test ? '<span class="badge">✅ test</span>' : ''}${n.is_stub ? '<span class="badge" style="border-color:#ef4444">stub</span>' : ''}
+    ${n.todos ? `<span class="badge">TODO ×${n.todos}</span>` : ''}
+    <h3 style="color:var(--edge-in)">Importado por (${n.imported_by.length}) — impacto si cambia</h3><ul>${li(n.imported_by)}</ul>
+    <h3 style="color:var(--edge-out)">Importa (${n.imports.length})</h3><ul>${li(n.imports)}</ul>`;
+  document.querySelectorAll('#side li[data-id]').forEach(el => el.onclick = () => { select(el.dataset.id); network.focus(el.dataset.id, { scale: 1.2, animation: true }); });
+}
+network.on('click', p => { if (p.nodes.length) select(p.nodes[0]); });
+network.on('doubleClick', p => { if (p.nodes.length) network.focus(p.nodes[0], { scale: 1.4, animation: true }); });
+document.getElementById('fit').onclick = () => network.fit({ animation: true });
+document.getElementById('q').addEventListener('keydown', e => {
+  if (e.key !== 'Enter') return;
+  const q = e.target.value.trim().toLowerCase(); if (!q) return;
+  const hit = all.find(n => n.id.toLowerCase().includes(q));
+  if (hit) { select(hit.id); network.focus(hit.id, { scale: 1.4, animation: true }); }
+});
+['py', 'ts', 'init'].forEach(id => document.getElementById(id).onchange = rebuild);
+rebuild();
+</script>
+</body>
+</html>
