@@ -1,0 +1,87 @@
+#!/bin/sh
+# ---------------------------------------------------------------------------
+# pre-push de SIMAP
+#
+# Solo actúa cuando se sube a la rama principal. Entonces:
+#   1. regenera el grafo y los diagramas          (graph.py build)
+#   2. valida reglas de arquitectura y ciclos     (graph.py check)
+#   3. ejecuta los tests del backend              (pytest)
+#   4. refresca la sección auto-generada del README (graph.py docs)
+#      -> si cambia, aborta para que se commitee
+#   5. exige que, si los commits tocan código, también toquen la documentación
+#      (README.md, README_USER.md o MANUAL_USUARIO.md)
+#
+# Instalación: git config core.hooksPath .githooks   (lo hace tools/setup.*)
+# Saltar en emergencia: git push --no-verify
+# ---------------------------------------------------------------------------
+set -e
+
+MAIN_BRANCH="main"
+ROOT="$(git rev-parse --show-toplevel)"
+cd "$ROOT"
+
+# Localizar el intérprete del venv (Windows o POSIX)
+if [ -x "$ROOT/.venv/Scripts/python.exe" ]; then PY="$ROOT/.venv/Scripts/python.exe";
+elif [ -x "$ROOT/.venv/bin/python" ]; then PY="$ROOT/.venv/bin/python";
+else PY="python"; fi
+export PYTHONIOENCODING=utf-8 PYTHONUTF8=1
+
+remote="$1"
+pushing_main=0
+zero=0000000000000000000000000000000000000000
+range=""
+
+# stdin: <local ref> <local sha> <remote ref> <remote sha>
+while read -r local_ref local_sha remote_ref remote_sha; do
+  case "$remote_ref" in
+    refs/heads/$MAIN_BRANCH)
+      pushing_main=1
+      if [ "$remote_sha" = "$zero" ]; then
+        range=""                      # primera subida: no hay rango que comparar
+      else
+        range="$remote_sha..$local_sha"
+      fi
+      ;;
+  esac
+done
+
+[ "$pushing_main" -eq 1 ] || exit 0
+
+echo "== pre-push: validando push a '$MAIN_BRANCH' =="
+
+echo "-- [1/5] grafo de dependencias"
+"$PY" tools/graph/graph.py build >/dev/null
+
+echo "-- [2/5] reglas de arquitectura"
+"$PY" tools/graph/graph.py check
+
+echo "-- [3/5] tests backend"
+( cd backend && "$PY" -m pytest -q )
+
+echo "-- [4/5] sección auto-generada del README"
+if ! "$PY" tools/graph/graph.py docs; then
+  echo ""
+  echo "!! README.md y/o docs/diagramas/ se han regenerado. Revisa, commitea y vuelve a hacer push:"
+  echo "     git add README.md docs/diagramas && git commit -m 'docs: actualizar grafo y estado'"
+  exit 1
+fi
+if ! git diff --quiet -- docs/diagramas; then
+  echo "!! docs/diagramas/ ha cambiado. Commitea y vuelve a hacer push."
+  exit 1
+fi
+
+echo "-- [5/5] documentación actualizada junto al código"
+if [ -n "$range" ]; then
+  changed="$(git diff --name-only "$range" 2>/dev/null || git show --pretty=format: --name-only "$range")"
+  code_changed=$(printf '%s\n' "$changed" | grep -E '^(backend|frontend)/' | grep -vE '(^|/)(node_modules|\.next)/' | head -1 || true)
+  docs_changed=$(printf '%s\n' "$changed" | grep -E '^(README\.md|README_USER\.md|MANUAL_USUARIO\.md)$' | head -1 || true)
+  if [ -n "$code_changed" ] && [ -z "$docs_changed" ]; then
+    echo ""
+    echo "!! Los commits modifican código ($code_changed ...) pero ninguno actualiza la documentación."
+    echo "   Actualiza README.md (técnico), README_USER.md y MANUAL_USUARIO.md y vuelve a hacer push."
+    echo "   (Regla del proyecto: cada push a $MAIN_BRANCH deja la documentación al día.)"
+    exit 1
+  fi
+fi
+
+echo "== pre-push OK =="

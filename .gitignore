@@ -1,0 +1,72 @@
+# ---------------------------------------------------------------------------
+# SIMAP - archivos ignorados por git
+# ---------------------------------------------------------------------------
+
+# --- Instrucciones para agentes de IA (NO versionadas, por decisión del equipo)
+CLAUDE.md
+AGENT.md
+AGENTS.md
+.claude/settings.local.json
+
+# --- Python / backend
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+ENV/
+build/
+dist/
+*.egg-info/
+.eggs/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+*.cover
+.tox/
+.nox/
+
+# --- Node / frontend
+node_modules/
+.next/
+out/
+.turbo/
+.pnpm-store/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+*.tsbuildinfo
+.eslintcache
+
+# --- Variables de entorno (nunca versionar secretos)
+.env
+.env.*
+!.env.example
+
+# --- Base de datos local
+*.sqlite
+*.sqlite3
+*.db
+
+# --- Artefactos del grafo de dependencias
+# El snapshot generado se regenera con `python tools/graph/graph.py build`.
+.graph/*
+!.graph/.gitkeep
+
+# --- Editores y SO
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.shared.json
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+desktop.ini

@@ -1,0 +1,30 @@
+# Plan de trabajo de SIMAP.
+# `python tools/graph/graph.py status` lee este archivo y reporta el avance.
+#
+# status: pending | in_progress | done
+# modules: (opcional) ids del grafo; si todos existen y no son stubs,
+#          la tarea se marca "done (auto)" sin tocar este archivo.
+milestones:
+  - name: "M0 - Infraestructura del proyecto"
+    tasks:
+      - name: "Repositorio, .gitignore y estructura de carpetas"
+        status: done
+      - name: "Backend FastAPI base con endpoint /health"
+        modules: [app.main, app.api.v1.routes.health, app.schemas.health]
+      - name: "Frontend Next.js base"
+        modules: [src/app/layout.tsx, src/app/page.tsx]
+      - name: "Herramienta de grafo de dependencias (tools/graph)"
+        status: done
+      - name: "Hook pre-push + GitHub Action de documentación"
+        status: done
+      - name: "Documentación inicial (README, README_USER, MANUAL_USUARIO)"
+        status: done
+
+  - name: "M1 - Dominio SIMAP (pendiente de definir con los documentos de contexto)"
+    tasks:
+      - name: "Definir entidades y modelos de datos"
+        status: pending
+      - name: "Definir endpoints de la API v1"
+        status: pending
+      - name: "Definir pantallas del frontend"
+        status: pending
