@@ -57,6 +57,9 @@
     <h2>Haz clic en un módulo</h2>
     <p class="hint">Verde = lo importan (quién depende de él, <b>rdeps</b>). Rojo = lo que importa (<b>deps</b>).
     Doble clic centra el nodo. Arrastra para reorganizar.</p>
+    <p class="hint">Borde <b>punteado</b> = punto de entrada (page/layout de Next.js, app.main): lo carga el framework,
+    nadie lo importa y es normal. Borde <b style="color:#f59e0b">ámbar</b> = huérfano real (posible código muerto).
+    Borde <b style="color:#ef4444">rojo</b> = stub vacío.</p>
     <div class="legend" id="legend"></div>
   </aside>
 </main>
@@ -67,6 +70,10 @@ const PALETTE = {
   schemas:'#0ea5e9', core:'#6b7280', app:'#2563eb', components:'#059669', lib:'#d97706', hooks:'#0891b2',
 };
 const colorFor = layer => PALETTE[layer] || '#9ca3af';
+// Módulos que el framework carga por convención de nombre (no por import): no son huérfanos.
+const ENTRY_RE = /^(app\.main|src\/app\/.*(page|layout|loading|error|not-found|template|route)\.tsx?)$/;
+const isEntry = n => ENTRY_RE.test(n.id);
+const isOrphan = n => !isEntry(n) && n.imported_by.length === 0 && !n.path.endsWith('__init__.py');
 
 const all = Object.values(DATA.nodes);
 document.getElementById('meta').textContent =
@@ -90,8 +97,9 @@ function rebuild() {
     label: n.lang === 'python' ? n.id.replace(/^app\./, '') : n.id.replace(/^src\//, ''),
     title: `${n.id}\n${n.path}\nLOC ${n.loc} · importa ${n.imports.length} · importado por ${n.imported_by.length}`,
     shape: n.lang === 'python' ? 'box' : 'ellipse',
-    color: { background: colorFor(n.layer), border: n.is_stub ? '#ef4444' : colorFor(n.layer) },
-    borderWidth: n.is_stub ? 3 : 1,
+    color: { background: colorFor(n.layer), border: n.is_stub ? '#ef4444' : isOrphan(n) ? '#f59e0b' : colorFor(n.layer) },
+    borderWidth: n.is_stub || isOrphan(n) ? 3 : 1,
+    shapeProperties: { borderDashes: isEntry(n) ? [6, 4] : false },
     font: { color: '#fff', size: 13 },
     group: n.lang,
     value: 1 + n.imported_by.length,
@@ -119,6 +127,7 @@ function select(id) {
   document.getElementById('side').innerHTML = `
     <h2>${n.id}</h2><div class="path">${n.path}</div>
     <span class="badge">${n.lang}</span><span class="badge">capa: ${n.layer}</span><span class="badge">LOC ${n.loc}</span>
+    ${isEntry(n) ? '<span class="badge" title="Lo carga el framework por convención, no por import">⤵ punto de entrada</span>' : ''}${isOrphan(n) ? '<span class="badge" style="border-color:#f59e0b">huérfano: nadie lo importa</span>' : ''}
     ${n.has_test ? '<span class="badge">✅ test</span>' : ''}${n.is_stub ? '<span class="badge" style="border-color:#ef4444">stub</span>' : ''}
     ${n.todos ? `<span class="badge">TODO ×${n.todos}</span>` : ''}
     <h3 style="color:var(--edge-in)">Importado por (${n.imported_by.length}) — impacto si cambia</h3><ul>${li(n.imported_by)}</ul>
