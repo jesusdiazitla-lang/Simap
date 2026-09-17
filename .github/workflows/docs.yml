@@ -65,9 +65,17 @@ jobs:
       - name: Verificar que la documentación acompaña al código
         if: github.event.before != '0000000000000000000000000000000000000000'
         run: |
-          changed="$(git diff --name-only ${{ github.event.before }} ${{ github.sha }})"
+          base=${{ github.event.before }}; head=${{ github.sha }}
+          changed="$(git diff --name-only "$base" "$head")"
           code=$(echo "$changed" | grep -E '^(backend|frontend)/' | head -1 || true)
-          docs=$(echo "$changed" | grep -E '^(README\.md|README_USER\.md|MANUAL_USUARIO\.md)$' | head -1 || true)
+          docs=$(echo "$changed" | grep -E '^(README_USER\.md|MANUAL_USUARIO\.md)$' | head -1 || true)
+          # README.md solo cuenta si cambió fuera de la sección auto-generada (misma regla que el hook local)
+          if [ -z "$docs" ] && echo "$changed" | grep -qx 'README.md'; then
+            strip='/<!-- graph:auto:start -->/,/<!-- graph:auto:end -->/d'
+            before="$(git show "$base:README.md" 2>/dev/null | sed "$strip")"
+            after="$(git show "$head:README.md" 2>/dev/null | sed "$strip")"
+            [ "$before" != "$after" ] && docs="README.md"
+          fi
           if [ -n "$code" ] && [ -z "$docs" ]; then
             echo "::error::Los commits modifican código pero no README.md / README_USER.md / MANUAL_USUARIO.md"
             exit 1
