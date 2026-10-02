@@ -1,7 +1,14 @@
 -- =============================================================================
 -- SIMAP - Esquema de base de datos (PostgreSQL 16)
+--
+-- ### ARCHIVO DE REFERENCIA - NO SE EJECUTA ###
+-- Quien crea las tablas es Alembic (backend/alembic/versions/), una migracion
+-- por fase. Este archivo es el mapa del modelo COMPLETO y la referencia a la
+-- que deben converger las migraciones: util para revisar el modelo entero de
+-- un vistazo, pero ejecutarlo a mano contra la base rompe el control de
+-- versiones del esquema.
+--
 -- Transcrito de Arquitectura_SIMAP.pdf, seccion 4. Fuente de verdad del modelo.
--- Las migraciones de Alembic deben converger a este esquema.
 --
 -- Cada tabla que pertenece a una empresa lleva su propia columna empresa_id,
 -- incluso las que ya la heredan por otra tabla: es intencional, para que cada

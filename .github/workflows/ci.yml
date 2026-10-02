@@ -1,0 +1,161 @@
+name: ci
+
+# Puerta de calidad en CADA push y pull request (04-fase1-fundamentos.md, seccion 4.2).
+# Se separa de docs.yml a proposito: aquel solo corre en main y ademas commitea documentacion;
+# este tiene que poder bloquear un pull request antes de que llegue a main.
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    env:
+      PYTHONUTF8: "1"
+      # CI=true hace que tests/conftest.py ABORTE si no hay base migrada, en vez de saltarse
+      # las pruebas de aislamiento. Un test que se salta no prueba nada pero deja el pipeline
+      # en verde, y asi la cobertura de RNF-01 desapareceria sin que nadie lo note.
+      CI: "true"
+      DATABASE_URL: postgresql+asyncpg://app_user:changeme@localhost:5432/simap
+      DATABASE_URL_MIGRACIONES: postgresql+asyncpg://simap_owner:changeme_owner@localhost:5432/simap
+      COOKIE_SECURE: "false"
+      JWT_SECRET: secreto-solo-para-ci-no-usar-en-produccion
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: simap
+          POSTGRES_USER: simap
+          POSTGRES_PASSWORD: simap_dev
+        ports: ["5432:5432"]
+        # Sin healthcheck los pasos siguientes arrancarian antes de que Postgres acepte conexiones.
+        options: >-
+          --health-cmd "pg_isready -U simap -d simap"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: backend/requirements-dev.txt
+
+      - name: Instalar dependencias
+        run: pip install -r backend/requirements-dev.txt
+
+      - name: Crear roles y extension
+        # Los service containers no ejecutan docker-entrypoint-initdb.d, asi que roles.sql se
+        # aplica a mano. Es el MISMO archivo que usa docker-compose en local: si divergieran,
+        # CI probaria una base distinta de la de desarrollo.
+        env:
+          PGPASSWORD: simap_dev
+        run: psql -h localhost -U simap -d simap -v ON_ERROR_STOP=1 -f backend/db/roles.sql
+
+      - name: Aplicar migraciones
+        working-directory: backend
+        run: python -m alembic upgrade head
+
+      - name: Comprobar que las migraciones son reversibles
+        # Una migracion sin vuelta atras es una trampa que solo se descubre el dia que hay que
+        # revertir en produccion. Se prueba el ciclo completo y se deja la base migrada.
+        working-directory: backend
+        run: |
+          python -m alembic downgrade base
+          python -m alembic upgrade head
+
+      - name: Lint (ruff)
+        working-directory: backend
+        run: python -m ruff check .
+
+      - name: Tipos (mypy --strict)
+        working-directory: backend
+        # Bloquea: el codigo pasa mypy en modo estricto hoy y no debe empezar a degradarse.
+        run: python -m mypy app
+
+      - name: Arquitectura por capas (import-linter)
+        working-directory: backend
+        run: lint-imports
+
+      - name: Tests
+        working-directory: backend
+        # -rs lista los tests saltados: si aparece alguno relacionado con la base, algo va mal
+        # pese al guardia de conftest.
+        run: python -m pytest -q -rs
+
+      - name: Auditoria de dependencias (pip-audit)
+        # No bloquea todavia: una vulnerabilidad recien publicada en una dependencia transitiva
+        # no debe impedir corregir otra cosa. Queda visible como aviso en el resumen del job.
+        run: |
+          pip install pip-audit
+          pip-audit -r backend/requirements.txt \
+            || echo "::warning::pip-audit encontro vulnerabilidades, revisar"
+
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Instalar dependencias
+        working-directory: frontend
+        run: npm ci
+
+      - name: Lint
+        working-directory: frontend
+        run: npm run lint
+
+      - name: Reglas de dependencias (dependency-cruiser)
+        working-directory: frontend
+        run: npm run graph:check
+
+      - name: Build
+        working-directory: frontend
+        run: npm run build
+
+      - name: Auditoria de dependencias (npm audit)
+        working-directory: frontend
+        run: npm audit --audit-level=high || echo "::warning::npm audit encontro vulnerabilidades"
+
+  grafo:
+    runs-on: ubuntu-latest
+    env:
+      PYTHONUTF8: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: backend/requirements-dev.txt
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Instalar dependencias
+        run: |
+          pip install -r backend/requirements-dev.txt
+          npm ci --prefix frontend
+
+      - name: Construir grafo y validar (capas, ciclos)
+        run: |
+          python tools/graph/graph.py build
+          python tools/graph/graph.py check

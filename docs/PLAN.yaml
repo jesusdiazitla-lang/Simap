@@ -37,17 +37,76 @@ milestones:
         modules: [app.core.security, app.services.auth, app.api.v1.routes.auth, app.schemas.auth]
       - name: "RBAC: dependencia require_roles verificada en cada endpoint"
         modules: [app.core.rbac]
+        # La dependencia se llama requiere_roles(). get_claims vive en app.core.auth, no en
+        # app.db.deps: core no puede importar de db (contrato de capas).
       - name: "Test automatizado de aislamiento entre tenants (RNF-01)"
-        status: pending
+        status: done
+        # backend/tests/test_aislamiento_tenant.py, 7 pruebas contra PostgreSQL real.
+        # Requiere `docker compose up -d db`; sin base se saltan con motivo explicito.
       - name: "Frontend: login, cliente API con JWT, navegación básica por rol, base PWA"
+        status: done
         modules: [src/app/login/page.tsx, src/lib/api.ts, src/lib/auth.ts]
-      - name: "CI: pytest + lint + pip-audit/npm audit en cada push"
+        # Sistema visual sobrio, en la línea del software de mantenimiento industrial (CMMS): el
+        # usuario descartó el mundo temático «bitácora» que se probó primero. Contrato en
+        # .impeccable/surfaces/ y sistema documentado en DESIGN.md. Piezas:
+        # src/components/{marco,campo,boton}.tsx, src/app/panel/page.tsx (navegación por rol) y
+        # public/manifest.webmanifest + iconos.
+        # El cliente de API no guarda ningún token: la sesión va en cookies httpOnly y se refresca
+        # sola ante un 401, con cerrojo para que varias peticiones no roten el refresh a la vez.
+        # Revisión de interfaz automatizada en frontend/e2e/ (Playwright), que corre contra la
+        # compilación y no contra `next dev`.
+      - name: "Alta de empresas por invitación: comando de consola en vez de ruta pública"
+        status: done
+        modules: [app.cli]
+        # SIMAP se cobra por equipo, así que una empresa no puede darse de alta a sí misma. Se
+        # retiró POST /auth/register y la revisión 0002 de Alembic estrecha la política RLS para
+        # que app_user no pueda insertar en `empresas` ni aunque la ruta volviera por descuido.
+      - name: "Plano de control: consola del operador de SIMAP (alta de clientes, suspensión, claves, bitácora)"
+        status: done
+        modules: [app.models.operador, app.schemas.operador, app.services.operador, app.api.v1.routes.operador, src/lib/operador.ts, src/app/operador/page.tsx]
+        # Revisión 0003 de Alembic. Cuarto rol de PostgreSQL (operador_user) con permisos concedidos
+        # TABLA POR TABLA y ninguno sobre las tablas de negocio: al crear activos/lecturas/alertas
+        # en F2, NO concederle permisos y quedarán fuera de su alcance por omisión.
+        # Sobre `usuarios` solo alcanza las filas con rol administrador.
+        # 11 pruebas en tests/test_operador.py, cuatro dedicadas a que la frontera aguante.
+      - name: "Cierre de F1: proxy de sesión, service worker mínimo y cambio de la clave propia"
+        status: done
+        modules: [app.services.limites, src/proxy.ts, src/components/formulario-clave.tsx, src/app/panel/clave/page.tsx, src/app/operador/clave/page.tsx]
+        # Lo que pedía 04-fase1-fundamentos.md y faltaba aunque el plan marcara F1 al 100 %:
+        # - 4.7 `middleware.ts` (en Next 16 se llama proxy.ts) y «service worker mínimo»
+        #   (public/sw.js + public/offline.html). El proxy mira una cookie-pista, no el token: ver
+        #   COOKIE_PISTA_SESION en app/core/auth.py.
+        # - 6.2 límite de intentos: el login de la consola del operador NO lo tenía, y es la cuenta
+        #   con más poder. Ahora toda puerta que compara una contraseña lo tiene (app.services.limites).
+        # Y lo que exigía la ampliación del plano de control (4.4.bis): el administrador de cada
+        # planta recibe una clave temporal y la documentación le pedía cambiarla, pero no había
+        # forma; la del operador no se podía rotar sin tocar la base. Revisión 0004: version_clave,
+        # para que cambiar o restablecer una clave cierre las demás sesiones.
+      - name: "Protección de main en GitHub: sin push directo, merge solo con CI en verde (4.2)"
         status: pending
+        # Es un ajuste del repositorio, no código. BLOQUEADO (2026-10-02): el usuario lo autorizó,
+        # pero GitHub no ofrece protección de ramas ni reglas en repositorios PRIVADOS de cuentas
+        # gratuitas (la API responde 403 «Upgrade to GitHub Pro or make this repository public»).
+        # Se desbloquea con GitHub Pro —gratis con el GitHub Student Developer Pack— o haciendo
+        # público el repositorio. Ojo al activarla: docs.yml hace `git push` a main con el
+        # GITHUB_TOKEN y quedaría bloqueado; habrá que convertirlo en un PR o darle excepción.
+      - name: "CI: pytest + lint + pip-audit/npm audit en cada push"
+        status: done
+        # .github/workflows/ci.yml, tres jobs: backend (con servicio postgres:16, migraciones,
+        # ruff, mypy --strict, import-linter, pytest, pip-audit), frontend (lint,
+        # dependency-cruiser, build, npm audit) y grafo. Corre en push Y pull_request.
+        # docs.yml sigue aparte: solo main, y ademas commitea documentacion regenerada.
 
   - name: "F2 - Activos y registro de campo (semanas 3-6)"
     rf: [RF-04, RF-05, RF-06, RF-07, RF-08, RF-09, RF-10, RNF-03, RNF-05]
     done_when: "Un operario escanea el QR y registra horómetro o alerta; el reporte llega aunque se hiciera offline."
     tasks:
+      - name: "Gestión de usuarios de la empresa: alta, rol y baja, por el administrador (RF-03)"
+        modules: [app.services.usuarios, app.api.v1.routes.usuarios, src/app/panel/usuarios/page.tsx]
+        # HUECO DETECTADO al construir el panel por rol en F1: RF-03 estaba asignado a F1, pero
+        # ninguna tarea creaba la pantalla ni los endpoints para dar de alta al personal. Sin esto
+        # una empresa se queda con un único usuario —el administrador que crea `app.cli`— y no
+        # puede existir ningún operario, que es justo quien alimenta de datos al sistema.
       - name: "CRUD de activos con ficha técnica, ubicación y criticidad; baja lógica"
         modules: [app.models.activo, app.schemas.activo, app.services.activos, app.api.v1.routes.activos]
       - name: "Generación de QR único + código corto de respaldo al crear el activo"

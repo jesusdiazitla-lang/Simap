@@ -11,7 +11,9 @@
     "graph:json": "depcruise --config .dependency-cruiser.cjs --output-type json src",
     "graph:svg": "depcruise --config .dependency-cruiser.cjs --output-type dot src | dot -T svg > ../docs/diagramas/frontend.svg",
     "graph:circular": "madge --circular --extensions ts,tsx src",
-    "graph:tree": "madge --extensions ts,tsx src"
+    "graph:tree": "madge --extensions ts,tsx src",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.9.1",

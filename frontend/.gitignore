@@ -39,3 +39,11 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Capturas generadas por las pruebas de extremo a extremo (no se versionan).
+e2e/capturas/
+test-results/
+playwright-report/
+
+# Capturas que generan las pruebas e2e en cada ejecucion: se regeneran, no se versionan.
+/e2e/capturas/

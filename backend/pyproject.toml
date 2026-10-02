@@ -20,6 +20,12 @@ python_version = "3.11"
 strict = true
 plugins = ["pydantic.mypy"]
 
+# Librerias sin stubs de tipos publicados. Se declara aqui en lugar de sembrar el codigo de
+# "type: ignore", para que la excepcion sea visible y revisable en un solo sitio.
+[[tool.mypy.overrides]]
+module = ["jose.*", "redis.*"]
+ignore_missing_imports = true
+
 # ---------------------------------------------------------------------------
 # Reglas de arquitectura (import-linter). Se validan con `lint-imports`.
 # Las capas se listan de MAS ALTA a MAS BAJA: una capa solo puede importar
@@ -33,7 +39,7 @@ root_package = "app"
 name = "Capas del backend"
 type = "layers"
 layers = [
-    "app.main",
+    "app.main | app.cli",
     "app.api | app.jobs",
     "app.services",
     "app.db",

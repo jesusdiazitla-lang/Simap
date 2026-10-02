@@ -4,6 +4,7 @@ fastapi==0.115.6
 uvicorn[standard]==0.34.0
 pydantic==2.10.4
 pydantic-settings==2.7.0
+email-validator==2.2.0   # valida EmailStr en los esquemas de autenticacion
 python-dotenv==1.0.1
 
 # Base de datos: SQLAlchemy 2.0 async + asyncpg + migraciones

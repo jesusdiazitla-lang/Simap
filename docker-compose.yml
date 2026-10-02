@@ -1,6 +1,22 @@
 # Entorno de desarrollo local: base de datos, Redis y backend con un solo comando.
 #   docker compose up -d db redis     # solo infraestructura (backend con uvicorn --reload)
 #   docker compose up                 # todo, incluido el backend en contenedor
+#
+# Al inicializar, la base SOLO ejecuta backend/db/roles.sql: crea los roles simap_owner y
+# app_user y la extension pgcrypto. NO crea tablas.
+#
+# Las tablas las crea Alembic, como exige docs/contexto/04-fase1-fundamentos.md seccion 4.3
+# ("ninguna tabla se crea o modifica a mano contra la base de datos"). Tras levantar la base:
+#   cd backend && ../.venv/Scripts/python.exe -m alembic upgrade head
+#
+# El orden importa: Alembic conecta como simap_owner, asi que ese rol debe existir antes.
+# Y creando las tablas simap_owner (que no es superusuario), nacen con el dueno correcto y
+# FORCE ROW LEVEL SECURITY si las protege.
+#
+# IMPORTANTE: el backend conecta con app_user. Ni con POSTGRES_USER (superusuario: ignora RLS
+# siempre) ni con simap_owner (dueno). Ver backend/.env.example.
+# roles.sql solo corre con el volumen pgdata vacio; para reinicializar:
+#   docker compose down -v
 services:
   db:
     image: postgres:16
@@ -9,14 +25,30 @@ services:
       POSTGRES_USER: simap
       POSTGRES_PASSWORD: simap_dev
     ports: ["5432:5432"]
-    volumes: ["pgdata:/var/lib/postgresql/data"]
+    volumes:
+      - "pgdata:/var/lib/postgresql/data"
+      - "./backend/db/roles.sql:/docker-entrypoint-initdb.d/01-roles.sql:ro"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U simap -d simap"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
   redis:
     image: redis:7
     ports: ["6379:6379"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
   api:
     build: ./backend
     env_file: ./backend/.env
     ports: ["8000:8000"]
-    depends_on: [db, redis]
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
 volumes:
   pgdata:

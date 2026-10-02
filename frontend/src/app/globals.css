@@ -1,26 +1,216 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+/* =============================================================================
+   SIMAP — sistema visual.
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+   El listón es el software de mantenimiento industrial (CMMS) que un jefe de
+   planta ya reconoce: gris neutro, superficies planas, controles con caja
+   visible, densidad alta y un único color de acción. Es una decisión del
+   usuario, registrada en PRODUCT.md como compromiso de marca.
+
+   Hubo una versión anterior con mundo visual propio —la interfaz imitaba una
+   bitácora de mantenimiento en papel, con fondo rayado, margen perforado y
+   sello de fecha— y el usuario la rechazó: «quiero que se vea más profesional,
+   un layout más sobrio, recuerda que esto va para empresas industriales». Por
+   eso aquí NO hay texturas, ni papel, ni metáforas de objetos físicos. La
+   estructura se comunica con espaciado, alineación y bordes de 1 px.
+
+   LO QUE SE CONSERVÓ DE AQUEL INTENTO ES LO FUNCIONAL, NO LO DECORATIVO
+   ---------------------------------------------------------------------
+   1. **Dos vocabularios de color que nunca se mezclan.** El azul (--accion)
+      significa «aquí se puede hacer algo» y solo aparece en controles activos;
+      un control deshabilitado lo pierde por completo. Verde, ámbar y rojo
+      (--estado-*) significan «este es el estado de una máquina»: alerta, orden
+      de trabajo, riesgo. Nunca se usan para interacción.
+
+      No es estética. El par verde/rojo es justamente el que no distingue una
+      persona con deuteranopía, así que si además cargara con el significado de
+      «pulsable» no quedaría ninguna señal libre para el estado del equipo. Con
+      esta separación, el estado puede ir siempre acompañado de texto o icono.
+
+   2. **Claro y oscuro son los dos de primera clase.** La luz ambiente de una
+      planta cambia dentro del mismo turno: sala de máquinas en penumbra, patio
+      a pleno sol. Los dos se auditan por separado; todos los pares de texto
+      cumplen 4.5:1 y los bordes de control 3:1.
+
+   3. **Objetivos táctiles generosos.** Se usa de pie y con guantes: los campos
+      y los botones miden 48 px de alto, por encima del mínimo de 44.
+   ============================================================================= */
+
+:root {
+  /* --- Superficies ------------------------------------------------------- */
+  /* El lienzo es gris; los paneles son blancos. Esa diferencia, y no una
+     sombra, es lo que separa el contenido del fondo. */
+  --lienzo: #f1f3f5;
+  --superficie: #ffffff;
+  --superficie-alterna: #f7f8f9;
+  --borde: #d2d8de;
+  --borde-fuerte: #7f8891;
+
+  /* --- Texto ------------------------------------------------------------- */
+  --texto: #15202b;
+  --texto-suave: #4b5763;
+  --texto-tenue: #5f6b77;
+
+  /* --- El único color de acción ------------------------------------------ */
+  --accion: #16528f;
+  --accion-relleno: #16528f;
+  --accion-viva: #0f3d6d;
+  --accion-texto: #ffffff;
+  --accion-halo: #16528f1f;
+
+  /* --- Error de formulario ----------------------------------------------- */
+  --error: #a32015;
+  --error-fondo: #a3201512;
+
+  /* --- Estado de una máquina (reservado; se estrena en F2) ---------------- */
+  --estado-ok: #1d6b39;
+  --estado-aviso: #7a5200;
+  --estado-falla: #a32015;
 }
 
 @media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+  :root:not([data-tema="claro"]) {
+    /* Gris neutro, ni azulado ni verdoso: en una herramienta de trabajo el
+       fondo no debe tener opinión. Tampoco negro puro, que en OLED hace que
+       los bordes de los paneles «floten». */
+    --lienzo: #0f1215;
+    --superficie: #181c20;
+    --superficie-alterna: #1e2328;
+    --borde: #2c3238;
+    --borde-fuerte: #68737e;
+
+    --texto: #e7eaed;
+    --texto-suave: #a6b0ba;
+    --texto-tenue: #8a949e;
+
+    /* El azul sube de luminosidad: el mismo tono del claro sobre fondo oscuro
+       no llega al contraste mínimo. El relleno del botón y el azul de tinta no
+       pueden ser el mismo valor, porque lo que tiene que contrastar en cada
+       caso es distinto: en el botón, el blanco de encima; en la tinta, el azul
+       mismo contra el panel. */
+    --accion: #74a9ee;
+    --accion-relleno: #1e5da8;
+    --accion-viva: #9cc4f5;
+    --accion-texto: #ffffff;
+    --accion-halo: #74a9ee29;
+
+    --error: #f0918a;
+    --error-fondo: #f0918a14;
+
+    --estado-ok: #5cc27f;
+    --estado-aviso: #dfa33c;
+    --estado-falla: #f0918a;
   }
 }
 
+/* Permite forzar un tema con data-tema en <html>, para auditar los dos sin
+   depender de la configuración del sistema operativo. */
+:root[data-tema="oscuro"] {
+  --lienzo: #0f1215;
+  --superficie: #181c20;
+  --superficie-alterna: #1e2328;
+  --borde: #2c3238;
+  --borde-fuerte: #68737e;
+  --texto: #e7eaed;
+  --texto-suave: #a6b0ba;
+  --texto-tenue: #8a949e;
+  --accion: #74a9ee;
+  --accion-relleno: #1e5da8;
+  --accion-viva: #9cc4f5;
+  --accion-texto: #ffffff;
+  --accion-halo: #74a9ee29;
+  --error: #f0918a;
+  --error-fondo: #f0918a14;
+  --estado-ok: #5cc27f;
+  --estado-aviso: #dfa33c;
+  --estado-falla: #f0918a;
+}
+
+@theme inline {
+  --color-lienzo: var(--lienzo);
+  --color-superficie: var(--superficie);
+  --color-superficie-alterna: var(--superficie-alterna);
+  --color-borde: var(--borde);
+  --color-borde-fuerte: var(--borde-fuerte);
+  --color-texto: var(--texto);
+  --color-texto-suave: var(--texto-suave);
+  --color-texto-tenue: var(--texto-tenue);
+  --color-accion: var(--accion);
+  --color-accion-relleno: var(--accion-relleno);
+  --color-accion-viva: var(--accion-viva);
+  --color-accion-texto: var(--accion-texto);
+  --color-error: var(--error);
+  --color-error-fondo: var(--error-fondo);
+  --color-estado-ok: var(--estado-ok);
+  --color-estado-aviso: var(--estado-aviso);
+  --color-estado-falla: var(--estado-falla);
+
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+
+  /* Radio pequeño y constante. Ni cero, que hoy se lee como sin terminar, ni
+     redondeado, que aleja la pantalla de una herramienta de trabajo. */
+  --radius-control: 3px;
+}
+
+/* =============================================================================
+   Superficies que no dibuja nadie y que igualmente llevan el diseño.
+   El caret, la selección, la barra de desplazamiento y el anillo de foco vienen
+   con valores del navegador que no pertenecen a ningún sistema visual.
+   ============================================================================= */
+
+html {
+  color-scheme: light dark;
+  caret-color: var(--accion);
+  scrollbar-color: var(--borde-fuerte) var(--lienzo);
+  scrollbar-width: thin;
+}
+
+html[data-tema="claro"] {
+  color-scheme: light;
+}
+
+html[data-tema="oscuro"] {
+  color-scheme: dark;
+}
+
+::selection {
+  background: var(--accion-halo);
+  color: var(--texto);
+}
+
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--lienzo);
+  color: var(--texto);
+  /* Cifras tabulares en todo el producto: un horómetro, una fecha o un contador
+     de horas que cambian de ancho al actualizarse hacen saltar la columna. */
+  font-variant-numeric: tabular-nums;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Anillo de foco del sistema visual, no del navegador. Se ve igual de bien
+   sobre el panel claro que sobre el oscuro. */
+:focus-visible {
+  outline: 2px solid var(--accion);
+  outline-offset: 2px;
+}
+
+/* Los campos de escritura son la excepcion, y tiene que estar aqui y no en una
+   utilidad de Tailwind: esta hoja no esta dentro de una capa (@layer), asi que
+   gana a cualquier utilidad. Los campos ya marcan el foco con su propio borde
+   azul mas un halo; dejar tambien el anillo general dibujaba tres cercos
+   concentricos alrededor del mismo input. */
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 1ms !important;
+    animation-duration: 1ms !important;
+  }
 }

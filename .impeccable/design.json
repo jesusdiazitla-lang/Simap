@@ -1,0 +1,336 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-09-26T00:00:00.000Z",
+  "title": "Design System: SIMAP",
+  "extensions": {
+    "themes": {
+      "note": "Claro y oscuro son los dos de primera clase y se auditan por separado. El oscuro se activa por prefers-color-scheme y se puede forzar con data-tema=\"claro\"|\"oscuro\" en <html>. Cada colorMeta lleva su valor en ambos temas.",
+      "light": "default :root",
+      "dark": "@media (prefers-color-scheme: dark) :root:not([data-tema=\"claro\"]) y :root[data-tema=\"oscuro\"]"
+    },
+    "colorMeta": {
+      "escritorio": {
+        "role": "neutral",
+        "displayName": "Escritorio",
+        "canonical": "#dbdfd2",
+        "dark": "#0b0d06",
+        "purpose": "Fondo bajo la hoja; más oscuro que la hoja para que la hoja se lea apoyada en algo. Rellena las perforaciones del margen.",
+        "tonalRamp": ["#1b1f14", "#2d331f", "#43492f", "#5c6444", "#79825e", "#9aa382", "#bfc6ab", "#e8ebdf"]
+      },
+      "hoja": {
+        "role": "neutral",
+        "displayName": "Hoja de libro mayor",
+        "canonical": "#f2f4ec",
+        "dark": "#252a1e",
+        "purpose": "Única superficie de contenido del producto.",
+        "tonalRamp": ["#1a1e13", "#2b301f", "#3f462f", "#586044", "#767f5e", "#98a181", "#c0c7ab", "#f2f4ec"]
+      },
+      "hoja-borde": {
+        "role": "neutral",
+        "displayName": "Borde de la hoja",
+        "canonical": "#c3cdb9",
+        "dark": "#46503a",
+        "purpose": "Aro de cada perforación de la encuadernación.",
+        "tonalRamp": ["#1b2014", "#2c3322", "#414a31", "#596346", "#76815f", "#98a382", "#c3cdb9", "#e9eee1"]
+      },
+      "tinta": {
+        "role": "neutral",
+        "displayName": "Tinta azul-negra de pluma",
+        "canonical": "#191f26",
+        "dark": "#e9ece0",
+        "purpose": "Todo el texto de contenido y los títulos. Nunca negro puro.",
+        "tonalRamp": ["#0d1116", "#191f26", "#2b3540", "#41505e", "#5c6f80", "#8598a8", "#b4c1cc", "#e3e9ee"]
+      },
+      "tinta-suave": {
+        "role": "neutral",
+        "displayName": "Tinta descargada",
+        "canonical": "#4b5661",
+        "dark": "#aab3a0",
+        "purpose": "Etiquetas, descripciones de apoyo, sello de fecha, botón secundario.",
+        "tonalRamp": ["#10151a", "#1e262d", "#2e3941", "#3f4b55", "#4b5661", "#788692", "#a9b4bd", "#dae0e5"]
+      },
+      "tinta-tenue": {
+        "role": "neutral",
+        "displayName": "Tinta gastada",
+        "canonical": "#5f6a74",
+        "dark": "#8d9784",
+        "purpose": "Letra pequeña del pie, código del formulario, texto deshabilitado.",
+        "tonalRamp": ["#13181d", "#222a30", "#333d45", "#45515a", "#5f6a74", "#87919b", "#b3bcc3", "#dee3e7"]
+      },
+      "reglado": {
+        "role": "neutral",
+        "displayName": "Reglado del libro mayor",
+        "canonical": "#c2cfb8",
+        "dark": "#3f4834",
+        "purpose": "Las líneas del papel y los separadores finos. Bajo contraste porque es estructura, no contenido.",
+        "tonalRamp": ["#1a2013", "#2b3321", "#3f4a30", "#576444", "#74845e", "#96a780", "#c2cfb8", "#e8eee2"]
+      },
+      "reglado-fuerte": {
+        "role": "neutral",
+        "displayName": "Regla gruesa",
+        "canonical": "#7c9372",
+        "dark": "#6d7d5e",
+        "purpose": "Reglas de 2 px, vertical del libro mayor, borde de control en reposo, barra de desplazamiento.",
+        "tonalRamp": ["#151d11", "#243019", "#364424", "#4a5b33", "#617345", "#7c9372", "#a6b79c", "#d5dfcd"]
+      },
+      "sello": {
+        "role": "primary",
+        "displayName": "Violeta de anilina del sello",
+        "canonical": "#5b2a86",
+        "dark": "#ae8ade",
+        "purpose": "Tinta violeta sobre la hoja: enlaces, marca de foco, anillo de foco, caret, acción disponible. Necesita 4.5:1 el propio violeta.",
+        "tonalRamp": ["#1d0d2c", "#2f1547", "#421e63", "#5b2a86", "#7440a6", "#9169c4", "#b79ddd", "#e2d5f2"]
+      },
+      "sello-relleno": {
+        "role": "primary",
+        "displayName": "Relleno del sello",
+        "canonical": "#5b2a86",
+        "dark": "#7c4dc4",
+        "purpose": "Fondo del único botón primario. Token separado de `sello` porque en oscuro no pueden coincidir: aquí lo que necesita contraste es el blanco de encima.",
+        "tonalRamp": ["#1d0d2c", "#2f1547", "#421e63", "#5b2a86", "#7c4dc4", "#9c78d6", "#c0a6e6", "#e6dcf6"]
+      },
+      "sello-vivo": {
+        "role": "primary",
+        "displayName": "Violeta cargado",
+        "canonical": "#4a2170",
+        "dark": "#c3a6ea",
+        "purpose": "Hover del botón primario y del enlace de utilidad.",
+        "tonalRamp": ["#1a0b28", "#2a1140", "#4a2170", "#63308f", "#7e4bab", "#9d70c6", "#c3a6ea", "#e8dcf7"]
+      },
+      "sello-tinta": {
+        "role": "primary",
+        "displayName": "Tinta sobre el sello",
+        "canonical": "#ffffff",
+        "dark": "#ffffff",
+        "purpose": "Texto del botón primario, en los dos temas.",
+        "tonalRamp": ["#262626", "#3d3d3d", "#595959", "#777777", "#9c9c9c", "#c2c2c2", "#e6e6e6", "#ffffff"]
+      },
+      "sello-halo": {
+        "role": "primary",
+        "displayName": "Halo del sello",
+        "canonical": "#5b2a8626",
+        "dark": "#ae8ade33",
+        "purpose": "Selección de texto y fondo hover de una fila pulsable. Como pasar un marcador por el renglón.",
+        "tonalRamp": ["#5b2a860d", "#5b2a8614", "#5b2a8626", "#5b2a8640", "#5b2a865c", "#5b2a8680", "#5b2a86a6", "#5b2a86"]
+      },
+      "excepcion": {
+        "role": "secondary",
+        "displayName": "Rojo de excepción",
+        "canonical": "#9e211b",
+        "dark": "#f08b84",
+        "purpose": "Lo que en el libro se escribe en rojo: errores, línea del campo inválido, observación de un intento rechazado, hover de cerrar sesión. No es un color de acción.",
+        "tonalRamp": ["#330a08", "#4e100d", "#6d1713", "#9e211b", "#c43a33", "#dc625b", "#f08b84", "#fbd3d0"]
+      },
+      "excepcion-fondo": {
+        "role": "secondary",
+        "displayName": "Fondo de excepción",
+        "canonical": "#9e211b14",
+        "dark": "#f08b8418",
+        "purpose": "Velo de respaldo para bloques de excepción. Declarado en el sistema; aún sin uso en las superficies construidas.",
+        "tonalRamp": ["#9e211b0a", "#9e211b14", "#9e211b21", "#9e211b33", "#9e211b4d", "#9e211b70", "#9e211b9e", "#9e211b"]
+      },
+      "estado-ok": {
+        "role": "tertiary",
+        "displayName": "Verde de equipo en orden",
+        "canonical": "#1d6b39",
+        "dark": "#5cc27f",
+        "purpose": "Estado de una máquina, nunca interacción. Reservado; entra en F2 con alertas y órdenes.",
+        "tonalRamp": ["#08210f", "#0e3a1c", "#14512a", "#1d6b39", "#2c8b4e", "#43a869", "#5cc27f", "#bfe9cd"]
+      },
+      "estado-aviso": {
+        "role": "tertiary",
+        "displayName": "Ámbar de aviso",
+        "canonical": "#7f5300",
+        "dark": "#e0a33a",
+        "purpose": "Estado de una máquina, nunca interacción. Reservado.",
+        "tonalRamp": ["#241700", "#3d2800", "#5b3b00", "#7f5300", "#a87200", "#c88f16", "#e0a33a", "#f6dda8"]
+      },
+      "estado-falla": {
+        "role": "tertiary",
+        "displayName": "Rojo de falla",
+        "canonical": "#9e211b",
+        "dark": "#f08b84",
+        "purpose": "Estado de una máquina, nunca interacción. Reservado. Comparte valor con `excepcion` a propósito: en el papel es la misma tinta roja.",
+        "tonalRamp": ["#330a08", "#4e100d", "#6d1713", "#9e211b", "#c43a33", "#dc625b", "#f08b84", "#fbd3d0"]
+      }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Display", "purpose": "El nombre impreso de la hoja, en la cabecera. Un solo uso por pantalla. Crece a 1.625rem desde 640 px." },
+      "headline": { "displayName": "Firma", "purpose": "El dato que identifica a la persona del turno." },
+      "title": { "displayName": "Renglón de acción", "purpose": "Nombre de una acción en la lista del panel." },
+      "body": { "displayName": "Cuerpo", "purpose": "Texto del cuerpo y todo input de escritura. Nunca por debajo de 16 px en un campo: iOS haría zoom al enfocar." },
+      "body-small": { "displayName": "Cuerpo menor", "purpose": "Descripciones de apoyo, acotadas a 46-68 ch." },
+      "nota": { "displayName": "Nota al pie", "purpose": "Letra pequeña del formulario y mensaje de error del campo." },
+      "label": { "displayName": "Etiqueta de renglón", "purpose": "Etiqueta de un campo y rótulo de la columna de observaciones." },
+      "accion": { "displayName": "Acción", "purpose": "Texto de cualquier botón." },
+      "impreso": { "displayName": "Impreso", "purpose": "Código del formulario y sello de fecha. Nunca como rótulo introductorio encima de un título." }
+    },
+    "shadows": [
+      {
+        "name": "renglon-enfocado",
+        "value": "inset 0 -3px 0 0 var(--sello)",
+        "purpose": "La única sombra del sistema, y es interior. Engorda la línea de escritura al enfocar. Se pinta con sombra y no con border-width porque un borde más grueso comería 2 px del área de contenido y el texto daría un salto."
+      },
+      {
+        "name": "sin-elevacion",
+        "value": "none",
+        "purpose": "Todo lo demás. Ninguna superficie proyecta sombra: la profundidad es tonal (escritorio más oscuro que hoja) y de reglas (2 px reglado-fuerte entre zonas, 1 px reglado entre registros)."
+      }
+    ],
+    "motion": [
+      { "name": "estampar", "value": "estampar 420ms cubic-bezier(0.16, 1, 0.3, 1) both", "purpose": "El único momento animado por pantalla: la impresión del sello al pulsar el botón primario. Arranca desde un estado ya visible, así que si no corre no se pierde nada." },
+      { "name": "cambio-de-color", "value": "200ms", "purpose": "Transición de background-color, color y border-color en botones y filas." },
+      { "name": "foco-de-renglon", "value": "transition-property: border-color, box-shadow", "purpose": "El foco del campo cambia color y grosor a la vez." },
+      { "name": "movimiento-reducido", "value": "@media (prefers-reduced-motion: reduce) { animation: none; transition-duration: 1ms !important }", "purpose": "Con movimiento reducido la estampa se anula y toda transición baja a 1 ms." }
+    ],
+    "breakpoints": [
+      { "name": "sm", "value": "640px", "purpose": "El margen perforado se abre de 16 a 48 px, la cabecera crece, el botón deja de ser de ancho completo." },
+      { "name": "lg", "value": "1024px", "purpose": "Aparecen la segunda columna y la vertical del libro mayor. No hay nada en md: a 640 px el área útil de la hoja son 528 px y una vertical a 34 rem caería fuera." }
+    ],
+    "grid": {
+      "renglon": "32px",
+      "rule": "Todo lo que va en el cuerpo de la hoja mide un múltiplo de 32 px. Cabecera 96, campo 160 (32 aire + 32 etiqueta + 64 escritura + 32 ranura de error), fila de panel 64, columna de observaciones 96 fija.",
+      "exception": "La banda de acción vive fuera del área reglada precisamente porque su altura es variable."
+    }
+  },
+  "components": [
+    {
+      "name": "Botón del sello (primario)",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "El único botón relleno de violeta por pantalla. Se estampa al pulsar.",
+      "html": "<button class=\"ds-btn-sello\">Entrar</button>",
+      "css": ".ds-btn-sello { height: 56px; min-width: 11rem; padding: 0 32px; background: var(--sello-relleno, #5b2a86); color: var(--sello-tinta, #fff); border: 2px solid var(--sello-relleno, #5b2a86); border-radius: 0; font-family: 'Libre Franklin', ui-sans-serif, system-ui, sans-serif; font-size: 0.9375rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.16em; cursor: pointer; transition: background-color 200ms, color 200ms, border-color 200ms; } .ds-btn-sello:hover { background: var(--sello-vivo, #4a2170); border-color: var(--sello-vivo, #4a2170); } .ds-btn-sello:focus-visible { outline: 2px solid var(--sello, #5b2a86); outline-offset: 2px; } .ds-btn-sello[aria-busy=\"true\"] { cursor: progress; } @keyframes ds-estampar { 0% { transform: rotate(-1.6deg) scale(1.28); opacity: 0; filter: blur(1.5px); } 55% { transform: rotate(-1.6deg) scale(0.97); opacity: 1; filter: blur(0); } 100% { transform: rotate(-1.6deg) scale(1); opacity: 0.82; } } .ds-btn-sello:active { animation: ds-estampar 420ms cubic-bezier(0.16, 1, 0.3, 1) both; }"
+    },
+    {
+      "name": "Botón del sello — deshabilitado",
+      "kind": "button",
+      "refersTo": "button-primary-disabled",
+      "description": "Pierde el violeta entero: en este sistema ese color significa «aquí se puede hacer algo».",
+      "html": "<button class=\"ds-btn-sello-apagado\" disabled>Entrar</button>",
+      "css": ".ds-btn-sello-apagado { height: 56px; min-width: 11rem; padding: 0 32px; background: transparent; color: var(--tinta-tenue, #5f6a74); border: 2px solid var(--reglado-fuerte, #7c9372); border-radius: 0; font-family: 'Libre Franklin', ui-sans-serif, system-ui, sans-serif; font-size: 0.9375rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.16em; cursor: not-allowed; }"
+    },
+    {
+      "name": "Botón secundario (cerrar sesión)",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "Sin violeta, porque no es una acción del turno. Al hover toma el rojo de excepción.",
+      "html": "<button class=\"ds-btn-salir\">Cerrar sesión</button>",
+      "css": ".ds-btn-salir { height: 56px; padding: 0 24px; background: transparent; color: var(--tinta-suave, #4b5661); border: 2px solid var(--reglado-fuerte, #7c9372); border-radius: 0; font-family: 'Libre Franklin', ui-sans-serif, system-ui, sans-serif; font-size: 0.875rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.16em; cursor: pointer; transition: color 200ms, border-color 200ms; } .ds-btn-salir:hover { color: var(--excepcion, #9e211b); border-color: var(--excepcion, #9e211b); } .ds-btn-salir:focus-visible { outline: 2px solid var(--sello, #5b2a86); outline-offset: 2px; }"
+    },
+    {
+      "name": "Campo de la bitácora",
+      "kind": "input",
+      "refersTo": "field",
+      "description": "Un renglón donde se escribe: sin caja, 160 px de alto total, con ranura de error reservada siempre.",
+      "html": "<div class=\"ds-campo\"><label class=\"ds-campo-etiqueta\" for=\"ds-campo-correo\">Correo <span class=\"ds-campo-obligatorio\">obligatorio</span></label><div class=\"ds-campo-linea\"><span class=\"ds-campo-marca\" aria-hidden=\"true\"></span><input id=\"ds-campo-correo\" class=\"ds-campo-input\" type=\"email\" value=\"j.marte@planta.do\" /></div><p class=\"ds-campo-error\"></p></div>",
+      "css": ".ds-campo { padding-top: 32px; font-family: 'Libre Franklin', ui-sans-serif, system-ui, sans-serif; } .ds-campo-etiqueta { display: flex; align-items: center; height: 32px; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.16em; line-height: 1; color: var(--tinta-suave, #4b5661); } .ds-campo-obligatorio { margin-left: 8px; font-weight: 400; text-transform: none; letter-spacing: normal; color: var(--tinta-tenue, #5f6a74); } .ds-campo-linea { position: relative; height: 64px; } .ds-campo-marca { position: absolute; left: -20px; top: 50%; width: 6px; height: 16px; transform: translateY(-50%); background: var(--sello, #5b2a86); opacity: 0; transition: opacity 200ms; pointer-events: none; } .ds-campo-linea:focus-within .ds-campo-marca { opacity: 1; } .ds-campo-input { height: 64px; width: 100%; padding: 0 8px; background: transparent; color: var(--tinta, #191f26); font: inherit; font-size: 1.0625rem; border: 0; border-bottom: 2px solid var(--reglado-fuerte, #7c9372); border-radius: 0; outline: none; font-variant-numeric: tabular-nums; transition: border-color 200ms, box-shadow 200ms; } .ds-campo-input:focus { border-bottom-color: var(--sello, #5b2a86); box-shadow: inset 0 -3px 0 0 var(--sello, #5b2a86); } .ds-campo-input:disabled { color: var(--tinta-tenue, #5f6a74); border-bottom-color: var(--reglado, #c2cfb8); cursor: not-allowed; } .ds-campo-error { display: flex; align-items: center; height: 32px; margin: 0; padding: 0 8px; font-size: 0.8125rem; line-height: 1; color: var(--excepcion, #9e211b); }"
+    },
+    {
+      "name": "Campo en excepción",
+      "kind": "input",
+      "refersTo": "field-error",
+      "description": "La línea pasa a rojo y la mantiene incluso con el foco; el mensaje ocupa la ranura reservada y el valor escrito nunca se borra.",
+      "html": "<div class=\"ds-campo-mal\"><label class=\"ds-campo-etiqueta\" for=\"ds-campo-clave\">Contraseña</label><div class=\"ds-campo-linea\"><input id=\"ds-campo-clave\" class=\"ds-campo-input ds-campo-input-mal\" type=\"password\" value=\"invalida\" aria-invalid=\"true\" aria-describedby=\"ds-campo-clave-error\" /></div><p id=\"ds-campo-clave-error\" class=\"ds-campo-error\" aria-live=\"polite\">Ese correo no tiene un formato válido.</p></div>",
+      "css": ".ds-campo-mal { padding-top: 32px; font-family: 'Libre Franklin', ui-sans-serif, system-ui, sans-serif; } .ds-campo-input-mal { border-bottom-color: var(--excepcion, #9e211b); } .ds-campo-input-mal:focus { border-bottom-color: var(--excepcion, #9e211b); box-shadow: inset 0 -3px 0 0 var(--excepcion, #9e211b); }"
+    },
+    {
+      "name": "La hoja",
+      "kind": "card",
+      "refersTo": "hoja",
+      "description": "El sustrato de todas las pantallas: reglado cada 32 px, margen perforado, cabecera de 96 px cerrada por regla gruesa. A sangre completa, nunca una tarjeta con sombra.",
+      "html": "<section class=\"ds-hoja\"><div class=\"ds-hoja-margen\" aria-hidden=\"true\"></div><div class=\"ds-hoja-caja\"><header class=\"ds-hoja-cabecera\"><h1 class=\"ds-hoja-titulo\">Registro de acceso</h1><p class=\"ds-sello-fecha\"><span>26/09/2026</span><span class=\"ds-sello-hora\">07:40</span></p></header><p class=\"ds-hoja-cuerpo\">El texto del cuerpo se interlinea a 32 px, el mismo paso del reglado, así que cada línea queda centrada en su banda en vez de que la línea de la hoja la atraviese.</p></div></section>",
+      "css": ".ds-hoja { position: relative; display: flex; flex-direction: column; background-color: var(--hoja, #f2f4ec); background-image: repeating-linear-gradient(to bottom, var(--reglado, #c2cfb8) 0, var(--reglado, #c2cfb8) 1px, transparent 1px, transparent 32px); background-position: 0 0; border-radius: 0; color: var(--tinta, #191f26); font-family: 'Libre Franklin', ui-sans-serif, system-ui, sans-serif; font-variant-numeric: tabular-nums; } .ds-hoja-margen { position: absolute; inset-block: 0; left: 0; width: 48px; border-right: 1px solid var(--reglado-fuerte, #7c9372); background-image: radial-gradient(circle at center, var(--escritorio, #dbdfd2) 0 5px, var(--hoja-borde, #c3cdb9) 5px 6px, transparent 6px); background-size: 100% 96px; background-repeat: repeat-y; background-position: center 48px; pointer-events: none; } .ds-hoja-caja { max-width: 60rem; padding: 0 40px 0 72px; } .ds-hoja-cabecera { display: flex; align-items: center; justify-content: space-between; gap: 24px; height: 96px; border-bottom: 2px solid var(--reglado-fuerte, #7c9372); } .ds-hoja-titulo { margin: 0; font-size: 1.625rem; font-weight: 700; line-height: 2rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--tinta, #191f26); } .ds-hoja-cuerpo { max-width: 62ch; margin: 0; padding: 32px 0; font-size: 1.0625rem; line-height: 2rem; color: var(--tinta-suave, #4b5661); }"
+    },
+    {
+      "name": "Sello de fecha",
+      "kind": "custom",
+      "refersTo": "sello-fecha",
+      "description": "Fecha y hora reales en cifras tabulares, recuadro rotado -1.6° con impresión desigual. Es contenido, no adorno, y no va en violeta porque no se pulsa.",
+      "html": "<p class=\"ds-sello-fecha\"><span>26/09/2026</span><span class=\"ds-sello-hora\">07:40</span></p>",
+      "css": ".ds-sello-fecha { margin: 0; padding: 4px 10px; text-align: right; transform: rotate(-1.6deg); color: var(--tinta-suave, #4b5661); border: 1.5px solid var(--reglado-fuerte, #7c9372); border-radius: 0; background: radial-gradient(120% 140% at 30% 20%, transparent 40%, var(--reglado, #c2cfb8) 100%); opacity: 0.9; font-family: 'Libre Franklin', ui-sans-serif, system-ui, sans-serif; font-size: 0.6875rem; font-weight: 600; line-height: 1rem; text-transform: uppercase; letter-spacing: 0.14em; font-variant-numeric: tabular-nums; } .ds-sello-fecha span { display: block; } .ds-sello-hora { font-weight: 400; letter-spacing: 0.1em; }"
+    },
+    {
+      "name": "Fila de acción (navegación del panel)",
+      "kind": "nav",
+      "refersTo": "fila-accion",
+      "description": "La navegación es una lista de renglones separados por regla fina. Lo disponible lleva el violeta; lo pendiente no, y dice en texto cuándo llega.",
+      "html": "<ul class=\"ds-filas\"><li><a class=\"ds-fila\" href=\"#\"><p class=\"ds-fila-nombre\">Registrar lectura de horómetro</p><p class=\"ds-fila-desc\">Escanea el QR del equipo y anota las horas de operación.</p></a></li><li><div class=\"ds-fila ds-fila-pendiente\"><p class=\"ds-fila-nombre ds-fila-nombre-pendiente\"><span class=\"ds-fila-fase\">Llega en F2</span>Levantar una alerta temprana</p><p class=\"ds-fila-desc\">Ruido, vibración, calor, olor o fuga detectados en el turno.</p></div></li></ul>",
+      "css": ".ds-filas { margin: 0; padding: 0; list-style: none; font-family: 'Libre Franklin', ui-sans-serif, system-ui, sans-serif; } .ds-filas > li { border-top: 1px solid var(--reglado, #c2cfb8); } .ds-fila { display: block; padding: 32px 0; text-decoration: none; transition: background-color 200ms; } a.ds-fila:hover { background: var(--sello-halo, #5b2a8626); } .ds-fila:focus-visible { outline: 2px solid var(--sello, #5b2a86); outline-offset: 2px; } .ds-fila-pendiente { opacity: 0.7; } .ds-fila-nombre { margin: 0; font-size: 1.0625rem; font-weight: 600; line-height: 2rem; color: var(--sello, #5b2a86); } .ds-fila-nombre-pendiente { color: var(--tinta-suave, #4b5661); } .ds-fila-fase { float: right; padding-left: 16px; font-size: 0.6875rem; font-weight: 600; line-height: 2rem; text-transform: uppercase; letter-spacing: 0.14em; color: var(--tinta-tenue, #5f6a74); } .ds-fila-desc { max-width: 62ch; margin: 0; font-size: 0.9375rem; line-height: 2rem; color: var(--tinta-suave, #4b5661); }"
+    },
+    {
+      "name": "Columna de observaciones",
+      "kind": "custom",
+      "refersTo": "hoja",
+      "description": "A la derecha de la vertical del libro mayor, desde 1024 px. Altura fija de 96 px y desborde con scroll: un error no desplaza nunca el botón. La hora va tachada porque en una bitácora no se borra nada.",
+      "html": "<div class=\"ds-observaciones\"><p class=\"ds-observaciones-rotulo\">Observaciones</p><div class=\"ds-observaciones-cuerpo\" role=\"alert\" tabindex=\"-1\"><p class=\"ds-anotacion\"><span class=\"ds-anotacion-hora\">07:41</span>Faltan datos en la hoja. Revisa los renglones marcados. <a class=\"ds-anotacion-enlace\" href=\"#ds-campo-correo\">Ir al renglón</a></p></div></div>",
+      "css": ".ds-observaciones { display: flex; flex-direction: column; justify-content: center; height: 96px; padding-left: 32px; overflow-y: auto; border-left: 1px solid var(--reglado-fuerte, #7c9372); font-family: 'Libre Franklin', ui-sans-serif, system-ui, sans-serif; } .ds-observaciones-rotulo { margin: 0; font-size: 0.6875rem; font-weight: 600; line-height: 1rem; text-transform: uppercase; letter-spacing: 0.16em; color: var(--tinta-tenue, #5f6a74); } .ds-observaciones-cuerpo { padding-top: 4px; outline: none; } .ds-observaciones-cuerpo:focus-visible { outline: 2px solid var(--sello, #5b2a86); outline-offset: 2px; } .ds-anotacion { margin: 0; font-size: 0.875rem; line-height: 1.5rem; color: var(--excepcion, #9e211b); } .ds-anotacion-hora { margin-right: 8px; font-weight: 600; letter-spacing: 0.025em; text-decoration: line-through; font-variant-numeric: tabular-nums; } .ds-anotacion-enlace { color: inherit; font-weight: 600; text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 4px; }"
+    },
+    {
+      "name": "Esqueleto de la hoja",
+      "kind": "custom",
+      "refersTo": "hoja",
+      "description": "Estado de carga con la forma real de lo que va a llegar, sobre la misma hoja reglada: tres renglones de 64 px. Nunca un girador en medio de la nada.",
+      "html": "<div class=\"ds-esqueleto\" aria-busy=\"true\" aria-live=\"polite\"><div class=\"ds-esqueleto-fila\"><div class=\"ds-esqueleto-banda\"><span class=\"ds-esqueleto-barra ds-esqueleto-barra-corta\"></span></div><div class=\"ds-esqueleto-banda\"><span class=\"ds-esqueleto-barra ds-esqueleto-barra-larga\"></span></div></div><div class=\"ds-esqueleto-fila\"><div class=\"ds-esqueleto-banda\"><span class=\"ds-esqueleto-barra ds-esqueleto-barra-corta\"></span></div><div class=\"ds-esqueleto-banda\"><span class=\"ds-esqueleto-barra ds-esqueleto-barra-larga\"></span></div></div></div>",
+      "css": ".ds-esqueleto { padding-top: 32px; } .ds-esqueleto-fila { height: 64px; border-top: 1px solid var(--reglado, #c2cfb8); } .ds-esqueleto-banda { display: flex; align-items: center; height: 32px; } .ds-esqueleto-barra { display: block; background: var(--reglado, #c2cfb8); } .ds-esqueleto-barra-corta { width: 160px; height: 12px; } .ds-esqueleto-barra-larga { width: 256px; height: 10px; opacity: 0.6; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "La bitácora de mantenimiento",
+    "overview": "Entrar a SIMAP es firmar el libro. El cuaderno rayado, el margen perforado de la encuadernación y el sello de fecha son el sustrato de la interfaz, no un adorno encima de ella: cada dato del sistema tiene un responsable con nombre, y la hoja es lo que lo dice antes de que nadie lea una palabra. La lectura del papel es industrial y no nostálgica: papel de oficio verde reglado de libro mayor, tinta azul-negra de pluma, letra de imprenta comercial. Nada de pergamino, nada de sepia.\n\nLa densidad es la de un impreso de taller: un solo tipo de letra, cero radios, cero sombras, y una rejilla horizontal que no se negocia. La pantalla se ve a distancia de brazo, de pie, con guantes y con la luz cambiando dentro del mismo turno, así que los objetivos táctiles son grandes aunque el dibujo sea una línea fina, y el esquema claro y el oscuro son los dos de primera clase, medidos por separado: todos los pares de texto cumplen 4.5:1 y los bordes de control 3:1.\n\nEl sistema rechaza por su nombre dos cosas que esta categoría entrega siempre: la tarjeta centrada flotando con sombra sobre un fondo liso, y el color como decoración. Hay exactamente un color de acción y aparece en un solo elemento por pantalla.",
+    "keyCharacteristics": [
+      "Hoja a sangre completa; nunca una tarjeta centrada con sombra.",
+      "Reglado cada 32 px que manda sobre la maquetación, no al revés.",
+      "Dos vocabularios de color incompatibles: acción (violeta) y estado de máquina (verde/ámbar/rojo).",
+      "Radio 0 en todo; la profundidad se consigue con reglas y tono, no con sombras.",
+      "Una sola familia tipográfica, cifras tabulares en todo el producto.",
+      "Claro y oscuro auditados por separado, ambos normativos.",
+      "Un único momento animado por pantalla."
+    ],
+    "rules": [
+      { "name": "La Regla de los Dos Vocabularios", "body": "El violeta significa «aquí se puede hacer algo» y solo aparece en controles activos; verde, ámbar y rojo significan «este es el estado de una máquina» y nunca significan interacción. No se mezclan nunca. El motivo es de accesibilidad y no de gusto: el par verde/rojo es justamente el que no distingue alguien con deuteranopía, así que si además cargara con el significado de «pulsable» no quedaría señal disponible para el estado real del equipo.", "section": "colors" },
+      { "name": "La Regla del Control Apagado", "body": "Un control deshabilitado pierde el violeta entero: pasa a borde reglado-fuerte y texto tinta-tenue sobre fondo transparente. No hay violeta atenuado, ni violeta al 40 %.", "section": "colors" },
+      { "name": "La Regla de Ocupado ≠ Deshabilitado", "body": "Mientras una petición está en vuelo el control conserva el color y cambia el texto («Entrar» → «Comprobando…», «Cerrar sesión» → «Cerrando…»), con aria-busy y cursor progress. Apagar a gris el único momento autoral de la pantalla en el instante exacto en que se dispara hace que no se vea ninguna de las dos cosas.", "section": "colors" },
+      { "name": "La Regla del Color que Nunca Está Solo", "body": "El color no es nunca el único portador de significado. La disponibilidad de una acción se escribe además en texto («Llega en F2»), el error va en mensaje enlazado con aria-describedby, y el foco cambia de grosor además de tono.", "section": "colors" },
+      { "name": "La Regla de la Tinta Sin Negro", "body": "El texto es azul-negro de pluma, nunca #000. El negro puro sobre papel claro no existe en el mundo del que sale esto y cansa más la vista. En oscuro, tampoco negro puro de fondo: en OLED los bordes de la hoja flotarían.", "section": "colors" },
+      { "name": "La Regla del Oscuro Que No Es Azul", "body": "El tema oscuro es la misma hoja de papel contable verde bajo una lámpara de trabajo: solo baja la luz. Un oscuro azul pizarra es el oscuro por defecto de cualquier interfaz y no el de este mundo.", "section": "colors" },
+      { "name": "La Regla del Interlineado del Reglado", "body": "Todo texto de varias líneas dentro del cuerpo de la hoja usa interlínea de 32 px, el mismo paso del reglado. Así cada línea ocupa una banda entera y queda centrada en ella, en vez de que las líneas de la hoja la atraviesen. Un párrafo puede crecer, pero siempre de 32 en 32.", "section": "typography" },
+      { "name": "La Regla del Renglón Sin Eyebrow", "body": "Las versales apretadas de la escala impreso son el código del formulario y el sello de fecha, y van al pie, donde los imprimen los formularios de verdad. Ningún rótulo en versalitas se coloca encima de un título para introducirlo.", "section": "typography" },
+      { "name": "La Regla de las Cifras Tabulares", "body": "font-variant-numeric: tabular-nums en todo el producto. Un horómetro, una fecha o un contador de horas que cambien de ancho al actualizarse hacen saltar la columna.", "section": "typography" },
+      { "name": "La Regla del Múltiplo de 32", "body": "Cualquier pieza nueva del cuerpo de la hoja mide un múltiplo de 32 px, o descuadra el reglado de toda la pantalla. Test: si una altura no es divisible por 32, no va dentro del cuerpo.", "section": "layout" },
+      { "name": "La Regla de la Banda Sin Reglar", "body": "Lo de altura variable vive en la banda de acción, no en el cuerpo. La banda es el único sitio del sistema donde la altura puede ser libre.", "section": "layout" },
+      { "name": "La Regla de la Geometría Inmóvil", "body": "La ranura del error (32 px) y la columna de observaciones (96 px) están reservadas siempre, vacías o no. Un mensaje que aparece y empuja el botón hacia abajo hace que quien iba a pulsar «Entrar» pulse otra cosa. Cuando el contenido desborda, se desborda con scroll y contenedor enfocable: nunca con overflow: hidden, porque lo que se recorta es justo la parte de «cómo salir de aquí».", "section": "layout" },
+      { "name": "La Regla del Plano Único", "body": "Todo está en el mismo plano. Si una superficie nueva necesita distinguirse, se separa con una regla o con un cambio de tono de papel; nunca con una sombra, y menos con una sombra desplazada y dura.", "section": "elevation" },
+      { "name": "La Regla del Rectángulo Recto", "body": "Radio 0 siempre. Si algo parece necesitar una esquina redondeada, lo que necesita es no ser una tarjeta.", "section": "shapes" },
+      { "name": "La Regla del Momento Único", "body": "Una pantalla tiene como máximo un momento animado, y es una respuesta a una acción del usuario, nunca una entrada coreografiada.", "section": "shapes" }
+    ],
+    "dos": [
+      "Do usar el violeta del sello solo donde se puede hacer algo, y quitárselo entero a lo deshabilitado.",
+      "Do reservar verde, ámbar y rojo (estado-ok, estado-aviso, estado-falla) para el estado de una máquina, siempre acompañados de texto o icono.",
+      "Do mantener el color en un control ocupado y cambiarle el texto («Comprobando…»), con aria-busy.",
+      "Do medir toda pieza del cuerpo de la hoja en múltiplos de 32 px (cabecera 96, campo 160, fila de panel 64).",
+      "Do poner lo de altura variable en la banda de acción, fuera del área reglada.",
+      "Do reservar el espacio de los mensajes antes de que existan, para que nada empuje al botón.",
+      "Do dibujar los campos como una línea sobre la que se escribe, con área táctil de 64 px.",
+      "Do dar a cada pantalla su hoja con código de formulario, incluidas las de carga y error.",
+      "Do auditar el tema claro y el oscuro por separado: 4.5:1 en texto, 3:1 en bordes de control.",
+      "Do interlinear a 32 px todo párrafo del cuerpo, para que quede centrado en su banda del reglado.",
+      "Do mantener las cifras tabulares en toda medida, fecha u hora."
+    ],
+    "donts": [
+      "Don't mezclar los dos vocabularios de color: ni violeta para estado de máquina, ni verde/rojo para interacción.",
+      "Don't usar el violeta atenuado como estado deshabilitado. Se pierde entero.",
+      "Don't presentar una hoja como tarjeta centrada con sombra sobre un fondo liso; la hoja va a sangre completa y el ancho de lectura se controla dentro.",
+      "Don't añadir sombras de elevación, y menos sombras desplazadas y duras: este mundo no tiene ninguna. La única sombra declarada es la interior del renglón enfocado.",
+      "Don't redondear esquinas. El radio es 0.",
+      "Don't colocar un rótulo en versalitas encima de un título para introducirlo. El código del formulario va al pie.",
+      "Don't poner un anillo rectangular de foco en un campo sin caja: el foco se marca engordando la línea y tiñéndola de violeta.",
+      "Don't recortar con overflow: hidden un mensaje de error o de espera; desbordar con scroll en un contenedor enfocable.",
+      "Don't borrar o limpiar lo que el usuario escribió al fallar la validación.",
+      "Don't bloquear el zoom (maximumScale, userScalable: false) ni el pegado en un campo de contraseña.",
+      "Don't animar la entrada de una pantalla ni añadir un segundo momento animado: la impresión del sello ocurre al pulsar.",
+      "Don't esconder una acción que aún no existe; se muestra desactivada, sin violeta y con su fase escrita en texto.",
+      "Don't hacer del tema oscuro un azul pizarra ni un negro puro: es la misma hoja verde bajo lámpara de trabajo."
+    ]
+  }
+}

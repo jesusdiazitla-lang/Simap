@@ -70,3 +70,41 @@ yarn-error.log*
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# --- Skills y configuracion de harnesses de IA (impeccable, ui-ux-pro-max, ...)
+# Instaladas por herramienta (`npx impeccable install`), no forman parte del codigo
+# del proyecto. Misma decision que CLAUDE.md / AGENT.md: cada quien instala las suyas.
+.agents/
+.augment/
+.claude/
+.codebuddy/
+.codewhale/
+.codex/
+.continue/
+.cursor/
+.factory/
+.gemini/
+.kilocode/
+.kiro/
+.opencode/
+.qoder/
+.roo/
+.trae/
+.warp/
+.windsurf/
+# En .github solo se ignoran las subcarpetas de agentes: workflows/ SI se versiona.
+.github/agents/
+.github/hooks/
+.github/prompts/
+.github/skills/
+
+# --- Salida del grafo de conocimiento de graphify (regenerable con `/graphify .`)
+graphify-out/
+
+# Impeccable: se versionan el contrato de direccion de cada superficie y el sidecar del sistema de
+# diseno, que son decisiones de diseno del proyecto y los lee el detector. El resto (cache del hook,
+# registros de las paginas de decision, capturas de revision, preferencias locales de cada maquina)
+# es estado de la herramienta y se regenera.
+.impeccable/*
+!.impeccable/surfaces/
+!.impeccable/design.json

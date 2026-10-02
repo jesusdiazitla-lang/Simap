@@ -15,6 +15,7 @@ inventario de repuestos, en una arquitectura **multi-tenant** con aislamiento po
 | [docs/contexto/01-especificacion-funcional.md](docs/contexto/01-especificacion-funcional.md) | Módulos, roles, modelo de Weibull, modelo de datos conceptual |
 | [docs/contexto/02-arquitectura.md](docs/contexto/02-arquitectura.md) | Stack completo, seguridad (RLS, JWT, RBAC), empaquetado y despliegue |
 | [docs/contexto/03-requerimientos-casos-de-uso.md](docs/contexto/03-requerimientos-casos-de-uso.md) | RF-01..28, RNF-01..08, CU-01..06 y plan por fases |
+| [docs/contexto/04-fase1-fundamentos.md](docs/contexto/04-fase1-fundamentos.md) | Alcance de F1: auth, multi-tenant, RLS y su definición de «hecho» |
 | [backend/db/schema.sql](backend/db/schema.sql) · [rls_policies.sql](backend/db/rls_policies.sql) | DDL de PostgreSQL y políticas de aislamiento por empresa |
 | [docs/PLAN.yaml](docs/PLAN.yaml) | Las 5 fases como tareas rastreables por `graph.py status` |
 
@@ -51,12 +52,20 @@ SIMAP/
 │   │   ├── main.py            # create_app(): instancia FastAPI, CORS, routers
 │   │   ├── api/v1/            # router.py agrega las rutas de routes/
 │   │   ├── core/config.py     # Settings (pydantic-settings, lee .env)
+│   │   ├── core/security.py   # Argon2id + emisión/verificación de JWT
+│   │   ├── core/auth.py       # extrae y valida el token (cookie o Bearer)
+│   │   ├── core/rbac.py       # requiere_roles(): permisos por endpoint
+│   │   ├── core/almacen.py    # rate limiting y revocación (Redis o memoria)
 │   │   ├── schemas/           # modelos Pydantic de entrada/salida
 │   │   ├── services/          # lógica de negocio (sin FastAPI)
-│   │   ├── db/                # sesión async y dependencia get_db (fija app.empresa_id)
+│   │   ├── db/session.py      # motor async y fábrica de sesiones (pool)
+│   │   ├── db/deps.py         # get_db: valida el JWT y fija app.empresa_id
+│   │   ├── db/tenant.py       # estrategia de aislamiento por motor (portabilidad)
 │   │   ├── models/            # entidades SQLAlchemy (espejo de db/schema.sql)
 │   │   └── jobs/              # tareas APScheduler (recalculo diario de riesgo)
-│   ├── db/schema.sql          # DDL de referencia + rls_policies.sql
+│   ├── alembic/versions/      # migraciones: la ÚNICA forma de crear tablas
+│   ├── db/roles.sql           # arranque: roles y pgcrypto (se ejecuta)
+│   ├── db/schema.sql          # DDL de referencia + rls_policies.sql (NO se ejecutan)
 │   ├── tests/                 # pytest + httpx TestClient
 │   ├── Dockerfile
 │   ├── pyproject.toml         # ruff, mypy, pytest, import-linter (capas)
@@ -88,16 +97,164 @@ git clone <url> SIMAP; cd SIMAP
 .\tools\setup.ps1          # en Linux/macOS: ./tools/setup.sh
 
 # 2) Infraestructura local (PostgreSQL + Redis)
+#    Al inicializar solo se ejecuta backend/db/roles.sql: crea los roles y pgcrypto.
+#    Las tablas NO las crea este paso.
 docker compose up -d db redis
 
 # 3) Backend
 .\.venv\Scripts\Activate.ps1
 cd backend; Copy-Item .env.example .env         # ajustar JWT_SECRET
-uvicorn app.main:app --reload                   # http://localhost:8000/docs
+alembic upgrade head                            # crea las tablas y sus politicas RLS
 
-# 4) Frontend (otra terminal)
+# 4) Sembrar el operador de SIMAP. Es el UNICO comando que hace falta, y solo esta vez:
+#    a partir de aqui los clientes se dan de alta desde /operador en el navegador.
+#    Pide la contrasena por teclado y no la hace eco.
+python -m app.cli crear-operador --nombre "Tu Nombre" --correo tu@correo.com
+
+# 5) Arrancar la API. COOKIE_SECURE=false en local: sin HTTPS el navegador
+#    descartaria la cookie de sesion y el login no funcionaria.
+$env:COOKIE_SECURE = "false"; uvicorn app.main:app --reload   # http://localhost:8000/docs
+
+# 6) Frontend (otra terminal)
 cd frontend; Copy-Item .env.local.example .env.local; npm run dev   # http://localhost:3000
 ```
+
+Luego, en el navegador: entra en **http://localhost:3000/operador** con el operador que acabas de
+sembrar, da de alta una empresa cliente, y usa la contraseña temporal que te muestra para entrar
+como su administrador en **http://localhost:3000**.
+
+## Dos planos: control y datos
+
+SIMAP tiene dos superficies que **no se tocan**, y la separación es de arquitectura, no de interfaz.
+
+| | Plano de control | Plano de datos |
+|---|---|---|
+| Quién | El operador de SIMAP (tú) | Los cinco roles dentro de una empresa |
+| Tabla | `operadores` (sin `empresa_id`) | `usuarios` (con `empresa_id`) |
+| Ruta | `/operador`, API `/api/v1/operador/*` | `/`, API `/api/v1/auth/*` |
+| Cookies | `simap_op_*`, limitadas a `/api/v1/operador` | `simap_*`, en `/` |
+| Rol de BD | `operador_user` | `app_user` |
+| Puede leer | Empresas, sus administradores, conteo de equipos | Solo su propia empresa, vía RLS |
+| **No** puede leer | **Ningún dato de negocio de ningún cliente** | Nada de otra empresa, ni el plano de control |
+
+### Por qué no basta con una bandera en el código
+
+Lo obvio habría sido un `es_superadmin` en `usuarios` y saltarse el Row-Level Security cuando
+estuviera activo. Eso pone en internet, detrás de una contraseña, una cuenta capaz de leer los
+datos de **todos** los clientes: una credencial filtrada deja de ser «una empresa comprometida» y
+pasa a ser «todas». Además haría inservible la prueba que comprueba que ningún rol que atiende HTTP
+puede saltarse el aislamiento.
+
+La frontera la impone PostgreSQL con un **cuarto rol de base de datos**:
+
+```
+simap           superusuario. Ignora RLS SIEMPRE. Solo administrar.
+simap_owner     dueño de las tablas. Migraciones y siembra inicial.
+app_user        atiende a los clientes. Ni dueño ni superusuario.
+operador_user   atiende la consola. Permisos tabla por tabla.
+```
+
+**La regla que hace que esto siga siendo cierto mañana:** a `operador_user` se le conceden permisos
+**tabla por tabla**, en la migración que crea cada tabla que deba ver, y **nunca** con un
+`ALTER DEFAULT PRIVILEGES` como el de `app_user`. Por eso las tablas de negocio de F2 en adelante
+—activos, lecturas, alertas, órdenes, repuestos— quedan fuera de su alcance **por omisión**:
+hacerlas visibles exigiría un `GRANT` explícito que se ve en la revisión del código.
+
+Encima de los permisos, las políticas lo estrechan más: sobre `usuarios`, el operador solo alcanza
+las filas con rol `administrador`. El personal de planta le es invisible.
+
+Lo comprueba `tests/test_operador.py`, con cuatro pruebas dedicadas a la frontera: que el operador
+no ve al personal de planta, que `app_user` no ve la tabla de operadores ni la bitácora, que el
+operador no puede leer una tabla a la que nadie le dio permiso, y que los tokens de los dos planos
+no son intercambiables en ninguna dirección.
+
+### El alta de empresas es por invitación
+
+SIMAP se cobra **por equipo monitoreado**, así que una empresa no puede darse de alta a sí misma:
+lo haría gratis. No existe `POST /auth/register`. Esconder la ruta no habría bastado —FastAPI la
+anunciaría en el esquema OpenAPI de `/docs`—, así que se retiró *y* la revisión `0002` de Alembic
+estrechó la política RLS de `empresas` para que solo el rol dueño pueda insertar.
+
+El alta se hace desde la consola, y el primer operador desde la terminal:
+
+```powershell
+# Solo la primera vez: sembrar al operador. Pide la contrasena por teclado.
+python -m app.cli crear-operador --nombre "Tu Nombre" --correo tu@correo.com
+
+# A partir de ahi, todo desde /operador en el navegador.
+```
+
+Queda además `python -m app.cli crear-empresa` para dar de alta un cliente sin pasar por la web
+(automatización, recuperación, pruebas). Usa la misma función de servicio que la consola y valida
+con el mismo esquema Pydantic, de modo que las reglas no pueden divergir entre los dos caminos.
+
+### Endpoints del plano de control
+
+| Método | Ruta | Qué hace |
+|---|---|---|
+| POST | `/api/v1/operador/login` | Abre sesión de operador. Cookies propias, limitadas a este prefijo. 429 al superar el límite |
+| POST | `/api/v1/operador/cambiar-clave` | El operador cambia su propia clave. Exige la actual; queda en la bitácora |
+| POST | `/api/v1/operador/logout` | Cierra sesión. No exige estar autenticado |
+| GET | `/api/v1/operador/yo` | El operador de la sesión actual |
+| GET | `/api/v1/operador/empresas` | Empresas con su administrador, estado y conteo de equipos |
+| POST | `/api/v1/operador/empresas` | Alta de empresa + administrador. Devuelve la clave temporal |
+| PATCH | `/api/v1/operador/empresas/{id}` | Renombrar |
+| POST | `/api/v1/operador/empresas/{id}/suspender` | Suspender: sus usuarios reciben 403 al entrar |
+| POST | `/api/v1/operador/empresas/{id}/reactivar` | Reactivar |
+| POST | `/api/v1/operador/empresas/{id}/restablecer-clave` | Clave temporal nueva para el administrador |
+| GET | `/api/v1/operador/bitacora` | Historial de acciones, con quién y cuándo |
+
+**La contraseña la genera el servidor, nunca el operador.** Si quien opera SIMAP eligiera la
+contraseña de su cliente, tendría acceso permanente a esa cuenta. Se muestra una sola vez y no se
+guarda en claro en ningún sitio; si se pierde, se genera otra.
+
+Toda acción del plano de control queda en `operador_bitacora`, escrita **en la misma transacción**
+que la acción: o quedan las dos cosas o ninguna.
+
+### Endpoints de autenticación (plano de datos)
+
+| Método | Ruta | Qué hace |
+|---|---|---|
+| POST | `/api/v1/auth/login` | Valida credenciales. 429 con `Retry-After` al superar el límite |
+| POST | `/api/v1/auth/refresh` | Rota el refresh token y revoca el anterior |
+| POST | `/api/v1/auth/logout` | Borra cookies y revoca. No exige estar autenticado |
+| POST | `/api/v1/auth/cambiar-clave` | Cambia la clave propia. Exige la actual (400 si no coincide, 429 al superar el límite) y cierra las demás sesiones |
+| GET | `/api/v1/auth/yo` | Usuario de la sesión actual, leído a través de RLS |
+
+No hay endpoint de registro: ver «Alta de empresas» más arriba.
+
+Los tokens **nunca** viajan en el cuerpo: van en cookies `httpOnly` (`simap_access` en `/`,
+`simap_refresh` restringida a `/api/v1/auth`). En desarrollo hay que poner `COOKIE_SECURE=false` o
+el navegador las descartará al no haber HTTPS.
+
+Hay una tercera cookie, `simap_sesion` (y `simap_op_sesion` en la consola), que **no es una
+credencial**: vale siempre `1` y ninguna ruta de la API la lee. Es la pista que usa el `proxy.ts`
+del frontend para decidir si mandar a alguien a `/login` (ver «Frontend → Desvío por sesión»).
+
+### Esquema de base de datos
+
+`alembic upgrade head` es la **única** forma de crear o modificar tablas; `backend/db/schema.sql` y
+`backend/db/rls_policies.sql` son documentos de referencia del modelo completo y no se ejecutan.
+Las migraciones corren como `simap_owner` (`DATABASE_URL_MIGRACIONES`), nunca como el superusuario:
+una tabla creada por un superusuario escapa a `FORCE ROW LEVEL SECURITY`.
+
+```powershell
+alembic upgrade head            # aplicar
+alembic downgrade -1            # revertir la ultima
+alembic revision --autogenerate -m "descripcion"   # tras cambiar un modelo
+```
+
+`tests/test_migraciones.py` falla si los modelos y la base divergen, que es el error silencioso más
+fácil de cometer: cambiar un modelo y olvidar la migración.
+
+> **Cuidado con `INSERT ... RETURNING` bajo RLS.** Al devolver la fila, PostgreSQL le aplica además
+> la política de **lectura**, no solo la de escritura. Un `INSERT INTO empresas (...) RETURNING id`
+> sin tenant fijado inserta y aun así falla, porque `tenant_isolation_empresas` oculta la fila
+> recién creada. El ORM no se topa con esto porque genera el UUID en Python; el SQL escrito a mano
+> sí. Si necesitas el id, genéralo antes y pásalo en el `INSERT`.
+
+> En Windows con Next.js: si `npm run dev` falla con *"Turbopack is not supported on this platform"*,
+> el binario nativo de SWC no carga (Avast suele bloquearlo). Alternativa: `npx next dev --webpack`.
 
 ### Nota sobre TLS en máquinas con Avast
 
@@ -145,12 +302,234 @@ de `src/app`; se avisan huérfanos (salvo convenciones de Next.js).
 
 ## Seguridad multi-tenant (no negociable)
 
-1. Toda tabla de empresa lleva `empresa_id` y tiene RLS activada (`backend/db/rls_policies.sql`).
-2. `app.db.deps.get_db` ejecuta `SET LOCAL app.empresa_id = <empresa_id del JWT>` en cada transacción.
-   El valor sale **del token firmado**, jamás de un parámetro del cliente.
-3. RBAC se verifica en cada endpoint con una dependencia (`app.core.rbac`), no solo en la UI.
-4. Antes de cada entrega: test automatizado de aislamiento entre tenants, OWASP Top 10 sobre lo nuevo,
+1. Toda tabla de empresa lleva `empresa_id` y tiene RLS con **`ENABLE` y `FORCE`**
+   (`backend/db/rls_policies.sql`).
+2. **Tres roles de base de datos, no dos.** `simap` (superusuario, solo administración),
+   `simap_owner` (dueño de las tablas, sin superusuario, corre las migraciones) y `app_user` (el que
+   usa el backend, sin `BYPASSRLS` y dueño de nada). `FORCE` hace que las políticas alcancen también
+   al propietario — **pero solo si el propietario no es superusuario**, porque a un superusuario
+   PostgreSQL le deja pasar siempre. Como la imagen de Docker crea `POSTGRES_USER` como superusuario
+   y dueño, `rls_policies.sql` transfiere la propiedad a `simap_owner`; sin ese paso el `FORCE` es
+   decorativo. Verificado en `tests/test_aislamiento_tenant.py`.
+3. `app.db.deps.get_db` ejecuta `set_config('app.empresa_id', <empresa_id del JWT>, true)` dentro de
+   la transacción del request — equivale a `SET LOCAL`, pero admite parámetro enlazado, así que el
+   contenido del token nunca se concatena en el SQL. El valor sale **del token firmado**, jamás de un
+   parámetro, cabecera o cuerpo del cliente.
+4. Las políticas comparan contra `current_setting('app.empresa_id', true)`, que devuelve NULL si nadie
+   lo fijó. Una transacción que olvide el `set_config` **no ve ninguna fila**: falla cerrado.
+5. El token de acceso viaja en cookie `httpOnly`/`Secure`/`SameSite` (`simap_access`), nunca en
+   `localStorage`. Se acepta `Authorization: Bearer` solo para clientes que no son navegador; si
+   llegan los dos, manda la cookie.
+6. Contraseñas con Argon2id (`app.core.security`), nunca bcrypt ni SHA. Los tokens de refresco no
+   sirven como tokens de acceso: la reclamación `typ` los distingue.
+7. RBAC se verifica en cada endpoint con `requiere_roles(...)` (`app.core.rbac`), no solo en la UI.
+   Llamarla sin roles lanza `RolNoDeclarado` al arrancar: ningún endpoint queda abierto por descuido.
+8. **La política `login_lookup` es la excepción deliberada al aislamiento.** El login tiene un
+   problema de huevo y gallina: para saber a qué empresa pertenece alguien hay que leer su fila,
+   pero leer exige conocer la empresa. La política deja ver únicamente la fila cuyo correo coincide
+   **exactamente** con el que se acaba de teclear, y solo mientras dure esa transacción. No permite
+   listar, buscar por patrón ni enumerar correos.
+9. Cada token lleva un `jti` único. Sin él, dos tokens emitidos en el mismo segundo serían la misma
+   cadena, la rotación del refresh token no rotaría nada y revocar el viejo revocaría también el nuevo.
+10. **Crear una empresa no es una operación HTTP.** Ningún rol que atienda tráfico web puede insertar
+   en `empresas`: la política `empresa_alta_administrativa` (revisión 0002) solo alcanza a
+   `simap_owner`, que es con quien corre `python -m app.cli crear-empresa`. Retirar la ruta pública
+   no habría bastado por sí solo, porque una ruta se puede reintroducir sin querer; la política es
+   lo que hace que el cierre no dependa de que nadie se despiste.
+11. **El frontend no guarda ningún token.** No hay nada en `localStorage` ni cabecera `Authorization`
+   que construir: el cliente (`src/lib/api.ts`) solo envía `credentials: "include"` y el navegador
+   adjunta las cookies `httpOnly`. Un XSS en la página no puede leer la sesión porque el JavaScript
+   no tiene acceso a ella. El rol tampoco se cachea en el cliente: se pregunta a `/auth/yo` en cada
+   carga, para que nadie pueda cambiarlo desde las herramientas del navegador y ver un menú que no
+   le corresponde.
+12. **El plano de control no puede leer datos de negocio, y lo impone PostgreSQL.** La consola del
+   operador se atiende con el rol `operador_user`, que recibe permisos **tabla por tabla** y nunca
+   por defecto. Al crear una tabla de negocio en F2 y siguientes, **no concederle permisos**: así
+   queda fuera de su alcance sin que nadie tenga que acordarse. Sobre `usuarios` solo alcanza las
+   filas con rol `administrador`.
+13. **Los tokens de los dos planos no son intercambiables.** Cada uno lleva la reclamación `suj`
+   que dice a qué plano pertenece, y las dos funciones de decodificación la comprueban en su
+   dirección. Un token de operador no lleva `empresa_id` y ya fallaría por eso, pero rechazarlo por
+   lo que **dice ser** es lo que seguirá funcionando el día que alguien añada un `empresa_id`
+   opcional sin acordarse de esta frontera.
+14. **La contraseña de un cliente la genera el servidor, nunca el operador.** Con `secrets`, no con
+   `random`. Si quien opera SIMAP pudiera elegirla, tendría acceso permanente a la cuenta de ese
+   cliente. Se muestra una vez y solo se guarda su hash.
+15. **Toda acción del plano de control queda en la bitácora**, escrita en la misma transacción que
+   la acción. La clave foránea a `operadores` es `RESTRICT`: nadie puede borrar su propia cuenta
+   para hacer desaparecer lo que hizo.
+16. **Toda puerta que compara una contraseña tiene límite de intentos**, no solo `/auth/login`: también
+   el login de la consola y el cambio de clave en los dos planos (`app.services.limites`). Cada
+   puerta lleva su propio contador; si compartieran uno, bastaría golpear la consola con el correo
+   de un administrador de planta para dejarlo fuera de su propia empresa.
+17. **Cambiar o restablecer una clave cierra las demás sesiones.** `usuarios.version_clave`
+   (revisión 0004) sube en cada cambio, el refresh token lleva la versión con la que se emitió
+   (reclamación `ver`) y `/auth/refresh` rechaza los que no coinciden. Es un contador y no una fecha
+   porque `iat` tiene resolución de un segundo y un token emitido en el mismo segundo que el cambio
+   caería a un lado u otro por azar. El token de acceso de los otros aparatos no se comprueba contra
+   la base —sería una consulta por petición—: les queda como mucho lo que falte de sus 30 minutos.
+18. **Cambiar la clave exige la actual**, aunque haya sesión: una sesión olvidada en un aparato
+   compartido no debe bastar para quedarse con la cuenta. Responde 400, no 401, para que el cliente
+   no confunda el error con una sesión caducada y lo tape con un reintento.
+19. Antes de cada entrega: test automatizado de aislamiento entre tenants, OWASP Top 10 sobre lo nuevo,
    sin secretos en repo ni logs (`pip-audit` / `npm audit` en CI).
+
+> Si más adelante se añade PgBouncer, debe ir en **session pooling**. En transaction pooling la
+> conexión puede reiniciarse entre sentencias y perder el `app.empresa_id` a mitad de una operación.
+
+## Frontend
+
+### El sistema visual: sobrio, como una herramienta de mantenimiento
+
+El listón es el software de mantenimiento industrial (CMMS) que un jefe de planta ya reconoce:
+gris neutro, superficies planas, controles con caja visible, densidad alta y un único color de
+acción. Es una decisión del usuario, registrada en `PRODUCT.md` como compromiso de marca, y el
+sistema completo está documentado en `DESIGN.md`.
+
+Hubo antes una versión con mundo visual propio —la interfaz imitaba una bitácora de mantenimiento
+en papel, con fondo rayado, margen perforado y sello de fecha— y el usuario la rechazó por poco
+sobria para una herramienta industrial. Queda dicho aquí porque explica una regla: **nada de
+texturas, papel ni metáforas de objetos físicos.** La estructura se comunica con espaciado,
+alineación y bordes de 1 px. Cuando una decisión pueda ir hacia lo expresivo o hacia el estándar
+de la categoría bien ejecutado, va hacia el estándar.
+
+Tres reglas del sistema que conviene no romper:
+
+- **Hay dos vocabularios de color que nunca se mezclan.** El azul (`--accion`) significa «aquí se
+  puede hacer algo» y solo aparece en controles activos; un control deshabilitado lo pierde por
+  completo. Verde, ámbar y rojo (`--estado-*`) quedan reservados para el **estado de una máquina**
+  (alerta, orden, riesgo). No es estética: el par verde/rojo es justo el que no distingue alguien
+  con deuteranopía, así que si además significara «pulsable» no quedaría ninguna señal libre para
+  el estado real del equipo.
+- **Ocupado no es lo mismo que deshabilitado.** Mientras una petición está en vuelo el control
+  conserva el color y solo cambia el texto; el gris sin color queda para lo genuinamente
+  deshabilitado.
+- **Un error nunca mueve el botón.** El aviso va debajo de la acción, no encima, y las pantallas de
+  una sola pieza se anclan con un desplazamiento fijo en lugar de centrarse: un bloque centrado
+  sube la mitad de lo que crece, y el botón se movería bajo el cursor justo cuando el usuario va a
+  volver a pulsarlo.
+
+Los campos y los botones miden 48 px: esto se usa de pie, con guantes y a menudo con una sola mano.
+El tema claro y el oscuro son **los dos de primera clase**, porque la luz ambiente de una planta
+cambia dentro del mismo turno; se auditan por separado y todos los pares texto/fondo cumplen 4.5:1,
+los bordes de control 3:1.
+
+### Rutas
+
+| Ruta | Para quién |
+|---|---|
+| `/` | Desvía: al panel si hay sesión, al acceso si no |
+| `/login` | Acceso de los usuarios de una empresa |
+| `/panel` | Panel del turno, distinto según el rol |
+| `/panel/clave` | Cambiar la contraseña propia |
+| `/operador/login` | Acceso del operador de SIMAP |
+| `/operador` | Consola: alta de clientes, suspensión, claves y bitácora |
+| `/operador/clave` | El operador cambia su propia contraseña |
+
+### Desvío por sesión (`src/proxy.ts`)
+
+El documento de F1 pide un `middleware.ts`; desde Next.js 16 esa convención se llama `proxy.ts`.
+Antes de pintar nada, manda a `/login` a quien no tiene sesión (o a `/operador/login` en la
+consola). **No es control de acceso**: es una comprobación optimista para no enseñar el esqueleto
+de una pantalla que no se puede usar. El permiso lo decide la API en cada petición.
+
+Tres decisiones que no son obvias:
+
+- **No mira el token, mira una pista.** El token de acceso caduca a los 30 minutos mientras la
+  sesión vive siete días gracias al refresh token, que el navegador no manda a las páginas. Mirar
+  el de acceso echaría a quien todavía puede renovar en silencio. La API pone y quita
+  `simap_sesion` junto con el refresh token.
+- **Nunca desvía `/login`.** Si mandara al panel a quien llega al acceso con pista, una pista
+  caducada daría un bucle infinito.
+- **Se aparta si no puede ver la pista.** Las cookies son del host que las pone; si la API vive en
+  otro host, su ausencia no significa nada. El proxy compara el host de `NEXT_PUBLIC_API_URL` con el
+  de la petición, y si no coinciden deja que cada página compruebe la sesión por su cuenta, como
+  antes.
+
+Protege **todo por defecto** y enumera lo público, igual que en el backend un endpoint sin roles se
+rechaza: una pantalla nueva nace protegida.
+
+### Service worker mínimo (`public/sw.js`)
+
+Hace una sola cosa: si una pantalla no carga por falta de red, enseña `public/offline.html` en vez
+del error del navegador. **No guarda en caché respuestas de la API** —servir una lectura de ayer
+como si fuera de hoy es peor que no servir nada— ni el JavaScript de la aplicación. Solo intercepta
+navegaciones. Se registra únicamente en la compilación de producción. La cola de reportes sin
+conexión es de F2 y se construirá sobre este archivo.
+
+`src/lib/operador.ts` está deliberadamente separado de `src/lib/auth.ts`. Comparten el cliente HTTP
+y nada más: mezclarlos sería la forma más fácil de que un día una pantalla de cliente acabe llamando
+a un endpoint de operador porque «ya estaba importado».
+
+### Sesión en el cliente
+
+`src/lib/api.ts` no contiene ningún token, y eso es lo importante: la sesión va en cookies
+`httpOnly` que el JavaScript de la página no puede leer. Toda la gestión se reduce a
+`credentials: "include"`. Ante un 401 el cliente refresca la sesión una vez y reintenta, con un
+**cerrojo compartido**: sin él, tres peticiones simultáneas dispararían tres refrescos, y como el
+backend rota el refresh token y revoca el anterior en el mismo paso, el segundo llegaría con un
+token ya revocado y cerraría la sesión de alguien que no hizo nada mal.
+
+### Revisión de interfaz automatizada
+
+`frontend/e2e/` (Playwright) comprueba lo que se rompe sin que nadie lo note: desplazamiento
+horizontal en **tres anchos** (390, 768 y 1280) y los dos temas, que los controles alcancen el
+tamaño táctil mínimo, que el foco se distinga sin el anillo del navegador, y que un error no
+desplace el botón.
+
+Los 768 px no estaban al principio, y una versión anterior desbordó justo ahí: entre el móvil y el
+escritorio hay un tramo donde nada encaja por defecto y que nadie mira.
+
+`sesion-y-cuenta.spec.ts` cubre el cierre de F1: el proxy (pidiendo la página con
+`maxRedirects: 0` y mirando el 307, porque la URL final no distinguiría el proxy del desvío que cada
+página ya hacía en el navegador), el cambio de clave en los dos planos —usa las cuentas de
+demostración y **les devuelve la clave original** al terminar, pase lo que pase— y la página sin
+conexión con la red cortada.
+
+Corren con **un solo trabajador**: comparten backend y cuentas, y en paralelo una prueba intentaba
+entrar con la clave de Ana justo mientras otra la tenía cambiada.
+
+`consola-operador.spec.ts` cubre además la consola, y deja fijada por escrito la frontera del plano
+de control: comprueba que las columnas de la tabla son exactamente empresa, administrador, equipos,
+estado y acciones. Si algún día aparece ahí una columna con datos de negocio, esa prueba falla.
+
+```powershell
+cd frontend
+npm run build; npx next start --port 3000   # se ejecutan contra la COMPILACION
+npm run test:e2e
+```
+
+Contra `next dev` fallaban dos o tres pruebas distintas en cada ejecución —el servidor de desarrollo
+compila cada ruta al pedirla y llegó a devolver 500 con un manifiesto truncado—, y una prueba que
+unas veces pasa y otras no enseña a ignorar los fallos. Necesitan la API levantada, una empresa dada
+de alta y un operador sembrado. Las credenciales salen **solo** de variables de entorno
+(`E2E_CORREO`, `E2E_PASSWORD`, `E2E_OPERADOR_CORREO`, `E2E_OPERADOR_PASSWORD`), que
+`playwright.config.ts` carga de `frontend/.env.e2e` si existe. Ese archivo no se versiona: son
+contraseñas reales de la base de desarrollo, incluida la del operador. Si falta una variable, la
+prueba que la necesita falla diciendo cuál.
+
+Todavía no están en CI: entran en F5, cuando el `docker compose` completo corra allí.
+
+## Integración continua
+
+Dos workflows con responsabilidades distintas:
+
+| Workflow | Cuándo | Qué hace |
+|---|---|---|
+| [`ci.yml`](.github/workflows/ci.yml) | Cada push **y** cada pull request | Puerta de calidad. Puede bloquear un PR |
+| [`docs.yml`](.github/workflows/docs.yml) | Solo push a `main` | Regenera el grafo y commitea la documentación |
+
+`ci.yml` tiene tres jobs: **backend** (levanta `postgres:16` como servicio, aplica `roles.sql`,
+migra, comprueba que la migración es reversible, y pasa ruff · `mypy --strict` · import-linter ·
+pytest · pip-audit), **frontend** (lint · dependency-cruiser · build · npm audit) y **grafo**.
+
+> **`CI=true` convierte en error la ausencia de base de datos.** En local, las ~30 pruebas que
+> necesitan PostgreSQL se saltan con un motivo explícito si no está levantado. En CI eso sería un
+> agujero: un test saltado no prueba nada pero deja el pipeline en verde, y la cobertura de RNF-01
+> desaparecería sin que nadie lo note. `tests/conftest.py` aborta la ejecución entera en ese caso.
+
+Recomendado en GitHub: protección de rama sobre `main` exigiendo `ci.yml` en verde y prohibiendo el
+push directo (sección 4.2 del documento de F1). Eso se configura en el repositorio, no en el código.
 
 ## Flujo de documentación
 
@@ -165,6 +544,25 @@ de `src/app`; se avisan huérfanos (salvo convenciones de Next.js).
 
 Para saltar el hook en una emergencia: `git push --no-verify` (queda registrado en el historial que no se validó).
 
+### Limpiar los datos que dejan las pruebas
+
+La batería de integración corre contra un PostgreSQL real —es lo que hace que las pruebas de
+aislamiento valgan algo— y cada ejecución deja empresas, usuarios y operadores con nombres
+generados al azar. Tras unas cuantas, la consola del operador muestra cientos de empresas basura.
+
+```powershell
+python tools/limpiar_datos_de_prueba.py              # muestra lo que haria
+python tools/limpiar_datos_de_prueba.py --ejecutar   # lo hace
+```
+
+Borra solo lo que coincide con patrones **declarados explícitamente** en el propio script, y se
+niega a correr si la URL no apunta a `localhost`. Si añades un nombre de empresa nuevo en una
+prueba, añádelo también allí.
+
+Está en `tools/` y no en `app.cli` a propósito: `app.cli` es una herramienta de producción y un
+comando que borra filas por patrón de nombre no debe estar a un tecleo de una base con clientes
+reales.
+
 ## Calidad
 
 ```powershell
@@ -177,20 +575,20 @@ npm run lint ; npm run graph:check
 <!-- graph:auto:start -->
 _Sección generada por `python tools/graph/graph.py docs`. No editar a mano; se sobrescribe en cada push a `main`._
 
-Última actualización: 2026-09-17 12:21 UTC
+Última actualización: 2026-10-02 16:46 UTC
 
 ### Estado del proyecto
 
 ```text
 === ESTADO DEL CÓDIGO ===
 
-[backend]  módulos: 5   LOC: 57   TODO/FIXME: 0
-  con test: 2/5   stubs/vacíos: 0
-  por capa: api=2, core=1, main=1, schemas=1
+[backend]  módulos: 24   LOC: 2517   TODO/FIXME: 0
+  con test: 20/24   stubs/vacíos: 0
+  por capa: api=4, cli=1, core=5, db=3, main=1, models=4, schemas=3, services=3
 
-[frontend]  módulos: 3   LOC: 115   TODO/FIXME: 0
-  con test: 0/3   stubs/vacíos: 0
-  por capa: app=3
+[frontend]  módulos: 18   LOC: 2618   TODO/FIXME: 0
+  con test: 0/18   stubs/vacíos: 0
+  por capa: app=9, components=5, lib=3, src=1
 
 ciclos de importación: 0
 
@@ -203,22 +601,27 @@ ciclos de importación: 0
     [x] Documentación inicial (README, README_USER, MANUAL_USUARIO)  <done>
     [x] Documentos de contexto transcritos en docs/contexto y DDL en backend/db  <done>
 
-  F1 - Fundamentos: auth, multi-tenant y RLS (semanas 1-2)  (2/9, 22%)
+  F1 - Fundamentos: auth, multi-tenant y RLS (semanas 1-2)  (12/13, 92%)
     cubre: RF-01, RF-02, RF-03, RNF-01, RNF-07, RNF-08
     hecho cuando: Un usuario se registra e inicia sesión; el sistema deniega datos de otra empresa incluso por API directa.
     [x] Dependencias del stack (SQLAlchemy async, asyncpg, Alembic, python-jose, argon2, redis, scipy, APScheduler, qrcode)  <done>
     [x] docker-compose con postgres:16 y redis:7; Dockerfile del backend  <done>
-    [ ] Sesión async de SQLAlchemy y dependencia get_db que fija app.empresa_id desde el JWT  <pending>
-    [ ] Modelos Empresa y Usuario + migración inicial Alembic (schema.sql + rls_policies.sql)  <pending>
-    [ ] Registro e inicio de sesión: Argon2id, JWT 30 min + refresh token  <pending>
-    [ ] RBAC: dependencia require_roles verificada en cada endpoint  <pending>
-    [ ] Test automatizado de aislamiento entre tenants (RNF-01)  <pending>
-    [ ] Frontend: login, cliente API con JWT, navegación básica por rol, base PWA  <pending>
-    [ ] CI: pytest + lint + pip-audit/npm audit en cada push  <pending>
+    [x] Sesión async de SQLAlchemy y dependencia get_db que fija app.empresa_id desde el JWT  <done (auto)>
+    [x] Modelos Empresa y Usuario + migración inicial Alembic (schema.sql + rls_policies.sql)  <done (auto)>
+    [x] Registro e inicio de sesión: Argon2id, JWT 30 min + refresh token  <done (auto)>
+    [x] RBAC: dependencia require_roles verificada en cada endpoint  <done (auto)>
+    [x] Test automatizado de aislamiento entre tenants (RNF-01)  <done>
+    [x] Frontend: login, cliente API con JWT, navegación básica por rol, base PWA  <done>
+    [x] Alta de empresas por invitación: comando de consola en vez de ruta pública  <done>
+    [x] Plano de control: consola del operador de SIMAP (alta de clientes, suspensión, claves, bitácora)  <done>
+    [x] Cierre de F1: proxy de sesión, service worker mínimo y cambio de la clave propia  <done>
+    [ ] Protección de main en GitHub: sin push directo, merge solo con CI en verde (4.2)  <pending>
+    [x] CI: pytest + lint + pip-audit/npm audit en cada push  <done>
 
-  F2 - Activos y registro de campo (semanas 3-6)  (0/8, 0%)
+  F2 - Activos y registro de campo (semanas 3-6)  (0/9, 0%)
     cubre: RF-04, RF-05, RF-06, RF-07, RF-08, RF-09, RF-10, RNF-03, RNF-05
     hecho cuando: Un operario escanea el QR y registra horómetro o alerta; el reporte llega aunque se hiciera offline.
+    [ ] Gestión de usuarios de la empresa: alta, rol y baja, por el administrador (RF-03)  <pending>
     [ ] CRUD de activos con ficha técnica, ubicación y criticidad; baja lógica  <pending>
     [ ] Generación de QR único + código corto de respaldo al crear el activo  <pending>
     [ ] Catálogo de componentes editable por el administrador  <pending>
@@ -258,26 +661,60 @@ ciclos de importación: 0
     [ ] Checklist OWASP Top 10 y verificación de secretos  <pending>
     [ ] Documentación técnica y manual de usuario finales  <pending>
 
-AVANCE GLOBAL: 7/40 tareas (17%)
+AVANCE GLOBAL: 17/45 tareas (37%)
 ```
 
 ### Módulos del backend
 
 | Módulo | Capa | Importa | Importado por | LOC | Test |
 |---|---|---:|---:|---:|:---:|
-| `app.api.v1.router` | api | 1 | 1 | 5 | — |
+| `app.api.v1.router` | api | 3 | 1 | 9 | — |
+| `app.api.v1.routes.auth` | api | 7 | 1 | 203 | ✅ |
 | `app.api.v1.routes.health` | api | 2 | 1 | 9 | ✅ |
-| `app.core.config` | core | 0 | 2 | 14 | — |
-| `app.main` | main | 2 | 0 | 18 | — |
+| `app.api.v1.routes.operador` | api | 9 | 1 | 315 | ✅ |
+| `app.cli` | cli | 5 | 0 | 189 | ✅ |
+| `app.core.almacen` | core | 1 | 5 | 112 | ✅ |
+| `app.core.auth` | core | 1 | 4 | 117 | ✅ |
+| `app.core.config` | core | 0 | 10 | 60 | — |
+| `app.core.rbac` | core | 2 | 0 | 36 | ✅ |
+| `app.core.security` | core | 1 | 8 | 212 | ✅ |
+| `app.db.deps` | db | 3 | 3 | 82 | ✅ |
+| `app.db.session` | db | 2 | 1 | 78 | ✅ |
+| `app.db.tenant` | db | 0 | 1 | 108 | ✅ |
+| `app.main` | main | 2 | 0 | 48 | — |
+| `app.models.base` | models | 0 | 4 | 32 | — |
+| `app.models.empresa` | models | 1 | 4 | 19 | ✅ |
+| `app.models.operador` | models | 1 | 3 | 68 | ✅ |
+| `app.models.usuario` | models | 2 | 3 | 44 | ✅ |
+| `app.schemas.auth` | schemas | 1 | 4 | 63 | ✅ |
 | `app.schemas.health` | schemas | 0 | 1 | 6 | ✅ |
+| `app.schemas.operador` | schemas | 1 | 1 | 66 | ✅ |
+| `app.services.auth` | services | 7 | 2 | 285 | ✅ |
+| `app.services.limites` | services | 2 | 4 | 34 | ✅ |
+| `app.services.operador` | services | 6 | 1 | 309 | ✅ |
 
 ### Módulos del frontend
 
 | Módulo | Capa | Importa | Importado por | LOC | Test |
 |---|---|---:|---:|---:|:---:|
-| `src/app/globals.css` | app | 0 | 1 | 22 | — |
-| `src/app/layout.tsx` | app | 1 | 0 | 25 | — |
-| `src/app/page.tsx` | app | 0 | 0 | 68 | — |
+| `src/app/globals.css` | app | 0 | 1 | 186 | — |
+| `src/app/layout.tsx` | app | 2 | 0 | 66 | — |
+| `src/app/login/page.tsx` | app | 5 | 0 | 173 | — |
+| `src/app/operador/clave/page.tsx` | app | 3 | 0 | 60 | — |
+| `src/app/operador/login/page.tsx` | app | 5 | 0 | 141 | — |
+| `src/app/operador/page.tsx` | app | 5 | 0 | 566 | — |
+| `src/app/page.tsx` | app | 2 | 0 | 44 | — |
+| `src/app/panel/clave/page.tsx` | app | 3 | 0 | 65 | — |
+| `src/app/panel/page.tsx` | app | 3 | 0 | 200 | — |
+| `src/components/boton.tsx` | components | 0 | 5 | 72 | — |
+| `src/components/campo.tsx` | components | 0 | 4 | 115 | — |
+| `src/components/formulario-clave.tsx` | components | 3 | 2 | 165 | — |
+| `src/components/marco.tsx` | components | 0 | 7 | 144 | — |
+| `src/components/registro-sw.tsx` | components | 0 | 1 | 28 | — |
+| `src/lib/api.ts` | lib | 0 | 6 | 177 | — |
+| `src/lib/auth.ts` | lib | 1 | 4 | 220 | — |
+| `src/lib/operador.ts` | lib | 1 | 3 | 121 | — |
+| `src/proxy.ts` | src | 0 | 0 | 75 | — |
 
 Diagramas: [backend](docs/diagramas/dependencias-backend.md) · [frontend](docs/diagramas/dependencias-frontend.md)
 <!-- graph:auto:end -->
