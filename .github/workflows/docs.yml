@@ -1,7 +1,12 @@
 name: docs
 
-# En cada push a main: regenera el grafo, valida arquitectura, ejecuta tests y
-# refresca la documentación auto-generada. Si algo cambia, lo commitea.
+# En cada push a main: regenera el grafo, valida arquitectura y refresca la documentación
+# auto-generada. Si algo cambia, lo commitea.
+#
+# NO ejecuta las pruebas del backend: eso es trabajo de ci.yml, que levanta PostgreSQL y aplica
+# las migraciones. Aquí no hay base de datos, y tests/conftest.py se niega a propósito a correr en
+# CI sin ella —saltarse las pruebas de aislamiento dejaría el pipeline en verde sin haber
+# comprobado RNF-01—, así que repetirlas aquí solo producía un fallo falso en cada push.
 on:
   push:
     branches: [main]
@@ -50,10 +55,6 @@ jobs:
 
       - name: Validar arquitectura (import-linter, dependency-cruiser, ciclos)
         run: python tools/graph/graph.py check
-
-      - name: Tests backend
-        working-directory: backend
-        run: python -m pytest -q
 
       - name: Lint frontend
         working-directory: frontend

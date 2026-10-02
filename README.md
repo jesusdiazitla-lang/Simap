@@ -81,7 +81,7 @@ SIMAP/
 │   └── diagramas/             # Mermaid auto-generado
 ├── docker-compose.yml         # postgres:16 + redis:7 (+ api) para desarrollo
 ├── .githooks/pre-push         # validación local antes de subir a main
-├── .github/workflows/docs.yml # CI: grafo + tests + docs en cada push a main
+├── .github/workflows/docs.yml # grafo + docs en cada push a main (los tests, en ci.yml)
 ├── README.md                  # este archivo (técnico)
 ├── README_USER.md             # introducción para usuarios
 └── MANUAL_USUARIO.md          # manual de usuario completo
@@ -539,7 +539,8 @@ push directo (sección 4.2 del documento de F1). Eso se configura en el reposito
    - si los commits tocan `backend/` o `frontend/` pero ninguno toca
      `README.md`, `README_USER.md` o `MANUAL_USUARIO.md`, **bloquea el push**.
 2. **Remoto (`.github/workflows/docs.yml`)** — en cada push a `main`:
-   - repite `build`, `check`, tests y `docs`;
+   - repite `build`, `check` y `docs`. Las pruebas no: las corre `ci.yml`, que es el único con
+     PostgreSQL, y el `conftest` se niega a correr en CI sin base de datos;
    - si el README auto-generado cambió, lo commitea como `docs: actualizar grafo y estado [skip ci]`.
 
 Para saltar el hook en una emergencia: `git push --no-verify` (queda registrado en el historial que no se validó).
