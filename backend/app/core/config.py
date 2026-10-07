@@ -66,6 +66,27 @@ class Settings(BaseSettings):
     cookie_secure: bool = True
     cookie_samesite: str = "lax"
 
+    # --- Registro de campo (F2) -----------------------------------------------
+    # Dirección pública del frontend. El QR de cada equipo codifica `{app_base_url}/a/{codigo}` y
+    # nada más: ni datos del equipo ni de la empresa (05-fase2-activos-y-campo.md, sección 6.1).
+    app_base_url: str = "http://localhost:3000"
+    # Horómetro (sección 5.1): techo de valor admitido, y holgura en horas al comprobar que una
+    # máquina no acumula más horas de operación que las que han pasado en el reloj.
+    horometro_max: int = 1_000_000
+    horometro_tolerancia_horas: int = 2
+    # Ventana de `capturado_en` admitida: un teléfono con el reloj adelantado, o un ítem olvidado
+    # semanas en una cola sin conexión, no deben escribir en la historia del equipo.
+    captura_tolerancia_futuro_minutos: int = 5
+    captura_antiguedad_max_dias: int = 14
+    # Deduplicación de alertas (sección 5.2): misma persona, mismo equipo y mismo síntoma dentro de
+    # esta ventana cuentan como una sola. Un botón atascado no debe inflar el riesgo en la fase 4.
+    alerta_dedup_minutos: int = 10
+    # Límites por usuario (secciones 6.2 y 8.4). La resolución de códigos lleva el suyo, más
+    # estricto, porque es la que permitiría barrer códigos ajenos.
+    campo_max_peticiones_por_minuto: int = 60
+    codigo_max_peticiones_por_minuto: int = 30
+    pagina_max: int = 100
+
     # --- Motor de predicción (se usa a partir de F4) -------------------------
     risk_threshold: float = Field(default=0.25, ge=0.0, le=1.0)
 

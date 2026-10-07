@@ -28,7 +28,18 @@ interface CampoProps {
    * para quien construye ese resumen.
    */
   readonly id?: string;
-  readonly tipo?: "text" | "email" | "password";
+  readonly tipo?: "text" | "email" | "password" | "date" | "search";
+  /**
+   * Teclado que abre el móvil. Para el horómetro, `numeric` con `tipo="text"` y no
+   * `type="number"`: este último acepta «e» y signos, cambia el valor con la rueda del ratón y en
+   * algunos navegadores borra lo tecleado si no le parece un número.
+   */
+  readonly modoTeclado?: "numeric" | "text";
+  /** Texto de ayuda permanente bajo la etiqueta, enlazado al campo con `aria-describedby`. */
+  readonly ayuda?: string;
+  readonly maxLength?: number;
+  /** Cifra grande y gruesa: para el dato que se viene a escribir (el horómetro). */
+  readonly grande?: boolean;
   readonly valor: string;
   readonly onCambio: (valor: string) => void;
   readonly error?: string;
@@ -50,10 +61,19 @@ export function Campo({
   autoFocus = false,
   requerido = false,
   deshabilitado = false,
+  modoTeclado,
+  ayuda,
+  maxLength,
+  grande = false,
 }: CampoProps) {
   const idBase = useId();
   const id = idFijado ?? `${idBase}-${nombre}`;
   const idError = `${id}-error`;
+  const idAyuda = `${id}-ayuda`;
+  const descritoPor =
+    [ayuda !== undefined ? idAyuda : null, error !== undefined ? idError : null]
+      .filter((x) => x !== null)
+      .join(" ") || undefined;
   const [visible, setVisible] = useState(false);
   const esClave = tipo === "password";
 
@@ -68,6 +88,11 @@ export function Campo({
           <span className="text-[0.75rem] font-normal text-texto-tenue">obligatorio</span>
         ) : null}
       </label>
+      {ayuda !== undefined ? (
+        <p id={idAyuda} className="-mt-0.5 pb-1.5 text-[0.8125rem] leading-5 text-texto-suave">
+          {ayuda}
+        </p>
+      ) : null}
 
       <div className="relative">
         <input
@@ -81,11 +106,14 @@ export function Campo({
           required={requerido}
           disabled={deshabilitado}
           aria-invalid={error !== undefined}
-          aria-describedby={error !== undefined ? idError : undefined}
+          aria-describedby={descritoPor}
+          inputMode={modoTeclado}
+          maxLength={maxLength}
           spellCheck={false}
           // 16 px exactos: por debajo, iOS hace zoom al enfocar y descoloca la pantalla.
           className={[
-            "h-12 w-full rounded-[var(--radius-control)] border bg-superficie px-3 text-[1rem] text-texto",
+            "w-full rounded-[var(--radius-control)] border bg-superficie px-3 text-texto",
+            grande ? "h-14 text-[1.5rem] font-semibold tracking-wide" : "h-12 text-[1rem]",
             esClave ? "pr-20" : "",
             "transition-colors placeholder:text-texto-tenue",
             "focus:border-accion focus:outline-none focus:ring-2 focus:ring-[var(--accion-halo)]",

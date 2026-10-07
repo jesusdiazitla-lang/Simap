@@ -32,7 +32,7 @@ from app.core.security import (
 from app.db.deps import fijar_tenant, permitir_busqueda_por_correo
 from app.models.empresa import Empresa
 from app.models.usuario import Usuario
-from app.services import limites
+from app.services import componentes, limites
 
 #: Hash de descarte con el que se compara cuando el correo no existe. Sin esto, un login con correo
 #: inexistente respondería en microsegundos y uno con correo real tardaría lo que tarda Argon2:
@@ -59,6 +59,10 @@ class CorreoYaRegistrado(Exception):
 
 class EmpresaSuspendida(Exception):
     """La empresa dejó de estar activa. Sus usuarios no pueden entrar hasta que se reactive."""
+
+
+class UsuarioDadoDeBaja(Exception):
+    """El administrador de la planta dio de baja a esta persona (RF-03)."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -126,6 +130,9 @@ async def registrar_empresa(
         if _es_correo_duplicado(exc):
             raise CorreoYaRegistrado(correo) from exc
         raise
+    # Catálogo inicial de componentes, en la misma transacción que la empresa.
+    session.add_all(componentes.plantilla_para(nueva.id))
+    await session.flush()
     return _sesion_para(admin)
 
 
@@ -219,6 +226,12 @@ async def autenticar(
         # tenemos la contrasena en claro, sin pedirle nada al usuario.
         usuario.password_hash = hash_password(password)
 
+    # Dado de baja por su administrador. Como la empresa suspendida, se comprueba DESPUES de la
+    # contrasena: decirlo antes confirmaria a cualquiera que ese correo existe.
+    if not usuario.activo:
+        await registrar_intento(session, correo=correo, ip=ip, exitoso=False)
+        raise UsuarioDadoDeBaja(str(usuario.id))
+
     # La empresa puede estar suspendida (dejo de pagar). Se comprueba DESPUES de validar la
     # contrasena, no antes: hacerlo antes le diria a cualquiera que probara un correo si esa
     # empresa existe y en que estado esta, sin necesidad de acertar la clave.
@@ -286,6 +299,9 @@ async def refrescar(
     # una sesión que el cambio tenía que cerrar. La lectura del usuario ya se hacía, así que la
     # comprobación no cuesta ninguna consulta más.
     if claims.version_clave != usuario.version_clave:
+        raise ErrorDeAutenticacion
+    # Dado de baja mientras tenía la sesión abierta: no se le renueva.
+    if not usuario.activo:
         raise ErrorDeAutenticacion
 
     await revocar_refresco(almacen, claims)

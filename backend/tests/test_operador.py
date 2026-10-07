@@ -179,9 +179,9 @@ def test_el_rol_de_los_clientes_no_ve_el_plano_de_control() -> None:
     """
     for tabla in ("operadores", "operador_bitacora"):
         resultado = _correr(_leer_como(URL_APP, f"SELECT id FROM {tabla}"))
-        assert isinstance(resultado, str), (
-            f"app_user pudo leer {tabla}; el plano de control queda expuesto"
-        )
+        assert isinstance(
+            resultado, str
+        ), f"app_user pudo leer {tabla}; el plano de control queda expuesto"
 
 
 def test_el_operador_no_puede_leer_los_intentos_de_login() -> None:
@@ -192,9 +192,9 @@ def test_el_operador_no_puede_leer_los_intentos_de_login() -> None:
     quedan fuera **por omisión**, sin que nadie tenga que acordarse de excluirlas.
     """
     resultado = _correr(_leer_como(URL_OPERADOR, "SELECT id FROM intentos_login"))
-    assert isinstance(resultado, str), (
-        "el operador pudo leer intentos_login; revisar que no se le hayan dado permisos por defecto"
-    )
+    assert isinstance(
+        resultado, str
+    ), "el operador pudo leer intentos_login; revisar que no se le hayan dado permisos por defecto"
 
 
 def test_el_rol_del_operador_no_puede_saltarse_rls() -> None:
@@ -279,9 +279,7 @@ def test_el_operador_da_de_alta_una_empresa_y_su_administrador(
 
     # Y sirve de verdad: el administrador entra con ella por el plano de datos.
     client.cookies.clear()
-    entrada = client.post(
-        "/api/v1/auth/login", json={"correo": correo_admin, "password": clave}
-    )
+    entrada = client.post("/api/v1/auth/login", json={"correo": correo_admin, "password": clave})
     assert entrada.status_code == 200, entrada.text
     assert entrada.json()["usuario"]["rol"] == "administrador"
 
@@ -312,9 +310,7 @@ def test_suspender_una_empresa_deja_fuera_a_su_gente(
 
     cookies_operador = dict(client.cookies)
     client.cookies.clear()
-    rechazado = client.post(
-        "/api/v1/auth/login", json={"correo": correo_admin, "password": clave}
-    )
+    rechazado = client.post("/api/v1/auth/login", json={"correo": correo_admin, "password": clave})
     assert rechazado.status_code == 403, rechazado.text
 
     # Y reactivar la deja como estaba: los datos nunca se fueron a ningun sitio.
@@ -519,10 +515,62 @@ def test_restablecer_la_clave_cierra_las_sesiones_del_administrador(
     )
 
     empresa = next(
-        e for e in client.get("/api/v1/operador/empresas").json()
+        e
+        for e in client.get("/api/v1/operador/empresas").json()
         if e["admin_correo"] == correo_admin
     )
     reset = client.post(f"/api/v1/operador/empresas/{empresa['id']}/restablecer-clave")
     assert reset.status_code == 200, reset.text
 
     assert client.post("/api/v1/auth/refresh").status_code == 401
+
+
+# --- Fase 2: el operador cuenta equipos sin verlos ---------------------------
+
+
+def test_alta_desde_la_consola_siembra_el_catalogo_y_cuenta_equipos(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """La consola da de alta con el catálogo inicial y factura por equipos en servicio.
+
+    El rol del operador puede INSERTAR componentes y contar `activos` por empresa, pero no leer
+    ninguno de los dos: eso lo prueban las pruebas de `test_aislamiento_fase2.py` contra la base.
+    """
+    from app.core.auth import COOKIE_ACCESO as _ACCESO
+    from app.models.componente import PLANTILLA_INICIAL
+
+    correo_op = _crear_operador(monkeypatch)
+    assert _entrar_como_operador(client, correo_op).status_code == 200
+    correo_admin = f"{uuid4().hex}@cliente.example.com"
+    alta = client.post(
+        "/api/v1/operador/empresas",
+        json={
+            "empresa": f"Cliente {uuid4().hex[:6]}",
+            "admin_nombre": "Admin del cliente",
+            "admin_correo": correo_admin,
+        },
+    )
+    assert alta.status_code == 201, alta.text
+    clave = alta.json()["password_temporal"]
+
+    # El administrador del cliente entra y encuentra su catálogo, y da de alta dos equipos.
+    login = client.post("/api/v1/auth/login", json={"correo": correo_admin, "password": clave})
+    assert login.status_code == 200
+    cabeceras = {"Authorization": f"Bearer {client.cookies.get(_ACCESO)}"}
+    client.cookies.clear()
+    catalogo = client.get("/api/v1/componentes", headers=cabeceras).json()
+    assert {c["nombre"] for c in catalogo} == {n for n, _ in PLANTILLA_INICIAL}
+    ids = [
+        client.post("/api/v1/activos", json={"nombre": n}, headers=cabeceras).json()["id"]
+        for n in ("Uno", "Dos")
+    ]
+    client.post(f"/api/v1/activos/{ids[1]}/baja", headers=cabeceras)
+
+    # La consola ve el conteo de equipos en servicio, y nada más de ellos.
+    assert _entrar_como_operador(client, correo_op).status_code == 200
+    fila = next(
+        e
+        for e in client.get("/api/v1/operador/empresas").json()
+        if e["admin_correo"] == correo_admin
+    )
+    assert fila["equipos"] == 1

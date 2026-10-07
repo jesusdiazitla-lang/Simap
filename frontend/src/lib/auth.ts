@@ -76,34 +76,34 @@ export const ACCIONES_POR_ROL: Readonly<Record<Rol, readonly Accion[]>> = {
     {
       nombre: "Escanear equipo",
       descripcion: "Abre la ficha del activo con la cámara y su código QR.",
-      fase: "F2",
+      ruta: "/escanear",
     },
     {
       nombre: "Registrar horómetro",
-      descripcion: "Anota las horas de operación de la ronda.",
-      fase: "F2",
+      descripcion: "Escanea el equipo y anota las horas de operación de la ronda.",
+      ruta: "/escanear",
     },
     {
       nombre: "Levantar alerta",
-      descripcion: "Ruido, vibración, calor, olor o fuga, con una nota.",
-      fase: "F2",
+      descripcion: "Escanea el equipo: ruido, vibración, calor, olor o fuga, con una nota.",
+      ruta: "/escanear",
     },
   ],
   supervisor: [
     {
       nombre: "Escanear equipo",
       descripcion: "Abre la ficha del activo con la cámara y su código QR.",
-      fase: "F2",
+      ruta: "/escanear",
     },
     {
       nombre: "Registrar horómetro",
-      descripcion: "Anota las horas de operación de la ronda.",
-      fase: "F2",
+      descripcion: "Escanea el equipo y anota las horas de operación de la ronda.",
+      ruta: "/escanear",
     },
     {
       nombre: "Levantar alerta",
-      descripcion: "Ruido, vibración, calor, olor o fuga, con una nota.",
-      fase: "F2",
+      descripcion: "Escanea el equipo: ruido, vibración, calor, olor o fuga, con una nota.",
+      ruta: "/escanear",
     },
     {
       nombre: "Reportar falla",
@@ -112,8 +112,8 @@ export const ACCIONES_POR_ROL: Readonly<Record<Rol, readonly Accion[]>> = {
     },
     {
       nombre: "Revisar alertas",
-      descripcion: "Alertas pendientes de la planta: revisar, descartar o convertir en orden.",
-      fase: "F2",
+      descripcion: "Alertas pendientes de la planta: revisar o descartar.",
+      ruta: "/alertas",
     },
     {
       nombre: "Historial de la planta",
@@ -152,20 +152,53 @@ export const ACCIONES_POR_ROL: Readonly<Record<Rol, readonly Accion[]>> = {
   ],
   administrador: [
     {
-      nombre: "Usuarios de la empresa",
+      nombre: "Personal de la empresa",
       descripcion: "Dar de alta al personal y asignarle su rol.",
-      fase: "F2",
+      ruta: "/panel/usuarios",
     },
     {
-      nombre: "Activos",
+      nombre: "Equipos",
       descripcion: "Ficha técnica, ubicación, criticidad y código QR de cada equipo.",
-      fase: "F2",
+      ruta: "/activos",
     },
     {
       nombre: "Catálogo de componentes",
       descripcion: "Los componentes sobre los que se calcula el riesgo.",
-      fase: "F2",
+      ruta: "/componentes",
     },
+  ],
+};
+
+/** Una entrada de la barra de navegación. */
+export interface Destino {
+  readonly nombre: string;
+  readonly ruta: string;
+}
+
+/**
+ * Navegación de la barra superior por rol. Solo pantallas que existen y que ese rol puede usar: la
+ * API las rechazaría igual, pero un enlace que lleva a «no tienes permiso» es un callejón.
+ */
+export const NAVEGACION_POR_ROL: Readonly<Record<Rol, readonly Destino[]>> = {
+  operario: [
+    { nombre: "Escanear", ruta: "/escanear" },
+    { nombre: "Mis alertas", ruta: "/alertas" },
+  ],
+  supervisor: [
+    { nombre: "Escanear", ruta: "/escanear" },
+    { nombre: "Equipos", ruta: "/activos" },
+    { nombre: "Alertas", ruta: "/alertas" },
+  ],
+  tecnico_taller: [{ nombre: "Escanear", ruta: "/escanear" }],
+  gerente: [
+    { nombre: "Equipos", ruta: "/activos" },
+    { nombre: "Alertas", ruta: "/alertas" },
+  ],
+  administrador: [
+    { nombre: "Equipos", ruta: "/activos" },
+    { nombre: "Alertas", ruta: "/alertas" },
+    { nombre: "Componentes", ruta: "/componentes" },
+    { nombre: "Personal", ruta: "/panel/usuarios" },
   ],
 };
 

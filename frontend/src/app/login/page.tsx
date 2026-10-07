@@ -1,7 +1,8 @@
 "use client";
 
 /**
- * Pantalla de acceso (RF-02, CU-06).
+ * Pantalla de acceso (RF-02, CU-06), la misma para todos: usuarios de las empresas y operador de
+ * SIMAP. Quién es quién lo decide `src/lib/acceso.ts`; por debajo los dos planos siguen separados.
  *
  * Sin texto de presentación del producto: quien llega ya sabe qué es SIMAP. Y sin camino de
  * registro, porque el alta de una empresa es por invitación y la crea quien opera SIMAP con
@@ -26,7 +27,9 @@ import { Boton } from "@/components/boton";
 import { Campo } from "@/components/campo";
 import { FechaHora, Marco, Panel } from "@/components/marco";
 import { ErrorApi } from "@/lib/api";
-import { entrar, rutaInicialPara } from "@/lib/auth";
+import { acceder } from "@/lib/acceso";
+import { rutaInicialPara } from "@/lib/auth";
+import { destinoSeguro } from "@/lib/qr";
 
 const ID_FORMULARIO = "acceso-form";
 const ID_CORREO = "acceso-correo";
@@ -79,10 +82,19 @@ export default function AccesoPage() {
     setAviso(null);
     setEnCurso(true);
     try {
-      const sesion = await entrar(resultado.data.correo, resultado.data.password);
+      const acceso = await acceder(resultado.data.correo, resultado.data.password);
+      if (acceso.plano === "operador") {
+        // El operador va siempre a su consola, aunque viniera de otra dirección: `next` es para las
+        // pantallas de las plantas, a las que su sesión no da acceso.
+        router.replace("/operador");
+        return;
+      }
       // No se guarda nada del usuario en el navegador: el rol se vuelve a pedir al servidor en el
       // panel. Aquí solo se usa para saber a dónde llevarlo.
-      router.replace(rutaInicialPara(sesion.usuario.rol));
+      // Si se llegó aquí desde una dirección protegida (una etiqueta escaneada sin sesión), se vuelve
+      // a ella; si no, al panel del rol. El destino se valida: nunca otro sitio.
+      const siguiente = destinoSeguro(new URLSearchParams(window.location.search).get("next"));
+      router.replace(siguiente ?? rutaInicialPara(acceso.sesion.usuario.rol));
     } catch (error) {
       setEnCurso(false);
       if (!(error instanceof ErrorApi)) {
@@ -115,7 +127,7 @@ export default function AccesoPage() {
       <div className="mx-auto w-full max-w-[26rem]">
         <Panel
           titulo="Iniciar sesión"
-          descripcion="Accede con la cuenta que te dio el administrador de tu planta."
+          descripcion="Entra con tu correo y tu contraseña."
           pie="El acceso a SIMAP es por invitación. Si tu empresa todavía no tiene cuenta, o no recuerdas tu contraseña, habla con quien administra SIMAP en tu planta."
         >
           <form id={ID_FORMULARIO} onSubmit={enviar} noValidate className="flex flex-col gap-3">

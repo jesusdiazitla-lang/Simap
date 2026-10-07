@@ -3,7 +3,17 @@
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Index, Integer, Text, Uuid
+from sqlalchemy import (
+    Boolean,
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    Text,
+    UniqueConstraint,
+    Uuid,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.security import Rol
@@ -31,6 +41,10 @@ class Usuario(IdUUID, Base):
         # 04-fase1-fundamentos.md, seccion 7.2: indice en empresa_id desde el primer commit. Es
         # gratis ahora y muy costoso anadirlo con la tabla ya en produccion.
         Index("ix_usuarios_empresa_id", "empresa_id"),
+        # Clave candidata de las referencias compuestas de la fase 2 (seccion 4.2): lecturas y
+        # alertas apuntan a (empresa_id, id) de su autor, asi que la base impide atribuir una fila
+        # de la empresa A a una persona de la empresa B.
+        UniqueConstraint("empresa_id", "id", name="uq_usuarios_empresa_id_id"),
     )
 
     empresa_id: Mapped[UUID] = mapped_column(
@@ -45,6 +59,11 @@ class Usuario(IdUUID, Base):
     #: aparatos. Ver `app.core.security.CLAIM_VERSION_CLAVE` y la revisión 0004.
     version_clave: Mapped[int] = mapped_column(
         Integer, nullable=False, default=0, server_default="0"
+    )
+    #: Dar de baja a alguien no borra su fila: sus lecturas y alertas siguen firmadas con su
+    #: nombre. Solo deja de poder entrar (RF-03, revision 0005).
+    activo: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default="true"
     )
     creado_en: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=_ahora

@@ -86,3 +86,29 @@ def test_la_base_esta_en_la_ultima_revision() -> None:
     guiones = ScriptDirectory.from_config(Config("alembic.ini"))
     cabeza = guiones.get_current_head()
     assert _correr(revision()) == cabeza
+
+
+def test_ninguna_restriccion_tiene_el_prefijo_duplicado() -> None:
+    """Alembic aplica la convención de nombres de `app.models.base` también en las migraciones.
+
+    Un CHECK escrito con su nombre completo (`ck_activos_estado_valido`) acababa llamándose
+    `ck_activos_ck_activos_estado_valido`, y el `downgrade` que lo borraba por su nombre fallaba. La
+    comparación de modelos de Alembic no mira los CHECK, así que nada más lo detectaba.
+    """
+
+    async def duplicadas() -> list[str]:
+        motor = create_async_engine(URL_DUENO)
+        try:
+            async with motor.connect() as conn:
+                filas = await conn.execute(
+                    text(
+                        "SELECT conname FROM pg_constraint c JOIN pg_namespace n"
+                        " ON n.oid = c.connamespace WHERE n.nspname = 'public'"
+                        " AND conname ~ '^(ck|uq|fk|pk|ix)_.*_(ck|uq|fk|pk|ix)_'"
+                    )
+                )
+                return [str(f[0]) for f in filas.all()]
+        finally:
+            await motor.dispose()
+
+    assert _correr(duplicadas()) == []

@@ -13,20 +13,24 @@ import { operador } from "./credenciales";
 
 
 async function entrar(page: import("@playwright/test").Page): Promise<void> {
-  await page.goto("/operador/login");
-  await page.locator("#consola-correo").fill(operador.correo);
-  await page.locator("#consola-clave").fill(operador.password);
+  // El mismo acceso que las plantas: `src/lib/acceso.ts` decide a dónde va cada cuenta.
+  await page.goto("/login");
+  await page.locator("#acceso-correo").fill(operador.correo);
+  await page.locator("#acceso-clave").fill(operador.password);
   await page.getByRole("button", { name: "Entrar" }).click();
   await expect(page).toHaveURL(/\/operador$/);
 }
 
-test("el acceso a la consola se distingue del de los clientes", async ({ page }) => {
-  await page.goto("/operador/login");
-  await expect(page.getByRole("heading", { name: /consola del operador/i })).toBeVisible();
+test("el operador entra por el mismo acceso y cae en su consola, marcada como tal", async ({ page }) => {
+  await entrar(page);
   // La marca va en texto, no solo en color: quien tenga las dos pestañas abiertas debe poder
   // saber en cuál está sin depender de distinguir tonos.
   await expect(page.getByText(/consola del operador/i).first()).toBeVisible();
-  await page.screenshot({ path: "e2e/capturas/consola-login.png", fullPage: true });
+});
+
+test("la dirección vieja del acceso del operador lleva al acceso común", async ({ page }) => {
+  await page.goto("/operador/login");
+  await expect(page).toHaveURL(/\/login$/);
 });
 
 test("la consola muestra las empresas y deja darlas de alta", async ({ page }) => {
@@ -71,5 +75,5 @@ test("dar de alta una empresa devuelve una contraseña temporal una sola vez", a
 test("no se puede entrar en la consola sin sesión", async ({ page }) => {
   await page.context().clearCookies();
   await page.goto("/operador");
-  await expect(page).toHaveURL(/\/operador\/login$/);
+  await expect(page).toHaveURL(/\/login$/);
 });

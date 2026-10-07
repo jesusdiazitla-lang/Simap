@@ -10,6 +10,7 @@ comportamiento del código ya escrito.
 | `02-arquitectura.md` | El **cómo**: stack, capas, seguridad y despliegue |
 | `03-requerimientos-casos-de-uso.md` | Los **criterios**: RF-01..28, RNF-01..08, CU-01..06 |
 | `04-fase1-fundamentos.md` | El **alcance de F1**: auth, multi-tenant, RLS y su definición de "hecho" |
+| `05-fase2-activos-y-campo.md` | El **alcance de F2**: activos, QR, horómetro, alertas, sin conexión; anexo con la implementación |
 
 El DDL y las políticas RLS están copiados tal cual en `backend/db/schema.sql` y
 `backend/db/rls_policies.sql`. Las fases de ejecución viven en `docs/PLAN.yaml` (F0..F5).

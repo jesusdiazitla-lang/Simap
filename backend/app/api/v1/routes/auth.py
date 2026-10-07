@@ -132,6 +132,13 @@ async def login(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="La cuenta de tu empresa está suspendida. Contacta con quien administra SIMAP.",
         ) from exc
+    except servicio.UsuarioDadoDeBaja as exc:
+        # 403 por la misma razón que la empresa suspendida: la contraseña era correcta, y decirlo
+        # evita que alguien pierda la tarde creyendo que la escribe mal.
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Tu usuario está dado de baja. Habla con el administrador de tu planta.",
+        ) from exc
     except servicio.ErrorDeAutenticacion as exc:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail=CREDENCIALES_INVALIDAS

@@ -1,4 +1,4 @@
-"""Límite de intentos para todo lo que verifica una contraseña (04-fase1-fundamentos.md, 6.2).
+"""Límite de peticiones: contraseñas (04-fase1-fundamentos.md, 6.2) y registro de campo (F2, 8.4).
 
 POR QUÉ ES UN MÓDULO APARTE
 ---------------------------
@@ -28,16 +28,27 @@ class DemasiadosIntentos(Exception):
         self.espera_segundos = espera_segundos
 
 
-async def comprobar(almacen: AlmacenEfimero, claves: Sequence[str]) -> None:
+async def comprobar(
+    almacen: AlmacenEfimero,
+    claves: Sequence[str],
+    *,
+    maximo: int | None = None,
+    ventana_segundos: int | None = None,
+) -> None:
     """Cuenta un intento en cada clave y corta si alguna supera el máximo.
 
     Se cuenta ANTES de verificar la contraseña, no después de fallar: si solo contaran los fallos,
     el intento que acierta tras el bloqueo pasaría, y el límite no limitaría nada.
+
+    Sin `maximo` ni `ventana_segundos` se aplican los del login. Las rutas de campo de la fase 2
+    pasan los suyos: un operario en ronda registra muchas lecturas seguidas, y cinco por minuto lo
+    dejaría fuera a media ronda.
     """
     s = get_settings()
-    ventana = s.login_attempt_window_seconds
+    ventana = ventana_segundos if ventana_segundos is not None else s.login_attempt_window_seconds
+    tope = maximo if maximo is not None else s.login_max_attempts
     for clave in claves:
-        if await almacen.incrementar(clave, ventana) > s.login_max_attempts:
+        if await almacen.incrementar(clave, ventana) > tope:
             raise DemasiadosIntentos(ventana)
 
 

@@ -82,14 +82,13 @@ milestones:
         # planta recibe una clave temporal y la documentación le pedía cambiarla, pero no había
         # forma; la del operador no se podía rotar sin tocar la base. Revisión 0004: version_clave,
         # para que cambiar o restablecer una clave cierre las demás sesiones.
-      - name: "Protección de main en GitHub: sin push directo, merge solo con CI en verde (4.2)"
-        status: pending
-        # Es un ajuste del repositorio, no código. BLOQUEADO (2026-10-02): el usuario lo autorizó,
-        # pero GitHub no ofrece protección de ramas ni reglas en repositorios PRIVADOS de cuentas
-        # gratuitas (la API responde 403 «Upgrade to GitHub Pro or make this repository public»).
-        # Se desbloquea con GitHub Pro —gratis con el GitHub Student Developer Pack— o haciendo
-        # público el repositorio. Ojo al activarla: docs.yml hace `git push` a main con el
-        # GITHUB_TOKEN y quedaría bloqueado; habrá que convertirlo en un PR o darle excepción.
+      - name: "Protección de main en GitHub (4.2): descartada por decisión del usuario"
+        status: done
+        # DESVIACIÓN DECIDIDA (2026-10-02). El documento de F1 pide prohibir el push directo y
+        # exigir pull requests. El usuario es el único desarrollador y el único con acceso al
+        # repositorio, así que la regla no protege de nadie. La puerta de calidad sigue siendo el
+        # hook pre-push local y ci.yml. (Además, GitHub no la ofrece en repositorios privados de
+        # cuentas gratuitas.)
       - name: "CI: pytest + lint + pip-audit/npm audit en cada push"
         status: done
         # .github/workflows/ci.yml, tres jobs: backend (con servicio postgres:16, migraciones,
@@ -100,29 +99,56 @@ milestones:
   - name: "F2 - Activos y registro de campo (semanas 3-6)"
     rf: [RF-04, RF-05, RF-06, RF-07, RF-08, RF-09, RF-10, RNF-03, RNF-05]
     done_when: "Un operario escanea el QR y registra horómetro o alerta; el reporte llega aunque se hiciera offline."
+    # Alcance y criterios: docs/contexto/05-fase2-activos-y-campo.md.
     tasks:
+      - name: "Puerta de entrada (05, sección 3) y migración 0005 con RLS, referencias compuestas y solo adición"
+        status: done
+        # tests/test_aislamiento_fase2.py: NULLIF en conexión reutilizada, test de guardia de RLS
+        # forzada, FK compuesta contra escritura cruzada, sin borrado y el operador cuenta equipos
+        # con permiso de columna sin poder leerlos. Ninguna prueba se conecta como superusuario.
+      - name: "Cookies y dominios (05, 8.2): el navegador habla solo con el frontend, Next reenvía /api"
+        status: done
+        # next.config.ts (rewrites) + comprobación de Origin en los métodos que escriben (app.main).
+        # Falta verificarlo desplegado: ver la tarea de producción más abajo.
       - name: "Gestión de usuarios de la empresa: alta, rol y baja, por el administrador (RF-03)"
         modules: [app.services.usuarios, app.api.v1.routes.usuarios, src/app/panel/usuarios/page.tsx]
         # HUECO DETECTADO al construir el panel por rol en F1: RF-03 estaba asignado a F1, pero
-        # ninguna tarea creaba la pantalla ni los endpoints para dar de alta al personal. Sin esto
-        # una empresa se queda con un único usuario —el administrador que crea `app.cli`— y no
-        # puede existir ningún operario, que es justo quien alimenta de datos al sistema.
+        # ninguna tarea creaba la pantalla ni los endpoints para dar de alta al personal.
       - name: "CRUD de activos con ficha técnica, ubicación y criticidad; baja lógica"
-        modules: [app.models.activo, app.schemas.activo, app.services.activos, app.api.v1.routes.activos]
-      - name: "Generación de QR único + código corto de respaldo al crear el activo"
-        modules: [app.services.qr]
-      - name: "Catálogo de componentes editable por el administrador"
-        modules: [app.models.componente, app.services.componentes, app.api.v1.routes.componentes]
+        modules: [app.models.activo, app.schemas.activo, app.services.activos, app.api.v1.routes.activos, src/app/activos/page.tsx, src/components/formulario-activo.tsx]
+      - name: "Generación de QR único + código corto de respaldo al crear el activo; etiqueta SVG"
+        modules: [app.services.qr, "src/app/activos/[id]/etiqueta/page.tsx"]
+      - name: "Catálogo de componentes editable por el administrador, con plantilla inicial"
+        modules: [app.models.componente, app.services.componentes, app.api.v1.routes.componentes, src/app/componentes/page.tsx]
       - name: "Lecturas de horómetro"
         modules: [app.models.lectura_horometro, app.services.lecturas, app.api.v1.routes.lecturas]
       - name: "Alertas de campo (síntoma + nota) con estados"
-        modules: [app.models.alerta, app.services.alertas, app.api.v1.routes.alertas]
-      - name: "Frontend: escáner QR (html5-qrcode) y vista móvil del activo con acciones por rol"
-        modules: ["src/app/qr/[codigo]/page.tsx", src/components/EscanerQR.tsx]
-      - name: "Frontend: formularios de horómetro y alerta (react-hook-form + zod), máx. 3 pasos"
-        modules: [src/components/FormularioHorometro.tsx, src/components/FormularioAlerta.tsx]
+        modules: [app.models.alerta, app.services.alertas, app.api.v1.routes.alertas, src/app/alertas/page.tsx]
+      - name: "Frontend: escáner QR y vista móvil del activo con acciones por rol"
+        modules: [src/app/equipo/page.tsx, src/app/escanear/page.tsx, src/components/escaner-qr.tsx, src/lib/qr.ts]
+        # La vista del activo vive en /equipo y se sirve en /a/{codigo} con una reescritura de
+        # next.config.ts (el plan decía src/app/qr/[codigo]). Escáner con BarcodeDetector + jsQR en
+        # vez de html5-qrcode, que no publica desde 2023.
+      - name: "Frontend: formularios de horómetro y alerta, máx. 3 pasos"
+        modules: [src/components/formulario-horometro.tsx, src/components/formulario-alerta.tsx]
+        # Nombres en minúsculas con guiones, como el resto de componentes del proyecto.
       - name: "Frontend: PWA offline con cola local y sincronización automática"
-        modules: [src/lib/offline-queue.ts]
+        modules: [src/lib/offline-queue.ts, src/lib/captura.ts, app.services.campo, app.api.v1.routes.campo]
+        # Service worker propio (public/sw.js) en vez de next-pwa/Serwist: next-pwa no publica desde
+        # 2022, y lo necesario es acotado. Cola en IndexedDB con idb.
+      - name: "Prueba en teléfonos reales (iOS y Android) y de una etiqueta impresa a 50 cm"
+        status: pending
+        # Física: no se puede automatizar. Necesita HTTPS para la cámara (cloudflared o similar).
+      - name: "Verificar en producción que la sesión persiste entre frontend y backend (8.2)"
+        status: pending
+        # Depende del despliegue (Vercel + Railway). Configurar API_ORIGEN en el frontend y
+        # FORWARDED_ALLOW_IPS en el backend para que el límite por IP vea la IP real.
+      - name: "Confirmar una lectura marcada para revisión, y el evento «horómetro reiniciado»"
+        status: done
+        modules: [src/components/lecturas-por-revisar.tsx]
+        # Revisión 0006: resolucion confirmada/descartada/reinicio, con quién y cuándo. El reinicio
+        # solo lo registra el administrador y empieza una serie nueva de horas: F4 debe sumar las
+        # horas de cada serie al calcular horas desde la última falla.
 
   - name: "F3 - Órdenes de trabajo (semanas 7-8)"
     rf: [RF-11, RF-12, RF-13, RF-14, RF-15, RF-16, RNF-06]

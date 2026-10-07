@@ -36,8 +36,15 @@ import { NextResponse, type NextRequest } from "next/server";
 const PISTA_SESION = "simap_sesion";
 const PISTA_OPERADOR = "simap_op_sesion";
 
-/** Pantallas que se ven sin sesión. Ninguna se desvía nunca (regla 1). */
-const PUBLICAS = new Set(["/login", "/operador/login"]);
+/**
+ * Pantallas que se ven sin sesión. Ninguna se desvía nunca (regla 1).
+ *
+ * `/equipo` es el cascarón vacío que se sirve en `/a/{código}` (ver `next.config.ts`): no contiene
+ * ningún dato —los pide a la API, que sí exige sesión—, y tiene que poder descargarse sin sesión
+ * para que el service worker lo guarde y la pantalla del equipo abra sin cobertura. `/a/...` sí
+ * está protegida: es la dirección que se escanea.
+ */
+const PUBLICAS = new Set(["/login", "/equipo"]);
 
 function esConsola(ruta: string): boolean {
   return ruta === "/operador" || ruta.startsWith("/operador/");
@@ -46,11 +53,12 @@ function esConsola(ruta: string): boolean {
 /**
  * True si las cookies que pone la API llegan a esta página (regla 2).
  *
- * Las cookies no distinguen puertos, así que `localhost:3000` ve las de `localhost:8000`. Lo que
- * importa es el nombre de host. Una URL relativa (API servida desde el mismo dominio) también vale.
+ * Con la API reenviada por Next (lo normal, ver `next.config.ts`) la URL es relativa y la pista
+ * siempre se ve. Si alguien apunta `NEXT_PUBLIC_API_URL` a un backend directo, cuenta el nombre de
+ * host: las cookies no distinguen puertos, así que `localhost:3000` sí ve las de `localhost:8000`.
  */
 function pistaVisible(request: NextRequest): boolean {
-  const api = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api/v1";
+  const api = process.env.NEXT_PUBLIC_API_URL ?? "/api/v1";
   try {
     return new URL(api, request.url).hostname === request.nextUrl.hostname;
   } catch {
@@ -62,20 +70,33 @@ function hacia(request: NextRequest, ruta: string): NextResponse {
   return NextResponse.redirect(new URL(ruta, request.url));
 }
 
+/**
+ * Al acceso, recordando a dónde iba (05-fase2-activos-y-campo.md, 7.2): quien escanea una etiqueta
+ * sin sesión vuelve a ese equipo después de entrar, no a su panel. El login valida el destino antes
+ * de usarlo (`destinoSeguro` en `src/lib/qr.ts`).
+ */
+function alAcceso(request: NextRequest): NextResponse {
+  const destino = `${request.nextUrl.pathname}${request.nextUrl.search}`;
+  const url = new URL("/login", request.url);
+  url.searchParams.set("next", destino);
+  return NextResponse.redirect(url);
+}
+
 export function proxy(request: NextRequest): NextResponse {
   const ruta = request.nextUrl.pathname;
 
   if (PUBLICAS.has(ruta) || !pistaVisible(request)) return NextResponse.next();
 
   if (esConsola(ruta)) {
-    return request.cookies.has(PISTA_OPERADOR) ? NextResponse.next() : hacia(request, "/operador/login");
+    // Sin `next`: el acceso es el mismo para todos y el operador va siempre a su consola.
+    return request.cookies.has(PISTA_OPERADOR) ? NextResponse.next() : hacia(request, "/login");
   }
 
   const conSesion = request.cookies.has(PISTA_SESION);
   // La raíz no tiene contenido propio: solo decide a dónde ir. Hacerlo aquí evita la pantalla
   // intermedia «Comprobando tu sesión…» en el caso normal.
   if (ruta === "/") return hacia(request, conSesion ? "/panel" : "/login");
-  return conSesion ? NextResponse.next() : hacia(request, "/login");
+  return conSesion ? NextResponse.next() : alAcceso(request);
 }
 
 export const config = {

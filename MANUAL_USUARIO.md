@@ -22,6 +22,12 @@
 5. [Funcionalidades](#5-funcionalidades)
    - [5.0 Entrar a SIMAP y ver el panel de tu turno](#50--entrar-a-simap-y-ver-el-panel-de-tu-turno)
    - [5.0.1 Cambiar tu contraseña](#501--cambiar-tu-contraseña)
+   - [5.1 Registrar un equipo y obtener su etiqueta QR](#51--registrar-un-equipo-y-obtener-su-etiqueta-qr)
+   - [5.2 Registrar una lectura de horómetro](#52--registrar-una-lectura-de-horómetro)
+   - [5.3 Reportar una alerta](#53--reportar-una-alerta-el-equipo-sigue-funcionando)
+   - [5.3.1 Trabajar sin cobertura](#531--trabajar-sin-cobertura)
+   - [5.3.2 Revisar alertas y lecturas que no cuadran](#532--revisar-alertas-y-lecturas-que-no-cuadran)
+   - [5.9 Administrar el personal y el catálogo de componentes](#59--administrar-el-personal-y-el-catálogo-de-componentes)
    - [5.10 La consola del operador de SIMAP](#510--la-consola-del-operador-de-simap)
 6. [Cómo calcula SIMAP el riesgo de un equipo](#6-cómo-calcula-simap-el-riesgo-de-un-equipo)
 7. [Preguntas frecuentes](#7-preguntas-frecuentes)
@@ -141,31 +147,73 @@ Tres cosas que sí notarás:
 Cada funcionalidad se documenta con el mismo esquema:
 **Objetivo · Quién · Cómo llegar · Pasos · Resultado · Errores habituales.**
 
-### 5.1 ⏳ Registrar un equipo (activo) y obtener su código QR
-- **Objetivo:** dar de alta un equipo para que reciba lecturas, alertas y órdenes.
+### 5.1 ✅ Registrar un equipo y obtener su etiqueta QR
+- **Objetivo:** dar de alta un equipo para que reciba lecturas, alertas y, más adelante, órdenes.
 - **Quién:** Administrador.
-- **Cómo llegar:** menú **Equipos → Nuevo equipo**.
-- **Pasos:** 1) nombre o código interno; 2) tipo (bomba, motor, compresor…); 3) ubicación (planta/área/línea);
-  4) criticidad (alta, media, baja); 5) **Guardar**.
-- **Resultado:** SIMAP genera un **código QR único** y un **código corto de respaldo**. Imprime la etiqueta y
-  pégala en el equipo. Si la etiqueta se daña, desde la ficha del equipo puedes **reimprimir** el QR.
+- **Cómo llegar:** **Equipos → Dar de alta un equipo**.
+- **Pasos:** escribe el nombre (es lo único obligatorio); si los sabes, tipo, ubicación, criticidad,
+  marca, modelo, número de serie y fecha de instalación; y el **horómetro de hoy** → **Dar de alta y
+  crear etiqueta**.
+- **Resultado:** SIMAP genera un **código único** de ocho caracteres y te lleva a su etiqueta, con el
+  QR, el código corto (`XK7P-2QH9`) y el nombre. Pulsa **Imprimir**. El horómetro de hoy queda como
+  primera lectura del equipo.
+- **La etiqueta:** al menos 3 × 3 cm, en vinilo o poliéster laminado, sobre una superficie plana y
+  visible, lejos del calor. Antes de imprimir todas, prueba a escanear una a unos 50 cm con el
+  teléfono más modesto de la planta.
+- **Más tarde, desde la ficha del equipo:** **Editar ficha**, **Imprimir etiqueta** (reimprimir no
+  cambia el código), **Regenerar código** (solo si la etiqueta se copió o se dañó: la vieja deja de
+  funcionar en ese momento) y **Dar de baja** (el equipo deja de admitir registros, pero conserva su
+  historial y su etiqueta sigue abriendo la ficha).
 
-### 5.2 ⏳ Registrar una lectura de horómetro
-- **Objetivo:** que SIMAP conozca las horas acumuladas del equipo (es la señal principal de la predicción).
+### 5.2 ✅ Registrar una lectura de horómetro
+- **Objetivo:** que SIMAP conozca las horas acumuladas del equipo, que son la señal principal de la
+  predicción.
 - **Quién:** Operario o Supervisor.
-- **Cómo llegar:** escanea el QR del equipo → **Horómetro**.
-- **Pasos:** 1) escribe el valor que marca el horómetro; 2) **Enviar**. Máximo tres toques desde el escaneo.
-- **Resultado:** la lectura queda asociada al equipo y a ti, y SIMAP recalcula el riesgo del equipo.
-- **Errores habituales:** un valor menor que la última lectura se rechaza (el horómetro no retrocede).
+- **Cómo llegar:** apunta la cámara del teléfono a la etiqueta QR del equipo.
+- **Pasos:** 1) comprueba que el nombre de arriba es el de la máquina que tienes delante; 2) escribe
+  las horas que marca el horómetro; 3) **Registrar lectura**.
+- **Resultado:** «Lectura registrada», y el horómetro del equipo se actualiza.
+- **Si no cuadra:** si el valor es menor que el último, o sube más horas de las que han pasado,
+  SIMAP te pregunta antes de enviar. Puedes **Corregir** o **Enviar igualmente**. Si lo envías, se
+  guarda **para revisar**: el supervisor decide si era correcto, y mientras tanto el horómetro del
+  equipo no cambia. Así un dígito de más no estropea los cálculos.
+- **Sin cobertura:** ver 5.3.1.
 
-### 5.3 ⏳ Reportar una alerta (el equipo sigue funcionando)
-- **Objetivo:** avisar de algo raro (ruido, vibración, calor, olor, fuga u otro) antes de que sea una falla.
+### 5.3 ✅ Reportar una alerta (el equipo sigue funcionando)
+- **Objetivo:** avisar de algo raro antes de que sea una falla.
 - **Quién:** Operario o Supervisor.
-- **Cómo llegar:** escanea el QR → **Reportar alerta**.
-- **Pasos:** 1) elige el síntoma de la lista; 2) opcionalmente escribe una nota; 3) **Enviar**.
-- **Resultado:** la alerta queda en estado **Pendiente** y la ve el supervisor de tu planta. Dos o más
-  alertas en 15 días elevan el riesgo estimado del equipo.
-- **Sin conexión:** verás "Guardado en el dispositivo"; se enviará sola cuando vuelva la señal.
+- **Cómo llegar:** escanea la etiqueta del equipo → **Reportar alerta**.
+- **Pasos:** 1) toca el síntoma: ruido, vibración, calor, olor, fuga u otro; 2) si quieres, escribe
+  una nota (hasta 500 caracteres); 3) **Reportar**.
+- **Resultado:** la alerta queda **Pendiente** y el supervisor la ve en su bandeja. En **Mis alertas**
+  ves las tuyas y qué se hizo con ellas.
+- **Repetida:** si reportas el mismo síntoma del mismo equipo dos veces en pocos minutos, cuenta como
+  una sola: así un toque de más no hace parecer el equipo más grave de lo que está. Si lo reporta
+  otra persona, sí cuenta.
+
+### 5.3.1 ✅ Trabajar sin cobertura
+- En una zona sin red, escanea y registra igual. Arriba verás **«Sin conexión · 1 por enviar»**: lo
+  que enviaste quedó guardado en el teléfono.
+- Si ya habías escaneado ese equipo antes con cobertura, su pantalla se abre con los datos de
+  entonces y un aviso de que pueden no estar al día.
+- Cuando vuelve la red se envía solo y verás **«Enviado»**. Aunque se envíe varias veces por mala
+  cobertura, llega **una sola vez**.
+- Lo pendiente es tuyo: si otra persona usa el mismo teléfono, no se envía con su sesión; se envía
+  cuando tú vuelvas a entrar. Cerrar sesión no lo borra.
+- Instala SIMAP en la pantalla de inicio del teléfono: algunos teléfonos borran los datos de las
+  páginas que no se usan, y así lo pendiente está a salvo.
+
+### 5.3.2 ✅ Revisar alertas y lecturas que no cuadran
+- **Quién:** Supervisor o Administrador (el gerente solo consulta).
+- **Cómo llegar:** **Alertas**.
+- **Alertas pendientes:** marca cada una como **Revisada** o **Descartar**. Queda anotado quién y
+  cuándo, y no se deshace.
+- **Lecturas por revisar** (arriba, solo si hay alguna): lecturas que no cuadraban con el historial
+  del equipo. Para cada una:
+  - **Es correcta** — el salto era real. Pasa a contar y actualiza el horómetro del equipo.
+  - **Error al teclear** — se conserva, pero no cuenta para nada.
+  - **Se cambió el horómetro** (solo el administrador) — el equipo tiene un horómetro nuevo o se
+    puso a cero. A partir de esa lectura, las siguientes se comparan con ella.
 
 ### 5.4 ⏳ Reportar una falla (se genera una orden de trabajo)
 - **Objetivo:** documentar una falla real y abrir la orden de trabajo.
@@ -246,11 +294,20 @@ Cada funcionalidad se documenta con el mismo esquema:
     escribirlas.
   - *«Tiene que ser distinta de la actual»* → cambiarla por la misma no te protege de nada.
 
-### 5.9 ⏳ Administrar usuarios y catálogo de componentes
+### 5.9 ✅ Administrar el personal y el catálogo de componentes
 - **Quién:** Administrador.
-- **Cómo llegar:** menú **Administración**.
-- **Qué puedes hacer:** crear usuarios con su rol; mantener el catálogo de componentes (tren motriz, sistema
-  hidráulico, bomba de aceite…) que se usa al reportar fallas.
+- **Personal** (**Personal** en el menú): da de alta a cada persona con su correo y su rol. SIMAP
+  genera una **contraseña temporal** que se muestra **una sola vez**: cópiala y entrégasela; al
+  entrar deberá cambiarla. Desde la misma lista puedes cambiarle el rol, darle una **Nueva clave** si
+  se quedó fuera, o **Dar de baja** (no podrá entrar, su sesión abierta se cierra y lo que registró
+  se conserva con su nombre).
+- No puedes quitarte a ti mismo el rol de administrador ni darte de baja, y la empresa nunca se
+  queda sin un administrador activo: da de alta a otro antes.
+- **Catálogo de componentes** (**Componentes** en el menú): las partes de los equipos que pueden
+  fallar. Toda empresa empieza con ocho (motor, tren motriz, sistema hidráulico, bomba de aceite,
+  rodamientos, correas y cadenas, refrigeración, eléctrico y control); si el tuyo está vacío,
+  **Cargar catálogo inicial**. Puedes añadir, renombrar y desactivar, pero no borrar: las órdenes
+  de trabajo los usarán.
 
 ### 5.10 ✅ La consola del operador de SIMAP
 
@@ -259,8 +316,11 @@ Cada funcionalidad se documenta con el mismo esquema:
 
 - **Objetivo:** dar de alta empresas clientes y mantener su cuenta.
 - **Quién:** el operador de SIMAP. No es ninguno de los cinco roles de la sección 4: es una cuenta
-  de otro tipo, con su propia pantalla de acceso.
-- **Cómo llegar:** `/operador` en el navegador.
+  de otro tipo, separada de las empresas.
+- **Cómo llegar:** la misma pantalla de acceso que todo el mundo. Con tu correo y tu contraseña,
+  SIMAP te lleva a la consola, marcada arriba como **Consola del operador**. Usa para ella un correo
+  que no tengas en ninguna planta: si el mismo correo y la misma contraseña valieran en las dos,
+  entrarías como usuario de la planta.
 
 **Qué puedes hacer**
 
@@ -321,9 +381,12 @@ acertado es.
 No. Se usa desde el navegador. Puedes añadirlo a la pantalla de inicio para abrirlo como una app.
 
 **¿Qué pasa si reporto sin señal?**
-*(Desde la fase 2)* El reporte se guardará en el teléfono y se enviará solo al recuperar la conexión.
-Hoy, sin señal, SIMAP muestra su propio aviso «Sin conexión» con un botón para volver a intentarlo;
-todavía no guarda nada en el teléfono.
+Se guarda en el teléfono y se envía solo al recuperar la conexión, una sola vez aunque se reintente
+(sección 5.3.1).
+
+**¿Por qué mi lectura dice «Para revisar»?**
+Porque no cuadraba con las anteriores del equipo. Se guardó, pero no cambia el horómetro del equipo
+hasta que el supervisor decide si era correcta (sección 5.3.2).
 
 **¿Cómo cambio mi contraseña?**
 En el panel, **Tu cuenta → Cambiar contraseña** (sección 5.0.1). Si no recuerdas la actual, pide al
@@ -345,7 +408,10 @@ En `http://<servidor>:8000/api/v1/health` aparece `"version"`.
 | Aparece «Sin conexión» | El aparato no tiene red | Recuperar cobertura y pulsar **Volver a intentar** |
 | Me pide entrar otra vez en un aparato donde tenía la sesión abierta | Cambiaste la contraseña desde otro aparato, o te la restablecieron | Entra con la contraseña nueva |
 | El escáner no abre la cámara | Permiso de cámara denegado | Permitir la cámara para el sitio en los ajustes del navegador; o escribe el **código corto** de la etiqueta |
-| "Guardado en el dispositivo" no cambia a "Enviado" | Sigue sin conexión | Al recuperar señal se envía solo; no borres los datos del navegador mientras tanto |
+| «Por enviar» no cambia a «Enviado» | Sigue sin conexión, o tu sesión caducó | Al recuperar señal se envía solo; si te pide entrar, entra y se enviará. No borres los datos del navegador mientras tanto |
+| «No encontramos este equipo» al escanear | La etiqueta se regeneró, o es de otra empresa | Avisa a tu supervisor; puede que haya que reimprimirla |
+| «Ese equipo está dado de baja» | El administrador lo retiró | Si sigue funcionando, avísale |
+| La cámara no abre dentro de SIMAP | Falta permiso, o la conexión no es segura (HTTPS) | Usa la cámara del teléfono directamente, o teclea el código de la etiqueta |
 | No puedo marcar una orden como "Reparada" | Tu rol no lo permite | Solo el técnico de taller puede; el cierre lo autoriza supervisor o gerente |
 
 ## 9. Glosario
@@ -380,4 +446,6 @@ En `http://<servidor>:8000/api/v1/health` aparece `"version"`.
 | 2026-09-26 | 0.5.0 | Nueva sección 3.3: qué significa que una empresa aparezca como suspendida. Reescrita la 3.5: la interfaz pasa a un aspecto sobrio de herramienta industrial, sin la apariencia de cuaderno de la versión anterior. |
 | 2026-10-02 | 0.6.0 | **Cambiar tu contraseña**, en el panel y en la consola del operador (nueva sección 5.0.1). Al cambiarla, o cuando te la restablecen, se cierran tus sesiones en otros aparatos. El acceso a la consola del operador pasa a tener límite de intentos. |
 | 2026-10-02 | 0.6.0 | Sin conexión, SIMAP muestra su propio aviso en lugar del error del navegador. Quien entra sin sesión va directo a la pantalla de acceso, sin pantallas intermedias. Corregida la sección 3.4, que describía un registro de intentos que ya no aparece en pantalla. |
+| 2026-10-07 | 0.7.0 | **Fase 2: equipos y registro de campo.** Equipos con etiqueta QR imprimible (5.1); horómetro (5.2) y alertas (5.3) desde el teléfono en tres pasos; **funciona sin cobertura** y lo pendiente se envía solo (5.3.1); bandeja de alertas y de lecturas que no cuadran, con reinicio del horómetro (5.3.2); el administrador gestiona su personal y el catálogo de componentes (5.9). |
+| 2026-10-07 | 0.7.0 | **Una sola pantalla de acceso para todos.** El operador de SIMAP entra por el mismo acceso que las plantas y SIMAP lo lleva a su consola (5.10). La dirección vieja de la consola lleva al acceso común. |
 | 2026-09-26 | 0.4.0 | **Las cuentas pasan a ser por invitación.** Se retira la posibilidad de que una empresa se registre sola: SIMAP se contrata por equipo, así que la cuenta la crea quien administra el servicio. Ver la sección 3.1. |

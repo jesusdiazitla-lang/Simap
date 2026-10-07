@@ -15,7 +15,7 @@
 import { useSyncExternalStore, type ReactNode } from "react";
 
 /** Versión que se muestra en la barra de estado. Coincide con la del manual de usuario. */
-const VERSION = "0.6.0";
+const VERSION = "0.7.0";
 
 interface MarcoProps {
   /** Lo que el usuario tiene delante. */
@@ -33,18 +33,29 @@ interface MarcoProps {
    * centrado y no se mueve nada.
    */
   readonly centrado?: boolean;
+  /**
+   * Nombre largo del sistema junto a «SIMAP». Las pantallas con navegación lo quitan: con los
+   * enlaces, el estado de la cola y quién está dentro, en un portátil ya no cabe y se cortaba.
+   */
+  readonly subtitulo?: boolean;
 }
 
-export function Marco({ children, barra, centrado = false }: MarcoProps) {
+export function Marco({ children, barra, centrado = false, subtitulo = true }: MarcoProps) {
   return (
     <div className="flex min-h-dvh flex-col bg-lienzo">
-      <header className="border-b border-borde bg-superficie">
+      {/* Barra y pie no se imprimen: lo que se imprime en SIMAP es una etiqueta, no la pantalla. */}
+      <header className="border-b border-borde bg-superficie print:hidden">
         <div className="mx-auto flex h-14 w-full max-w-6xl items-center justify-between gap-4 px-4 sm:px-6">
           <div className="flex min-w-0 items-baseline gap-3">
             <span className="text-[0.9375rem] font-bold tracking-[0.08em] text-texto">SIMAP</span>
             {/* El nombre largo solo en pantalla ancha: en móvil roba sitio y no aporta nada a
                 quien ya está dentro del sistema. */}
-            <span className="hidden truncate text-[0.8125rem] text-texto-tenue sm:block">
+            <span
+              className={[
+                "truncate text-[0.8125rem] text-texto-tenue",
+                subtitulo ? "hidden sm:block" : "hidden",
+              ].join(" ")}
+            >
               Sistema Inteligente de Mantenimiento Predictivo
             </span>
           </div>
@@ -63,7 +74,7 @@ export function Marco({ children, barra, centrado = false }: MarcoProps) {
         </div>
       </main>
 
-      <footer className="border-t border-borde bg-superficie">
+      <footer className="border-t border-borde bg-superficie print:hidden">
         <div className="mx-auto flex w-full max-w-6xl flex-col gap-1 px-4 py-3 text-[0.75rem] leading-5 text-texto-tenue sm:flex-row sm:items-center sm:justify-between sm:px-6">
           <span>SIMAP v{VERSION}</span>
           <span>Soporte: el administrador de SIMAP en tu planta</span>
@@ -84,16 +95,24 @@ export function Panel({
   descripcion,
   children,
   pie,
+  nivel = 1,
 }: {
   readonly titulo: string;
   readonly descripcion?: string;
   readonly children: ReactNode;
   readonly pie?: ReactNode;
+  /**
+   * Nivel del título. 1 cuando el panel es la pantalla (acceso, panel); 2 cuando es una sección de
+   * una pantalla que ya tiene su propio título, para que el lector de pantalla no anuncie cinco
+   * encabezados principales en la ficha de un equipo.
+   */
+  readonly nivel?: 1 | 2;
 }) {
+  const Titulo = nivel === 1 ? "h1" : "h2";
   return (
     <section className="rounded-[var(--radius-control)] border border-borde bg-superficie">
       <header className="border-b border-borde px-5 py-4 sm:px-6">
-        <h1 className="text-[1.0625rem] font-semibold leading-6 text-texto">{titulo}</h1>
+        <Titulo className="text-[1.0625rem] font-semibold leading-6 text-texto">{titulo}</Titulo>
         {descripcion !== undefined ? (
           <p className="pt-1 text-[0.875rem] leading-5 text-texto-suave">{descripcion}</p>
         ) : null}

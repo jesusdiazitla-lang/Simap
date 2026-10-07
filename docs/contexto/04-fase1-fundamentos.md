@@ -58,8 +58,10 @@ simap/
 ### 4.2 Integración continua
 - GitHub Actions en cada push y pull request: instala dependencias, ejecuta el linter, corre pytest
   en el backend y el build de Next.js en el frontend.
-- Protección de `main`: prohibido el push directo; todo cambio entra por pull request con el
-  pipeline en verde.
+- ~~Protección de `main`: prohibido el push directo; todo cambio entra por pull request con el
+  pipeline en verde.~~ **DESVIACIÓN DECIDIDA (2026-10-02).** El proyecto lo desarrolla y publica
+  una sola persona, así que la regla no protegería de nadie. La calidad la garantizan el hook
+  `pre-push` local, que corre las pruebas antes de publicar, y `ci.yml` en cada push.
 
 ### 4.3 Modelo de datos base
 - Tablas `empresas` y `usuarios` (definición completa en el documento de Arquitectura Técnica).

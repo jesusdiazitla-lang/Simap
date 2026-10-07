@@ -16,7 +16,8 @@ import { expect, test, type APIRequestContext, type Page } from "@playwright/tes
 
 import { operador, usuario } from "./credenciales";
 
-const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api/v1";
+/** El backend directamente, sin pasar por el frontend: para devolver las claves de demostración. */
+const API = process.env.E2E_API_URL ?? "http://localhost:8000/api/v1";
 const BASE = process.env.E2E_BASE_URL ?? "http://localhost:3000";
 
 const TEMPORAL = "clave-temporal-de-la-prueba-e2e";
@@ -35,7 +36,8 @@ test.describe("proxy de sesión", () => {
     for (const ruta of ["/panel", "/panel/clave"]) {
       const resp = await request.get(ruta, { maxRedirects: 0 });
       expect(resp.status(), ruta).toBe(307);
-      expect(resp.headers()["location"], ruta).toMatch(/\/login$/);
+      // Al acceso, recordando a dónde iba (05-fase2, 7.2).
+      expect(resp.headers()["location"], ruta).toContain(`/login?next=${encodeURIComponent(ruta)}`);
     }
   });
 
@@ -45,10 +47,10 @@ test.describe("proxy de sesión", () => {
     expect(resp.headers()["location"]).toMatch(/\/login$/);
   });
 
-  test("la consola tiene su propio desvío, a su propio acceso", async ({ request }) => {
+  test("la consola sin sesión de operador va al acceso común", async ({ request }) => {
     const resp = await request.get("/operador", { maxRedirects: 0 });
     expect(resp.status()).toBe(307);
-    expect(resp.headers()["location"]).toMatch(/\/operador\/login$/);
+    expect(resp.headers()["location"]).toMatch(/\/login$/);
   });
 
   test("la sesión de una planta no deja pasar a la consola", async ({ page }) => {
@@ -70,7 +72,7 @@ test.describe("proxy de sesión", () => {
   }) => {
     await ponerPista(page, "simap_sesion");
     await page.goto("/panel");
-    await expect(page).toHaveURL(/\/login$/);
+    await expect(page).toHaveURL(/\/login\?next=%2Fpanel$/);
   });
 
   test("los archivos públicos no pasan por el desvío", async ({ request }) => {
@@ -150,9 +152,9 @@ test("un usuario de planta cambia su contraseña desde el panel", async ({ page,
 test("el operador cambia su contraseña y queda en la bitácora", async ({ page, playwright }) => {
   const api = await playwright.request.newContext();
   try {
-    await page.goto("/operador/login");
-    await page.locator("#consola-correo").fill(operador.correo);
-    await page.locator("#consola-clave").fill(operador.password);
+    await page.goto("/login");
+    await page.locator("#acceso-correo").fill(operador.correo);
+    await page.locator("#acceso-clave").fill(operador.password);
     await page.getByRole("button", { name: "Entrar" }).click();
     await expect(page).toHaveURL(/\/operador$/);
 
@@ -195,4 +197,27 @@ test("sin red, una pantalla muestra el aviso de SIMAP y no el error del navegado
   } finally {
     await context.setOffline(false);
   }
+});
+
+// --- Un solo acceso para los dos planos -------------------------------------
+
+test("con credenciales que no abren ninguna cuenta, el error es el mismo de siempre", async ({ page }) => {
+  // No debe delatar si el correo tiene cuenta de operador, de planta o de ninguna.
+  await page.goto("/login");
+  await page.locator("#acceso-correo").fill(operador.correo);
+  await page.locator("#acceso-clave").fill("no-es-la-contrasena");
+  await page.getByRole("button", { name: "Entrar" }).click();
+  await expect(page.getByRole("main").getByRole("alert")).toContainText("Correo o contraseña incorrectos.");
+  await expect(page).toHaveURL(/\/login$/);
+});
+
+test("un usuario de planta sigue llegando a su panel por el mismo acceso", async ({ page }) => {
+  await page.goto("/login");
+  await page.locator("#acceso-correo").fill(usuario.correo);
+  await page.locator("#acceso-clave").fill(usuario.password);
+  await page.getByRole("button", { name: "Entrar" }).click();
+  await expect(page).toHaveURL(/\/panel$/);
+  // Y no le abre la consola: su sesión es de otro plano.
+  const consola = await page.request.get("/operador", { maxRedirects: 0 });
+  expect(consola.status()).toBe(307);
 });

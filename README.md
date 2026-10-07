@@ -16,6 +16,7 @@ inventario de repuestos, en una arquitectura **multi-tenant** con aislamiento po
 | [docs/contexto/02-arquitectura.md](docs/contexto/02-arquitectura.md) | Stack completo, seguridad (RLS, JWT, RBAC), empaquetado y despliegue |
 | [docs/contexto/03-requerimientos-casos-de-uso.md](docs/contexto/03-requerimientos-casos-de-uso.md) | RF-01..28, RNF-01..08, CU-01..06 y plan por fases |
 | [docs/contexto/04-fase1-fundamentos.md](docs/contexto/04-fase1-fundamentos.md) | Alcance de F1: auth, multi-tenant, RLS y su definición de «hecho» |
+| [docs/contexto/05-fase2-activos-y-campo.md](docs/contexto/05-fase2-activos-y-campo.md) | Alcance de F2: activos, QR, horómetro, alertas, sin conexión. Anexo con cómo quedó implementada |
 | [backend/db/schema.sql](backend/db/schema.sql) · [rls_policies.sql](backend/db/rls_policies.sql) | DDL de PostgreSQL y políticas de aislamiento por empresa |
 | [docs/PLAN.yaml](docs/PLAN.yaml) | Las 5 fases como tareas rastreables por `graph.py status` |
 
@@ -115,23 +116,33 @@ python -m app.cli crear-operador --nombre "Tu Nombre" --correo tu@correo.com
 #    descartaria la cookie de sesion y el login no funcionaria.
 $env:COOKIE_SECURE = "false"; uvicorn app.main:app --reload   # http://localhost:8000/docs
 
-# 6) Frontend (otra terminal)
+# 6) Frontend (otra terminal). El navegador habla SOLO con el frontend: Next reenvia /api/* a
+#    API_ORIGEN (http://localhost:8000 por defecto). Ver «Cookies y dominios».
 cd frontend; Copy-Item .env.local.example .env.local; npm run dev   # http://localhost:3000
 ```
 
-Luego, en el navegador: entra en **http://localhost:3000/operador** con el operador que acabas de
-sembrar, da de alta una empresa cliente, y usa la contraseña temporal que te muestra para entrar
-como su administrador en **http://localhost:3000**.
+Luego, en el navegador: entra en **http://localhost:3000** con el operador que acabas de sembrar
+(el acceso es el mismo para todos y te lleva a la consola), da de alta una empresa cliente, y usa
+la contraseña temporal que te muestra para entrar como su administrador por el mismo acceso.
 
 ## Dos planos: control y datos
 
 SIMAP tiene dos superficies que **no se tocan**, y la separación es de arquitectura, no de interfaz.
 
+**Una sola pantalla de acceso, `/login`, para los dos.** Con un correo y una contraseña, el
+frontend prueba primero la entrada de las plantas y, si no abre, la del operador
+(`src/lib/acceso.ts`); cada cuenta cae en su sitio. Por debajo nada se mezcla: son dos endpoints,
+dos roles de base de datos, dos juegos de cookies y dos límites de intentos, y ningún endpoint toca
+los dos planos. Si el mismo correo y la misma contraseña valen en los dos, gana la planta; con
+contraseñas distintas cada una abre la suya. Un fallo cuesta dos comprobaciones de Argon2, y las dos
+ramas lo pagan igual, así que el tiempo de respuesta no delata en qué plano existe un correo.
+`/operador/login` redirige a `/login`.
+
 | | Plano de control | Plano de datos |
 |---|---|---|
 | Quién | El operador de SIMAP (tú) | Los cinco roles dentro de una empresa |
 | Tabla | `operadores` (sin `empresa_id`) | `usuarios` (con `empresa_id`) |
-| Ruta | `/operador`, API `/api/v1/operador/*` | `/`, API `/api/v1/auth/*` |
+| Ruta | `/operador`, API `/api/v1/operador/*` (acceso por `/login`) | `/`, API `/api/v1/auth/*` |
 | Cookies | `simap_op_*`, limitadas a `/api/v1/operador` | `simap_*`, en `/` |
 | Rol de BD | `operador_user` | `app_user` |
 | Puede leer | Empresas, sus administradores, conteo de equipos | Solo su propia empresa, vía RLS |
@@ -256,6 +267,113 @@ fácil de cometer: cambiar un modelo y olvidar la migración.
 > En Windows con Next.js: si `npm run dev` falla con *"Turbopack is not supported on this platform"*,
 > el binario nativo de SWC no carga (Avast suele bloquearlo). Alternativa: `npx next dev --webpack`.
 
+## Fase 2: activos y registro de campo
+
+Fuente: [05-fase2-activos-y-campo.md](docs/contexto/05-fase2-activos-y-campo.md); su anexo final
+resume dónde se apartó la implementación del documento y por qué.
+
+### Endpoints
+
+Todos pasan por `get_db` (RLS) y declaran sus roles con `requiere_roles`.
+
+| Método | Ruta | Roles | Qué hace |
+|---|---|---|---|
+| GET | `/usuarios` | Administrador | Personal de la empresa (RF-03) |
+| POST | `/usuarios` | Administrador | Alta con rol; la clave la genera el servidor y se ve una vez |
+| PATCH | `/usuarios/{id}` | Administrador | Nombre, rol o baja. Nadie se degrada a sí mismo; nunca queda la empresa sin administrador |
+| POST | `/usuarios/{id}/restablecer-clave` | Administrador | Clave temporal nueva; cierra sus sesiones |
+| GET | `/componentes` | Todos | Catálogo; `?incluir_inactivos=true` solo para el administrador |
+| POST | `/componentes` | Administrador | Nombre único por empresa (409 si se repite) |
+| POST | `/componentes/plantilla` | Administrador | Añade lo que falte del catálogo inicial |
+| PATCH | `/componentes/{id}` | Administrador | Renombrar o desactivar. No hay DELETE |
+| GET | `/activos` | Todos | Paginado por cursor; filtros `estado`, `tipo`, `ubicacion`, `q` |
+| POST | `/activos` | Administrador | Alta con código QR; `horometro_inicial` queda como primera lectura |
+| GET | `/activos/por-codigo/{codigo}` | Todos | Lo que se consulta al escanear. 404 uniforme; 30/min por usuario |
+| GET | `/activos/{id}` | Todos | 404 si es de otra empresa |
+| PATCH | `/activos/{id}` | Administrador | Ficha técnica; rechaza `qr_code` y `empresa_id` (422) |
+| POST | `/activos/{id}/baja` | Administrador | Baja lógica; el código sigue resolviendo |
+| POST | `/activos/{id}/regenerar-codigo` | Administrador | El código anterior deja de resolver |
+| GET | `/activos/{id}/etiqueta.svg` | Administrador, supervisor | Etiqueta imprimible con ETag |
+| POST | `/activos/{id}/lecturas` | Operario, supervisor | Idempotente por `cliente_id`: 201 creada, 200 duplicada |
+| GET | `/activos/{id}/lecturas` | Supervisor, administrador, gerente | Historial por cursor |
+| GET | `/lecturas/por-revisar` | Supervisor, administrador | Lecturas marcadas sin resolver |
+| PATCH | `/lecturas/{id}` | Supervisor, administrador | `confirmada` o `descartada`; `reinicio` solo el administrador |
+| POST | `/activos/{id}/alertas` | Operario, supervisor | Con deduplicación |
+| GET | `/alertas` | Operario (solo las suyas), supervisor, administrador, gerente | Bandeja por cursor |
+| PATCH | `/alertas/{id}` | Supervisor, administrador | `revisada` o `descartada`, una sola vez |
+| POST | `/campo/lotes` | Operario, supervisor | Cola sin conexión: hasta 50 ítems, resultado por ítem |
+
+### Reglas del horómetro
+
+Una lectura se guarda siempre —el dato del operario nunca se pierde—, pero queda **marcada** si es
+menor que la anterior, mayor que una posterior ya registrada, o sube más horas de las que han pasado
+en el reloj (más una holgura). Una lectura marcada no mueve `activos.horometro_actual` hasta que un
+supervisor la resuelve (revisión 0006):
+
+| Resolución | Quién | Efecto |
+|---|---|---|
+| `confirmada` | Supervisor o administrador | Cuenta como válida y, si es la más reciente, mueve el horómetro |
+| `descartada` | Supervisor o administrador | Se conserva y no cuenta para nada |
+| `reinicio` | Solo administrador | El horómetro se cambió o se puso a cero: empieza una serie nueva |
+
+El horómetro vigente se mueve con un **UPDATE condicionado**, sin leer antes ni bloquear: solo
+avanza, en valor y en tiempo, así que una lectura vieja que llega tarde nunca lo hace retroceder. El
+reinicio es el único caso en que puede bajar. **Para F4:** las horas desde la última falla tienen que
+sumar las horas de cada serie, no restar el valor actual del de la falla.
+
+### Idempotencia y cola sin conexión
+
+Cada captura lleva un `cliente_id` que genera el teléfono **antes** del primer intento y repite en
+cada reintento; la restricción `UNIQUE (empresa_id, cliente_id)` hace que entre una sola vez. No es
+la llave primaria a propósito: un choque de llave primaria delataría que ese UUID existe en otra
+empresa. Se usa el ORM dentro de un savepoint y no `ON CONFLICT`, que ataría el código a PostgreSQL.
+
+En el teléfono (`src/lib/offline-queue.ts`, IndexedDB con `idb`): la cola es de una persona —en un
+aparato compartido solo se envía lo de quien tiene la sesión, y lo de otros se descarta a los 7
+días—; cerrar sesión no la borra; se sincroniza al volver la red, al volver a primer plano, al
+arrancar y con retroceso exponencial, sin depender de Background Sync, que no existe en iOS.
+`POST /campo/lotes` procesa cada ítem en su propio savepoint y valida cada uno por separado: un ítem
+malo vuelve como `rechazado` con su motivo y los demás entran.
+
+### Lo que la base impone además de RLS
+
+- **Referencias compuestas.** PostgreSQL comprueba las llaves foráneas ignorando RLS, así que una
+  lectura de la empresa A podría colgar de un equipo de B. Las FK incluyen `empresa_id`:
+  `(empresa_id, activo_id) → activos (empresa_id, id)`, y lo mismo para autor y revisor.
+- **`app_empresa_id()`** lee el tenant con `NULLIF(..., '')`: una conexión del pool que ya fijó el
+  parámetro devuelve cadena vacía, no NULL, y convertirla a uuid daba un 500 en vez de cero filas.
+- **Solo adición.** `app_user` no puede borrar en ninguna tabla de negocio; de una lectura solo puede
+  cambiar su resolución, y de una alerta solo su estado.
+- **El operador cuenta sin leer.** `operador_user` tiene SELECT sobre `activos.empresa_id` y
+  `activos.estado` y nada más: factura por equipos en servicio, y pedir el nombre de un equipo le da
+  un error de permisos.
+- **Test de guardia** (`test_rnf01_tablas_con_empresa_id_tienen_rls_forzada`): cualquier tabla con
+  `empresa_id` sin RLS habilitada y forzada hace fallar la batería.
+
+> **Nombres de restricciones en las migraciones.** Alembic aplica la convención de nombres de
+> `app.models.base` también en `op.create_table` y `op.create_check_constraint`: un CHECK se nombra
+> solo con su sufijo (`estado_valido`) y la convención le antepone `ck_<tabla>_`. Escribir el nombre
+> completo lo duplicaba. `test_ninguna_restriccion_tiene_el_prefijo_duplicado` lo vigila.
+
+### Código QR y etiqueta
+
+Ocho caracteres de un alfabeto sin I, O, 0 ni 1, generados con `secrets` (nunca un contador, que
+permitiría recorrer los equipos de todas las empresas). Único en todo el sistema, con reintento si
+choca. El QR codifica solo `{APP_BASE_URL}/a/{código}`. La etiqueta es un SVG con corrección de
+errores nivel Q y margen de 4 módulos, el código corto en dos grupos (`XK7P-2QH9`) y el nombre
+escapado.
+
+### Cookies y dominios
+
+El navegador habla **solo con el origen del frontend**: `next.config.ts` reenvía `/api/*` a
+`API_ORIGEN`. Así la cookie de sesión es siempre del mismo sitio, también en producción, donde
+frontend y backend viven en dominios distintos y una cookie de otro sitio no viajaría (sección 8.2).
+Como defensa adicional contra CSRF, la API rechaza con 403 cualquier método que escriba si trae un
+`Origin` que no es el del frontend.
+
+Detrás de ese reenvío la API ve la IP del servidor de Next. Para que el límite de login por IP vea la
+real, uvicorn debe arrancar con `--proxy-headers` y `FORWARDED_ALLOW_IPS` acotado a la IP del proxy.
+
 ### Nota sobre TLS en máquinas con Avast
 
 Avast Web Shield intercepta TLS. Node ya confía en su CA vía `NODE_EXTRA_CA_CERTS`;
@@ -371,7 +489,13 @@ de `src/app`; se avisan huérfanos (salvo convenciones de Next.js).
 18. **Cambiar la clave exige la actual**, aunque haya sesión: una sesión olvidada en un aparato
    compartido no debe bastar para quedarse con la cuenta. Responde 400, no 401, para que el cliente
    no confunda el error con una sesión caducada y lo tape con un reintento.
-19. Antes de cada entrega: test automatizado de aislamiento entre tenants, OWASP Top 10 sobre lo nuevo,
+19. **Las tablas de negocio son de solo adición y sus FK incluyen `empresa_id`.** Ver «Lo que la
+   base impone además de RLS» en la sección de la fase 2.
+20. **Lo que llega del teléfono es no confiable**: `empresa_id` y el autor salen del token, nunca del
+   cuerpo; `capturado_en` se acepta solo con zona horaria, hasta 5 minutos en el futuro y 14 días
+   atrás; las notas se guardan tal cual y React las escapa (`dangerouslySetInnerHTML` prohibido con
+   datos de usuarios).
+21. Antes de cada entrega: test automatizado de aislamiento entre tenants, OWASP Top 10 sobre lo nuevo,
    sin secretos en repo ni logs (`pip-audit` / `npm audit` en CI).
 
 > Si más adelante se añade PgBouncer, debe ir en **session pooling**. En transaction pooling la
@@ -419,18 +543,24 @@ los bordes de control 3:1.
 | Ruta | Para quién |
 |---|---|
 | `/` | Desvía: al panel si hay sesión, al acceso si no |
-| `/login` | Acceso de los usuarios de una empresa |
+| `/login` | Acceso único: usuarios de una empresa y operador de SIMAP |
 | `/panel` | Panel del turno, distinto según el rol |
 | `/panel/clave` | Cambiar la contraseña propia |
-| `/operador/login` | Acceso del operador de SIMAP |
+| `/operador/login` | Redirige a `/login` (el acceso se unificó) |
 | `/operador` | Consola: alta de clientes, suspensión, claves y bitácora |
 | `/operador/clave` | El operador cambia su propia contraseña |
+| `/a/{código}` | Pantalla del equipo al escanear su QR (página `/equipo` por reescritura) |
+| `/escanear` | Escáner dentro de la app y código tecleado a mano |
+| `/activos`, `/activos/nuevo`, `/activos/{id}/editar` | Lista, alta y edición de equipos |
+| `/activos/{id}/etiqueta` | Vista de impresión de la etiqueta |
+| `/alertas` | Bandeja de alertas y de lecturas por revisar |
+| `/componentes` | Catálogo de componentes |
+| `/panel/usuarios` | Personal de la empresa |
 
 ### Desvío por sesión (`src/proxy.ts`)
 
 El documento de F1 pide un `middleware.ts`; desde Next.js 16 esa convención se llama `proxy.ts`.
-Antes de pintar nada, manda a `/login` a quien no tiene sesión (o a `/operador/login` en la
-consola). **No es control de acceso**: es una comprobación optimista para no enseñar el esqueleto
+Antes de pintar nada, manda a `/login` a quien no tiene sesión, también desde la consola. **No es control de acceso**: es una comprobación optimista para no enseñar el esqueleto
 de una pantalla que no se puede usar. El permiso lo decide la API en cada petición.
 
 Tres decisiones que no son obvias:
@@ -449,13 +579,21 @@ Tres decisiones que no son obvias:
 Protege **todo por defecto** y enumera lo público, igual que en el backend un endpoint sin roles se
 rechaza: una pantalla nueva nace protegida.
 
-### Service worker mínimo (`public/sw.js`)
+### Service worker (`public/sw.js`)
 
-Hace una sola cosa: si una pantalla no carga por falta de red, enseña `public/offline.html` en vez
-del error del navegador. **No guarda en caché respuestas de la API** —servir una lectura de ayer
-como si fuera de hoy es peor que no servir nada— ni el JavaScript de la aplicación. Solo intercepta
-navegaciones. Se registra únicamente en la compilación de producción. La cola de reportes sin
-conexión es de F2 y se construirá sobre este archivo.
+Hace que la aplicación **abra sin cobertura**. Precarga el cascarón de la pantalla del equipo
+(`/equipo`, que se sirve en todas las `/a/{código}`) con sus recursos; los recursos de
+`/_next/static` van primero a la caché (llevan la huella de su contenido en el nombre); las
+pantallas, primero a la red y, sin ella, a la última copia guardada o a `offline.html`. **Nunca
+guarda respuestas de la API**: son datos de una persona y una empresa, y en un teléfono compartido
+una caché del navegador se los serviría a quien venga después. Los datos para consultar sin red los
+guarda la aplicación, por persona, en IndexedDB, y los borra al cerrar sesión. Se escribió a mano en
+lugar de usar next-pwa (sin versiones desde 2022) o Serwist porque lo necesario es acotado.
+
+El escáner dentro de la app usa `BarcodeDetector` donde existe y jsQR donde no (Safari). Valida que
+lo leído sea exactamente `{este origen}/a/{código válido}` (`src/lib/qr.ts`): un QR ajeno pegado
+encima de una etiqueta no lleva a ninguna parte. La cámara exige HTTPS fuera de `localhost`: para
+probar en un teléfono por la red local hace falta un túnel (cloudflared) o HTTPS de desarrollo.
 
 `src/lib/operador.ts` está deliberadamente separado de `src/lib/auth.ts`. Comparten el cliente HTTP
 y nada más: mezclarlos sería la forma más fácil de que un día una pantalla de cliente acabe llamando
@@ -479,6 +617,13 @@ desplace el botón.
 
 Los 768 px no estaban al principio, y una versión anterior desbordó justo ahí: entre el móvil y el
 escritorio hay un tramo donde nada encaja por defecto y que nadie mira.
+
+`campo.spec.ts` cubre la fase 2 de punta a punta, con un equipo y un operario nuevos en cada
+ejecución: escanear y registrar en tres pasos en un móvil, la confirmación de una lectura que no
+cuadra, **el envío sin conexión que llega una sola vez** al recuperar la red (con
+`context.setOffline`), la etiqueta de otra empresa, la bandeja de lecturas por revisar y que ninguna
+pantalla nueva desborde en móvil ni en escritorio. `unidad-qr.spec.ts` prueba el analizador de QR y
+el destino `next` del login contra URLs ajenas, absolutas y códigos mal formados.
 
 `sesion-y-cuenta.spec.ts` cubre el cierre de F1: el proxy (pidiendo la página con
 `maxRedirects: 0` y mirando el 307, porque la URL final no distinguiría el proxy del desvío que cada
@@ -528,8 +673,10 @@ pytest · pip-audit), **frontend** (lint · dependency-cruiser · build · npm a
 > agujero: un test saltado no prueba nada pero deja el pipeline en verde, y la cobertura de RNF-01
 > desaparecería sin que nadie lo note. `tests/conftest.py` aborta la ejecución entera en ese caso.
 
-Recomendado en GitHub: protección de rama sobre `main` exigiendo `ci.yml` en verde y prohibiendo el
-push directo (sección 4.2 del documento de F1). Eso se configura en el repositorio, no en el código.
+**Sin protección de rama sobre `main`, por decisión.** El documento de F1 (sección 4.2) pide
+prohibir el push directo y exigir pull requests, pero SIMAP lo desarrolla y publica una sola
+persona: la regla no protegería de nadie y solo añadiría pasos. La puerta de calidad está en el
+hook `pre-push` local, que corre las pruebas antes de publicar, y en `ci.yml` después.
 
 ## Flujo de documentación
 
@@ -576,20 +723,20 @@ npm run lint ; npm run graph:check
 <!-- graph:auto:start -->
 _Sección generada por `python tools/graph/graph.py docs`. No editar a mano; se sobrescribe en cada push a `main`._
 
-Última actualización: 2026-10-02 16:46 UTC
+Última actualización: 2026-10-07 14:04 UTC
 
 ### Estado del proyecto
 
 ```text
 === ESTADO DEL CÓDIGO ===
 
-[backend]  módulos: 24   LOC: 2517   TODO/FIXME: 0
-  con test: 20/24   stubs/vacíos: 0
-  por capa: api=4, cli=1, core=5, db=3, main=1, models=4, schemas=3, services=3
+[backend]  módulos: 47   LOC: 4782   TODO/FIXME: 0
+  con test: 37/47   stubs/vacíos: 0
+  por capa: api=11, cli=1, core=6, db=3, main=1, models=8, schemas=6, services=11
 
-[frontend]  módulos: 18   LOC: 2618   TODO/FIXME: 0
-  con test: 0/18   stubs/vacíos: 0
-  por capa: app=9, components=5, lib=3, src=1
+[frontend]  módulos: 45   LOC: 6222   TODO/FIXME: 0
+  con test: 0/45   stubs/vacíos: 0
+  por capa: app=17, components=15, lib=12, src=1
 
 ciclos de importación: 0
 
@@ -602,7 +749,7 @@ ciclos de importación: 0
     [x] Documentación inicial (README, README_USER, MANUAL_USUARIO)  <done>
     [x] Documentos de contexto transcritos en docs/contexto y DDL en backend/db  <done>
 
-  F1 - Fundamentos: auth, multi-tenant y RLS (semanas 1-2)  (12/13, 92%)
+  F1 - Fundamentos: auth, multi-tenant y RLS (semanas 1-2)  (13/13, 100%)
     cubre: RF-01, RF-02, RF-03, RNF-01, RNF-07, RNF-08
     hecho cuando: Un usuario se registra e inicia sesión; el sistema deniega datos de otra empresa incluso por API directa.
     [x] Dependencias del stack (SQLAlchemy async, asyncpg, Alembic, python-jose, argon2, redis, scipy, APScheduler, qrcode)  <done>
@@ -616,21 +763,26 @@ ciclos de importación: 0
     [x] Alta de empresas por invitación: comando de consola en vez de ruta pública  <done>
     [x] Plano de control: consola del operador de SIMAP (alta de clientes, suspensión, claves, bitácora)  <done>
     [x] Cierre de F1: proxy de sesión, service worker mínimo y cambio de la clave propia  <done>
-    [ ] Protección de main en GitHub: sin push directo, merge solo con CI en verde (4.2)  <pending>
+    [x] Protección de main en GitHub (4.2): descartada por decisión del usuario  <done>
     [x] CI: pytest + lint + pip-audit/npm audit en cada push  <done>
 
-  F2 - Activos y registro de campo (semanas 3-6)  (0/9, 0%)
+  F2 - Activos y registro de campo (semanas 3-6)  (12/14, 85%)
     cubre: RF-04, RF-05, RF-06, RF-07, RF-08, RF-09, RF-10, RNF-03, RNF-05
     hecho cuando: Un operario escanea el QR y registra horómetro o alerta; el reporte llega aunque se hiciera offline.
-    [ ] Gestión de usuarios de la empresa: alta, rol y baja, por el administrador (RF-03)  <pending>
-    [ ] CRUD de activos con ficha técnica, ubicación y criticidad; baja lógica  <pending>
-    [ ] Generación de QR único + código corto de respaldo al crear el activo  <pending>
-    [ ] Catálogo de componentes editable por el administrador  <pending>
-    [ ] Lecturas de horómetro  <pending>
-    [ ] Alertas de campo (síntoma + nota) con estados  <pending>
-    [ ] Frontend: escáner QR (html5-qrcode) y vista móvil del activo con acciones por rol  <pending>
-    [ ] Frontend: formularios de horómetro y alerta (react-hook-form + zod), máx. 3 pasos  <pending>
-    [ ] Frontend: PWA offline con cola local y sincronización automática  <pending>
+    [x] Puerta de entrada (05, sección 3) y migración 0005 con RLS, referencias compuestas y solo adición  <done>
+    [x] Cookies y dominios (05, 8.2): el navegador habla solo con el frontend, Next reenvía /api  <done>
+    [x] Gestión de usuarios de la empresa: alta, rol y baja, por el administrador (RF-03)  <done (auto)>
+    [x] CRUD de activos con ficha técnica, ubicación y criticidad; baja lógica  <done (auto)>
+    [x] Generación de QR único + código corto de respaldo al crear el activo; etiqueta SVG  <done (auto)>
+    [x] Catálogo de componentes editable por el administrador, con plantilla inicial  <done (auto)>
+    [x] Lecturas de horómetro  <done (auto)>
+    [x] Alertas de campo (síntoma + nota) con estados  <done (auto)>
+    [x] Frontend: escáner QR y vista móvil del activo con acciones por rol  <done (auto)>
+    [x] Frontend: formularios de horómetro y alerta, máx. 3 pasos  <done (auto)>
+    [x] Frontend: PWA offline con cola local y sincronización automática  <done (auto)>
+    [ ] Prueba en teléfonos reales (iOS y Android) y de una etiqueta impresa a 50 cm  <pending>
+    [ ] Verificar en producción que la sesión persiste entre frontend y backend (8.2)  <pending>
+    [x] Confirmar una lectura marcada para revisión, y el evento «horómetro reiniciado»  <done>
 
   F3 - Órdenes de trabajo (semanas 7-8)  (0/5, 0%)
     cubre: RF-11, RF-12, RF-13, RF-14, RF-15, RF-16, RNF-06
@@ -662,60 +814,110 @@ ciclos de importación: 0
     [ ] Checklist OWASP Top 10 y verificación de secretos  <pending>
     [ ] Documentación técnica y manual de usuario finales  <pending>
 
-AVANCE GLOBAL: 17/45 tareas (37%)
+AVANCE GLOBAL: 30/50 tareas (60%)
 ```
 
 ### Módulos del backend
 
 | Módulo | Capa | Importa | Importado por | LOC | Test |
 |---|---|---:|---:|---:|:---:|
-| `app.api.v1.router` | api | 3 | 1 | 9 | — |
-| `app.api.v1.routes.auth` | api | 7 | 1 | 203 | ✅ |
+| `app.api.v1.comun` | api | 7 | 5 | 83 | — |
+| `app.api.v1.router` | api | 9 | 1 | 27 | — |
+| `app.api.v1.routes.activos` | api | 9 | 1 | 155 | ✅ |
+| `app.api.v1.routes.alertas` | api | 8 | 1 | 87 | ✅ |
+| `app.api.v1.routes.auth` | api | 7 | 1 | 210 | ✅ |
+| `app.api.v1.routes.campo` | api | 6 | 1 | 23 | ✅ |
+| `app.api.v1.routes.componentes` | api | 6 | 1 | 53 | ✅ |
 | `app.api.v1.routes.health` | api | 2 | 1 | 9 | ✅ |
+| `app.api.v1.routes.lecturas` | api | 9 | 1 | 119 | ✅ |
 | `app.api.v1.routes.operador` | api | 9 | 1 | 315 | ✅ |
+| `app.api.v1.routes.usuarios` | api | 5 | 1 | 66 | ✅ |
 | `app.cli` | cli | 5 | 0 | 189 | ✅ |
-| `app.core.almacen` | core | 1 | 5 | 112 | ✅ |
-| `app.core.auth` | core | 1 | 4 | 117 | ✅ |
-| `app.core.config` | core | 0 | 10 | 60 | — |
-| `app.core.rbac` | core | 2 | 0 | 36 | ✅ |
-| `app.core.security` | core | 1 | 8 | 212 | ✅ |
-| `app.db.deps` | db | 3 | 3 | 82 | ✅ |
+| `app.core.almacen` | core | 1 | 6 | 112 | ✅ |
+| `app.core.auth` | core | 1 | 5 | 117 | ✅ |
+| `app.core.config` | core | 0 | 15 | 80 | — |
+| `app.core.cursor` | core | 0 | 4 | 48 | ✅ |
+| `app.core.rbac` | core | 2 | 6 | 36 | ✅ |
+| `app.core.security` | core | 1 | 17 | 225 | ✅ |
+| `app.db.deps` | db | 3 | 9 | 82 | ✅ |
 | `app.db.session` | db | 2 | 1 | 78 | ✅ |
 | `app.db.tenant` | db | 0 | 1 | 108 | ✅ |
-| `app.main` | main | 2 | 0 | 48 | — |
-| `app.models.base` | models | 0 | 4 | 32 | — |
+| `app.main` | main | 2 | 0 | 74 | — |
+| `app.models.activo` | models | 1 | 7 | 66 | — |
+| `app.models.alerta` | models | 1 | 2 | 75 | — |
+| `app.models.base` | models | 0 | 8 | 32 | — |
+| `app.models.componente` | models | 1 | 2 | 41 | — |
 | `app.models.empresa` | models | 1 | 4 | 19 | ✅ |
+| `app.models.lectura_horometro` | models | 1 | 3 | 88 | — |
 | `app.models.operador` | models | 1 | 3 | 68 | ✅ |
-| `app.models.usuario` | models | 2 | 3 | 44 | ✅ |
+| `app.models.usuario` | models | 2 | 4 | 63 | ✅ |
+| `app.schemas.activo` | schemas | 0 | 4 | 78 | — |
 | `app.schemas.auth` | schemas | 1 | 4 | 63 | ✅ |
+| `app.schemas.campo` | schemas | 0 | 4 | 106 | ✅ |
 | `app.schemas.health` | schemas | 0 | 1 | 6 | ✅ |
 | `app.schemas.operador` | schemas | 1 | 1 | 66 | ✅ |
-| `app.services.auth` | services | 7 | 2 | 285 | ✅ |
-| `app.services.limites` | services | 2 | 4 | 34 | ✅ |
-| `app.services.operador` | services | 6 | 1 | 309 | ✅ |
+| `app.schemas.usuario` | schemas | 1 | 1 | 32 | ✅ |
+| `app.services.activos` | services | 4 | 2 | 167 | ✅ |
+| `app.services.alertas` | services | 5 | 2 | 145 | ✅ |
+| `app.services.auth` | services | 8 | 2 | 298 | ✅ |
+| `app.services.campo` | services | 4 | 1 | 101 | ✅ |
+| `app.services.capturas` | services | 2 | 6 | 53 | ✅ |
+| `app.services.componentes` | services | 1 | 3 | 83 | ✅ |
+| `app.services.lecturas` | services | 5 | 2 | 243 | ✅ |
+| `app.services.limites` | services | 2 | 5 | 44 | ✅ |
+| `app.services.operador` | services | 8 | 1 | 323 | ✅ |
+| `app.services.qr` | services | 0 | 2 | 84 | ✅ |
+| `app.services.usuarios` | services | 2 | 1 | 114 | ✅ |
 
 ### Módulos del frontend
 
 | Módulo | Capa | Importa | Importado por | LOC | Test |
 |---|---|---:|---:|---:|:---:|
+| `src/app/activos/[id]/editar/page.tsx` | app | 5 | 0 | 55 | — |
+| `src/app/activos/[id]/etiqueta/page.tsx` | app | 5 | 0 | 83 | — |
+| `src/app/activos/nuevo/page.tsx` | app | 4 | 0 | 32 | — |
+| `src/app/activos/page.tsx` | app | 8 | 0 | 215 | — |
+| `src/app/alertas/page.tsx` | app | 8 | 0 | 202 | — |
+| `src/app/componentes/page.tsx` | app | 7 | 0 | 207 | — |
+| `src/app/equipo/page.tsx` | app | 14 | 0 | 417 | — |
+| `src/app/escanear/page.tsx` | app | 6 | 0 | 72 | — |
 | `src/app/globals.css` | app | 0 | 1 | 186 | — |
 | `src/app/layout.tsx` | app | 2 | 0 | 66 | — |
-| `src/app/login/page.tsx` | app | 5 | 0 | 173 | — |
+| `src/app/login/page.tsx` | app | 7 | 0 | 185 | — |
 | `src/app/operador/clave/page.tsx` | app | 3 | 0 | 60 | — |
-| `src/app/operador/login/page.tsx` | app | 5 | 0 | 141 | — |
 | `src/app/operador/page.tsx` | app | 5 | 0 | 566 | — |
 | `src/app/page.tsx` | app | 2 | 0 | 44 | — |
 | `src/app/panel/clave/page.tsx` | app | 3 | 0 | 65 | — |
-| `src/app/panel/page.tsx` | app | 3 | 0 | 200 | — |
-| `src/components/boton.tsx` | components | 0 | 5 | 72 | — |
-| `src/components/campo.tsx` | components | 0 | 4 | 115 | — |
+| `src/app/panel/page.tsx` | app | 3 | 0 | 87 | — |
+| `src/app/panel/usuarios/page.tsx` | app | 9 | 0 | 267 | — |
+| `src/components/barra-sesion.tsx` | components | 3 | 1 | 92 | — |
+| `src/components/boton.tsx` | components | 0 | 16 | 72 | — |
+| `src/components/campo.tsx` | components | 0 | 9 | 143 | — |
+| `src/components/escaner-qr.tsx` | components | 3 | 1 | 153 | — |
+| `src/components/estado.tsx` | components | 1 | 6 | 105 | — |
+| `src/components/formulario-activo.tsx` | components | 4 | 2 | 147 | — |
+| `src/components/formulario-alerta.tsx` | components | 9 | 1 | 147 | — |
 | `src/components/formulario-clave.tsx` | components | 3 | 2 | 165 | — |
-| `src/components/marco.tsx` | components | 0 | 7 | 144 | — |
+| `src/components/formulario-horometro.tsx` | components | 9 | 2 | 212 | — |
+| `src/components/iconos.tsx` | components | 0 | 7 | 82 | — |
+| `src/components/indicador-cola.tsx` | components | 2 | 1 | 77 | — |
+| `src/components/lecturas-por-revisar.tsx` | components | 6 | 1 | 119 | — |
+| `src/components/marco.tsx` | components | 0 | 15 | 163 | — |
+| `src/components/pantalla.tsx` | components | 5 | 10 | 106 | — |
 | `src/components/registro-sw.tsx` | components | 0 | 1 | 28 | — |
-| `src/lib/api.ts` | lib | 0 | 6 | 177 | — |
-| `src/lib/auth.ts` | lib | 1 | 4 | 220 | — |
+| `src/lib/acceso.ts` | lib | 3 | 1 | 53 | — |
+| `src/lib/activos.ts` | lib | 1 | 12 | 114 | — |
+| `src/lib/api.ts` | lib | 0 | 22 | 182 | — |
+| `src/lib/auth.ts` | lib | 1 | 17 | 251 | — |
+| `src/lib/campo.ts` | lib | 2 | 7 | 141 | — |
+| `src/lib/captura.ts` | lib | 5 | 2 | 83 | — |
+| `src/lib/formato.ts` | lib | 0 | 7 | 31 | — |
+| `src/lib/offline-queue.ts` | lib | 4 | 4 | 332 | — |
 | `src/lib/operador.ts` | lib | 1 | 3 | 121 | — |
-| `src/proxy.ts` | src | 0 | 0 | 75 | — |
+| `src/lib/qr.ts` | lib | 0 | 4 | 60 | — |
+| `src/lib/sesion.ts` | lib | 3 | 2 | 98 | — |
+| `src/lib/usuarios.ts` | lib | 2 | 1 | 41 | — |
+| `src/proxy.ts` | src | 0 | 0 | 95 | — |
 
 Diagramas: [backend](docs/diagramas/dependencias-backend.md) · [frontend](docs/diagramas/dependencias-frontend.md)
 <!-- graph:auto:end -->

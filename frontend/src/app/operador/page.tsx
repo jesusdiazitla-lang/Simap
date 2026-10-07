@@ -71,7 +71,7 @@ export default function ConsolaPage() {
       try {
         const yo = await operadorActual(control.signal);
         if (yo === null) {
-          router.replace("/operador/login");
+          router.replace("/login");
           return;
         }
         setOperador(yo);
@@ -133,7 +133,7 @@ export default function ConsolaPage() {
           <button
             type="button"
             onClick={() => {
-              void salirDeLaConsola().finally(() => router.replace("/operador/login"));
+              void salirDeLaConsola().finally(() => router.replace("/login"));
             }}
             className="h-9 shrink-0 cursor-pointer rounded-[var(--radius-control)] border border-borde-fuerte px-3 text-[0.8125rem] font-medium text-texto-suave transition-colors hover:border-error hover:text-error"
           >

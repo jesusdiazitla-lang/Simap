@@ -40,11 +40,28 @@ teléfono y se envían solos cuando vuelve la conexión.
 
 ## Primeros pasos
 
-1. Abre la dirección en el navegador. Verás la **hoja de registro de acceso**.
+1. Abre la dirección en el navegador. Verás la pantalla de acceso.
 2. Escribe tu correo y tu contraseña y pulsa **Entrar**.
 3. Verás el panel de tu turno, con lo que tu rol puede hacer.
-4. *(Desde la fase 2)* En planta: escanea el **código QR** pegado en el equipo → elige **Horómetro**
-   o **Alerta** → envía.
+4. En planta: apunta la **cámara del teléfono** a la etiqueta QR del equipo. Se abre su pantalla:
+   comprueba que el nombre es el de la máquina que tienes delante, escribe el horómetro o elige el
+   síntoma, y envía. Tres pasos.
+
+### En planta, con o sin cobertura
+
+- **Horómetro:** escribe lo que marca. Al lado ves la última lectura; si lo que escribes no cuadra
+  (es menor, o sube más horas de las que han pasado), SIMAP te pregunta antes de enviar. Suele ser
+  un dígito de más.
+- **Alerta:** toca el síntoma (ruido, vibración, calor, olor, fuga u otro) y, si quieres, añade una
+  nota. Si reportas lo mismo dos veces en pocos minutos, cuenta como una sola.
+- **Sin cobertura:** registra igual. Lo que envíes se guarda en el teléfono y arriba verás
+  «Sin conexión · 1 por enviar». Cuando vuelva la red se envía solo y verás «Enviado». Aunque se
+  reintente varias veces, llega una sola vez.
+- **Si la cámara no lee la etiqueta**, en **Escanear** puedes teclear el código impreso bajo el QR
+  (por ejemplo `XK7P-2QH9`).
+
+Instala SIMAP en la pantalla de inicio del teléfono («añadir a la pantalla de inicio»): así el
+teléfono no borra lo que tengas pendiente de enviar.
 
 ### No hay botón de «crear cuenta», y es a propósito
 
@@ -86,11 +103,19 @@ al nombre de quien tenga la sesión abierta.
 | Consola del operador: alta de clientes, suspensión, claves | 1 | ✅ Disponible |
 | Cambiar tu contraseña (usuarios y operador) | 1 | ✅ Disponible |
 | Aviso propio cuando no hay conexión | 1 | ✅ Disponible |
-| Equipos con código QR, horómetro y alertas | 2 | ⏳ Pendiente |
+| Equipos con código QR y etiqueta imprimible | 2 | ✅ Disponible |
+| Horómetro y alertas desde el teléfono, también sin cobertura | 2 | ✅ Disponible |
+| Revisión de alertas y de lecturas que no cuadran | 2 | ✅ Disponible |
+| Personal de la empresa y catálogo de componentes | 2 | ✅ Disponible |
 | Órdenes de trabajo con trazabilidad | 3 | ⏳ Pendiente |
 | Predicción de riesgo e inventario de repuestos | 4 | ⏳ Pendiente |
 | Paneles por rol | 5 | ⏳ Pendiente |
 | API en funcionamiento (`/api/v1/health`) | — | ✅ Disponible |
+
+**La fase 2 está construida.** Los equipos llevan su etiqueta QR, el personal registra el
+horómetro y las alertas desde el teléfono —también sin cobertura—, y el supervisor revisa lo que no
+cuadra. El administrador de cada planta da de alta a su propia gente. Queda probarla en teléfonos
+reales con etiquetas impresas.
 
 **La fase 1 está terminada.** Ya se puede entrar a SIMAP desde el navegador, con correo y
 contraseña, y cada persona ve el panel de su rol. Incluye protección contra quien intente adivinar
@@ -108,9 +133,9 @@ propósito, para poder usarlos con guantes y con una sola mano. Todo lo que regi
 asociado a tu nombre.
 
 También se puede **instalar en el teléfono** como una aplicación: al abrirla en el navegador, el
-propio teléfono ofrece «añadir a la pantalla de inicio». Si te quedas sin cobertura, SIMAP te lo
-dice con su propio aviso en lugar del error del navegador. Ojo: todavía **no guarda reportes sin
-conexión**; eso llega con la fase 2.
+propio teléfono ofrece «añadir a la pantalla de inicio». Si te quedas sin cobertura, la pantalla del
+equipo se abre igual con lo que se guardó la última vez, y lo que registres se envía al volver la
+red.
 
 > Cada cambio en el código pasa por una verificación automática que, entre otras cosas, comprueba
 > contra una base de datos real que ninguna empresa pueda ver los datos de otra. Si esa comprobación
@@ -120,7 +145,8 @@ conexión**; eso llega con la fase 2.
 
 Esta sección no es para el personal de una planta, sino para quien presta el servicio.
 
-Tienes una consola aparte en **`/operador`**, con su propio acceso. Desde ahí puedes:
+Entras por la **misma pantalla de acceso** que todo el mundo: SIMAP reconoce tu cuenta y te lleva
+a tu consola, marcada como **Consola del operador**. Desde ahí puedes:
 
 - **Dar de alta una empresa cliente** con su primer administrador. SIMAP genera la contraseña y te
   la muestra **una sola vez**: cópiala y entrégasela. No se guarda en ningún sitio, así que si la

@@ -413,3 +413,18 @@ def test_seccion64_la_api_envia_las_cabeceras_de_seguridad(client: TestClient) -
 def test_hsts_solo_cuando_las_cookies_son_secure(client: TestClient) -> None:
     # En desarrollo (sin HTTPS) enviar HSTS no hace nada y confunde al depurar.
     assert "Strict-Transport-Security" not in client.get("/api/v1/health").headers
+
+
+# --- Defensa adicional contra CSRF (05-fase2-activos-y-campo.md, 8.2) ---------
+
+
+def test_una_peticion_que_escribe_desde_otro_origen_se_rechaza(client: TestClient) -> None:
+    ajeno = client.post("/api/v1/auth/logout", headers={"Origin": "https://malicioso.example"})
+    assert ajeno.status_code == 403
+    propio = client.post("/api/v1/auth/logout", headers={"Origin": "http://localhost:3000"})
+    assert propio.status_code == 204
+
+
+def test_las_lecturas_no_miran_el_origen(client: TestClient) -> None:
+    resp = client.get("/api/v1/health", headers={"Origin": "https://malicioso.example"})
+    assert resp.status_code == 200

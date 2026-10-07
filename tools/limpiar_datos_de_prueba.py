@@ -55,6 +55,15 @@ EMPRESAS_DE_PRUEBA = [
 #: Correo de los operadores que crean las pruebas.
 OPERADORES_DE_PRUEBA = "op-%@simap.do"
 
+#: Lo que las pruebas e2e de la fase 2 crean DENTRO de la empresa de demostración (que no se borra):
+#: un equipo y un operario por ejecución. Explícito, igual que lo de arriba.
+EQUIPOS_E2E = "Compresor E2E %"
+PERSONAS_E2E = "operario-e2e-%@example.com"
+
+#: Tablas de negocio, de hija a madre: el orden en que hay que vaciarlas para no chocar con las
+#: llaves foráneas. Al añadir una tabla con empresa_id en una fase nueva, añadirla aquí.
+TABLAS_DE_NEGOCIO = ("alertas", "lecturas_horometro", "activos", "componentes")
+
 
 async def limpiar(ejecutar: bool) -> int:
     if "localhost" not in URL and "127.0.0.1" not in URL:
@@ -113,6 +122,33 @@ async def limpiar(ejecutar: bool) -> int:
             await conn.execute(
                 text("DELETE FROM operadores WHERE correo LIKE :op"), params
             )
+            # Datos de negocio de las empresas de prueba, de las tablas hijas a las madres.
+            for tabla in TABLAS_DE_NEGOCIO:
+                await conn.execute(
+                    text(
+                        f"DELETE FROM {tabla} WHERE empresa_id IN"
+                        f" (SELECT id FROM empresas WHERE {condicion})"
+                    ),
+                    params,
+                )
+            # Lo que dejan las pruebas e2e dentro de la empresa de demostración.
+            params_e2e = {"eq": EQUIPOS_E2E, "pe": PERSONAS_E2E}
+            for tabla in ("alertas", "lecturas_horometro"):
+                await conn.execute(
+                    text(
+                        f"DELETE FROM {tabla} WHERE activo_id IN"
+                        " (SELECT id FROM activos WHERE nombre LIKE :eq)"
+                        " OR registrado_por IN (SELECT id FROM usuarios WHERE correo LIKE :pe)"
+                        if tabla == "lecturas_horometro"
+                        else f"DELETE FROM {tabla} WHERE activo_id IN"
+                        " (SELECT id FROM activos WHERE nombre LIKE :eq)"
+                        " OR reportado_por IN (SELECT id FROM usuarios WHERE correo LIKE :pe)"
+                    ),
+                    params_e2e,
+                )
+            await conn.execute(text("DELETE FROM activos WHERE nombre LIKE :eq"), params_e2e)
+            await conn.execute(text("DELETE FROM usuarios WHERE correo LIKE :pe"), params_e2e)
+
             await conn.execute(
                 text(
                     "DELETE FROM usuarios WHERE empresa_id IN"

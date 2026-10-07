@@ -14,9 +14,14 @@
  * `*`, porque con `*` el navegador se niega a enviar credenciales.
  */
 
-/** Base de la API. En desarrollo apunta al backend local; en despliegue se inyecta al construir. */
-export const BASE_API =
-  process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") ?? "http://localhost:8000/api/v1";
+/**
+ * Base de la API: **el mismo origen del frontend**. Next reenvía `/api/*` al backend (ver
+ * `next.config.ts`), así que el navegador nunca habla con otro sitio y la cookie de sesión viaja
+ * como cookie propia, también en producción (05-fase2-activos-y-campo.md, sección 8.2). Se puede
+ * sobrescribir para apuntar a un backend directamente, pero entonces vuelve el problema de las
+ * cookies de otro sitio.
+ */
+export const BASE_API = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") ?? "/api/v1";
 
 /** Errores de validación agrupados por nombre de campo, tal como los pinta el formulario. */
 export type ErroresDeCampo = Readonly<Record<string, string>>;

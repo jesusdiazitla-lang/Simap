@@ -14,7 +14,6 @@ añadido posterior: se escribe en la misma transacción, así que o quedan las d
 
 from __future__ import annotations
 
-import secrets
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from uuid import UUID
@@ -28,23 +27,20 @@ from app.core.security import (
     Rol,
     crear_token_de_acceso_operador,
     crear_token_de_refresco_operador,
+    generar_clave_temporal,
     hash_password,
     necesita_rehash,
     verify_password,
 )
+from app.models.activo import Activo
 from app.models.empresa import Empresa
 from app.models.operador import AccionOperador, BitacoraOperador, Operador
 from app.models.usuario import Usuario
-from app.services import limites
+from app.services import componentes, limites
 
 #: Hash de descarte con el que se compara cuando el correo no existe, para que un intento con
 #: correo inexistente tarde lo mismo que uno con correo real. Ver `app.services.auth`.
 _HASH_SENUELO = hash_password("senuelo-del-plano-de-control")
-
-#: Longitud de la contraseña temporal que genera el servidor, en bytes de entropía.
-#: 12 bytes en base64 seguro para URL dan 16 caracteres imposibles de adivinar y cómodos de dictar
-#: por teléfono, que es como va a llegar a su destinatario la mitad de las veces.
-_BYTES_CLAVE_TEMPORAL = 12
 
 
 class ErrorDeAutenticacion(Exception):
@@ -197,15 +193,6 @@ async def cambiar_password(
 # --- Empresas -----------------------------------------------------------------
 
 
-def generar_clave_temporal() -> str:
-    """Contraseña de un solo uso, generada por el servidor.
-
-    `secrets` y no `random`: el segundo es predecible a partir de valores anteriores, y esto abre
-    la cuenta de administrador de un cliente.
-    """
-    return secrets.token_urlsafe(_BYTES_CLAVE_TEMPORAL)
-
-
 async def dar_de_alta_empresa(
     session: AsyncSession,
     *,
@@ -247,6 +234,12 @@ async def dar_de_alta_empresa(
             raise CorreoYaRegistrado(admin_correo) from exc
         raise
 
+    # Catálogo inicial de componentes (05-fase2-activos-y-campo.md, sección 2), en la misma
+    # transacción: no puede existir una empresa sin catálogo. El rol del operador puede INSERTAR en
+    # `componentes` pero no leerlos (revisión 0005).
+    session.add_all(componentes.plantilla_para(nueva.id))
+    await session.flush()
+
     await _anotar(
         session,
         operador_id=operador_id,
@@ -258,39 +251,53 @@ async def dar_de_alta_empresa(
 
 
 async def listar_empresas(session: AsyncSession) -> list[tuple[Empresa, Usuario | None]]:
-    """Todas las empresas con su administrador, para la consola.
+    """Todas las empresas con su administrador de referencia, para la consola.
 
-    `outerjoin` y no `join`: una empresa cuyo administrador se desactivara seguiría existiendo y
-    tiene que aparecer en la lista, porque justamente es la que necesita atención.
+    Desde que cada empresa gestiona su personal (RF-03) puede tener varios administradores; se
+    muestra el activo más antiguo, que suele ser el que se dio de alta con la empresa. Con un JOIN
+    simple, una empresa con dos administradores aparecería dos veces en la lista.
+
+    `outerjoin` y no `join`: una empresa sin ningún administrador activo sigue existiendo y tiene
+    que aparecer, porque justamente es la que necesita atención.
     """
+    referencia = (
+        select(Usuario.id)
+        .where(
+            Usuario.empresa_id == Empresa.id,
+            Usuario.rol == Rol.ADMINISTRADOR.value,
+            Usuario.activo.is_(True),
+        )
+        .order_by(Usuario.creado_en)
+        .limit(1)
+        .correlate(Empresa)
+        .scalar_subquery()
+    )
     consulta = (
         select(Empresa, Usuario)
-        .outerjoin(
-            Usuario,
-            (Usuario.empresa_id == Empresa.id) & (Usuario.rol == Rol.ADMINISTRADOR.value),
-        )
+        .outerjoin(Usuario, Usuario.id == referencia)
         .order_by(Empresa.nombre)
     )
     filas = await session.execute(consulta)
     return [(e, u) for e, u in filas.all()]
 
 
-async def contar_equipos(session: AsyncSession) -> dict[UUID, int] | None:
-    """Equipos monitoreados por empresa, que es la unidad de cobro.
+async def contar_equipos(session: AsyncSession) -> dict[UUID, int]:
+    """Equipos en servicio por empresa, que es la unidad de cobro.
 
-    Devuelve `None` mientras la tabla `activos` no exista, que es hasta F2. Se distingue de un
-    diccionario vacío a propósito: «todavía no se puede contar» y «todas tienen cero equipos» son
-    cosas distintas, y mostrar un cero donde no hay dato es una mentira pequeña que acaba en una
-    factura equivocada.
+    Es la única consulta del plano de control sobre una tabla de negocio, y la base la deja pasar
+    solo porque toca exactamente dos columnas: `operador_user` tiene permiso de SELECT sobre
+    `activos.empresa_id` y `activos.estado`, y sobre ninguna otra (revisión 0005). Pedir aquí el
+    nombre de un equipo daría un error de permisos de PostgreSQL, no una fila.
+
+    Los equipos dados de baja no cuentan: no se monitorean y no se facturan. Una empresa sin equipos
+    no aparece en el diccionario; quien llama la cuenta como cero.
     """
-    existe = await session.execute(
-        select(func.to_regclass("public.activos")),
+    filas = await session.execute(
+        select(Activo.empresa_id, func.count())
+        .where(Activo.estado == "activo")
+        .group_by(Activo.empresa_id)
     )
-    if existe.scalar_one() is None:
-        return None
-    # Cuando `activos` exista (F2), aquí entra el COUNT agrupado por empresa. El rol del plano de
-    # control necesitará un GRANT SELECT explícito sobre esa tabla, concedido en su migración.
-    return {}
+    return {empresa_id: int(total) for empresa_id, total in filas.all()}
 
 
 async def _empresa_por_id(session: AsyncSession, empresa_id: UUID) -> Empresa:
@@ -349,9 +356,15 @@ async def restablecer_clave_administrador(
     """
     empresa = await _empresa_por_id(session, empresa_id)
     fila = await session.execute(
-        select(Usuario).where(
-            Usuario.empresa_id == empresa.id, Usuario.rol == Rol.ADMINISTRADOR.value
+        select(Usuario)
+        .where(
+            Usuario.empresa_id == empresa.id,
+            Usuario.rol == Rol.ADMINISTRADOR.value,
+            # Un administrador dado de baja por su propia empresa no se reactiva por la puerta de
+            # atrás restableciéndole la clave.
+            Usuario.activo.is_(True),
         )
+        .order_by(Usuario.creado_en)
     )
     admin: Usuario | None = fila.scalars().first()
     if admin is None:

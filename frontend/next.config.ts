@@ -1,6 +1,33 @@
 import type { NextConfig } from "next";
 
+/**
+ * Dónde está el backend, visto desde el servidor de Next (no desde el navegador).
+ *
+ * El navegador nunca habla con el backend directamente: pide `/api/...` al mismo origen del
+ * frontend y Next lo reenvía aquí (05-fase2-activos-y-campo.md, sección 8.2). Así la cookie de
+ * sesión es siempre del mismo sitio, sin CORS y con `SameSite=Lax`, también en producción, donde
+ * frontend y backend viven en dominios distintos y una cookie de otro sitio no viajaría.
+ */
+const API_ORIGEN = (process.env.API_ORIGEN ?? "http://localhost:8000").replace(/\/$/, "");
+
 const nextConfig: NextConfig = {
+  async rewrites() {
+    return [
+      { source: "/api/:ruta*", destination: `${API_ORIGEN}/api/:ruta*` },
+      // Todas las etiquetas QR apuntan a `/a/{código}`, una dirección distinta por equipo. Se sirven
+      // todas con la misma página estática, que lee el código de la barra de direcciones. Al ser una
+      // sola página sin datos, el service worker la guarda una vez y la pantalla del equipo abre
+      // sin cobertura para cualquier código (05-fase2-activos-y-campo.md, 7.5).
+      { source: "/a/:codigo", destination: "/equipo" },
+    ];
+  },
+  async redirects() {
+    return [
+      // El acceso del operador se unificó con el de las plantas en `/login` (ver
+      // `src/lib/acceso.ts`). Se conserva la dirección vieja para no romper enlaces guardados.
+      { source: "/operador/login", destination: "/login", permanent: false },
+    ];
+  },
   async headers() {
     return [
       {

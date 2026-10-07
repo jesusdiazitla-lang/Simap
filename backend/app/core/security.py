@@ -7,6 +7,7 @@ convierte credenciales en hashes y reclamaciones en tokens. Quién puede hacer q
 
 from __future__ import annotations
 
+import secrets
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
@@ -110,6 +111,24 @@ def necesita_rehash(password_hash: str) -> bool:
         return _hasher().check_needs_rehash(password_hash)
     except (Argon2Error, InvalidHashError):
         return True
+
+
+#: Bytes de entropía de una contraseña temporal. 12 bytes en base64 seguro para URL dan 16
+#: caracteres imposibles de adivinar y cómodos de dictar por teléfono, que es como llegará a su
+#: destinatario la mitad de las veces.
+_BYTES_CLAVE_TEMPORAL = 12
+
+
+def generar_clave_temporal() -> str:
+    """Contraseña de un solo uso, generada por el servidor.
+
+    La usan los dos planos: el operador al dar de alta una empresa o restablecer a su
+    administrador, y el administrador de una planta al dar de alta o restablecer a su personal.
+    Quien la entrega no la elige, así que no conserva acceso a la cuenta una vez cambiada.
+
+    `secrets` y no `random`: el segundo es predecible a partir de valores anteriores.
+    """
+    return secrets.token_urlsafe(_BYTES_CLAVE_TEMPORAL)
 
 
 def _crear_token(claims: Claims, expira_en: timedelta) -> str:

@@ -250,7 +250,7 @@ async def listar_empresas(
             suspendida_en=empresa.suspendida_en,
             admin_nombre=admin.nombre if admin else None,
             admin_correo=admin.correo if admin else None,
-            equipos=None if equipos is None else equipos.get(empresa.id, 0),
+            equipos=equipos.get(empresa.id, 0),
         )
         for empresa, admin in filas
     ]

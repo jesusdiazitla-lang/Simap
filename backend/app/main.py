@@ -4,6 +4,7 @@ from collections.abc import Awaitable, Callable
 
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from app.api.v1.router import api_router
 from app.core.config import get_settings
@@ -22,6 +23,16 @@ CABECERAS_SEGURIDAD = {
 }
 
 
+#: Métodos que modifican datos. Son los únicos que un sitio ajeno podría querer forzar con la sesión
+#: del usuario (CSRF), así que son los únicos en los que se comprueba el origen.
+METODOS_QUE_ESCRIBEN = frozenset({"POST", "PUT", "PATCH", "DELETE"})
+
+
+def origenes_permitidos() -> frozenset[str]:
+    s = get_settings()
+    return frozenset({*s.cors_origins, s.app_base_url.rstrip("/")})
+
+
 def create_app() -> FastAPI:
     settings = get_settings()
     app = FastAPI(title=settings.app_name, version=settings.app_version, debug=settings.debug)
@@ -35,6 +46,27 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    @app.middleware("http")
+    async def origen_de_confianza(
+        request: Request, call_next: Callable[[Request], Awaitable[Response]]
+    ) -> Response:
+        """Defensa adicional contra CSRF (05-fase2-activos-y-campo.md, sección 8.2).
+
+        `SameSite` ya impide que la cookie viaje en peticiones de otros sitios, pero no todos los
+        navegadores lo aplican igual. Si una petición que escribe trae `Origin` y no es el del
+        frontend, se rechaza. Sin cabecera `Origin` se deja pasar: los navegadores la mandan
+        siempre en estas peticiones, y su ausencia indica un cliente que no es un navegador
+        (pruebas, scripts), que no lleva la cookie de nadie más.
+        """
+        origen = request.headers.get("origin")
+        if (
+            request.method in METODOS_QUE_ESCRIBEN
+            and origen is not None
+            and origen.rstrip("/") not in origenes_permitidos()
+        ):
+            return JSONResponse(status_code=403, content={"detail": "Origen no permitido."})
+        return await call_next(request)
 
     @app.middleware("http")
     async def cabeceras_de_seguridad(
