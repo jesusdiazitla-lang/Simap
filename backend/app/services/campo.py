@@ -20,6 +20,7 @@ from pydantic import TypeAdapter, ValidationError
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core import registro
 from app.schemas.campo import ItemAlerta, ItemLectura, ItemLote, ResultadoItem
 from app.services import alertas, lecturas
 from app.services.capturas import CapturaInvalida
@@ -113,4 +114,13 @@ async def procesar_lote(
                 estado="creado" if estado == "creado" else "duplicado",
             )
         )
+    # Métrica de sincronización (sección 9.7): un salto en duplicados o rechazados delata un fallo
+    # en los teléfonos antes de que nadie lo reporte.
+    registro.evento(
+        "campo.lote",
+        recibidos=len(items),
+        creados=sum(r.estado == "creado" for r in resultados),
+        duplicados=sum(r.estado == "duplicado" for r in resultados),
+        rechazados=sum(r.estado == "rechazado" for r in resultados),
+    )
     return resultados

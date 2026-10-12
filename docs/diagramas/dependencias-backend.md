@@ -33,6 +33,7 @@ graph LR
     app_core_config["core.config"]
     app_core_cursor["core.cursor"]
     app_core_rbac["core.rbac"]
+    app_core_registro["core.registro"]
     app_core_security["core.security"]
   end
   subgraph db[db]
@@ -164,6 +165,7 @@ graph LR
   app_cli --> app_schemas_auth
   app_cli --> app_services_auth
   app_core_almacen --> app_core_config
+  app_core_auth --> app_core_registro
   app_core_auth --> app_core_security
   app_core_rbac --> app_core_auth
   app_core_rbac --> app_core_security
@@ -175,6 +177,8 @@ graph LR
   app_db_session --> app_db_tenant
   app_main --> app_api_v1_router
   app_main --> app_core_config
+  app_main --> app_core_cursor
+  app_main --> app_core_registro
   app_models --> app_models_activo
   app_models --> app_models_alerta
   app_models --> app_models_base
@@ -191,6 +195,7 @@ graph LR
   app_models_operador --> app_models_base
   app_models_usuario --> app_core_security
   app_models_usuario --> app_models_base
+  app_schemas_activo --> app_core_config
   app_schemas_auth --> app_core_security
   app_schemas_operador --> app_schemas_auth
   app_schemas_usuario --> app_core_security
@@ -200,6 +205,7 @@ graph LR
   app_services_activos --> app_services_qr
   app_services_alertas --> app_core_config
   app_services_alertas --> app_core_cursor
+  app_services_alertas --> app_core_registro
   app_services_alertas --> app_models_activo
   app_services_alertas --> app_models_alerta
   app_services_alertas --> app_services_capturas
@@ -211,6 +217,7 @@ graph LR
   app_services_auth --> app_models_usuario
   app_services_auth --> app_services_componentes
   app_services_auth --> app_services_limites
+  app_services_campo --> app_core_registro
   app_services_campo --> app_schemas_campo
   app_services_campo --> app_services_alertas
   app_services_campo --> app_services_capturas
@@ -220,6 +227,7 @@ graph LR
   app_services_componentes --> app_models_componente
   app_services_lecturas --> app_core_config
   app_services_lecturas --> app_core_cursor
+  app_services_lecturas --> app_core_registro
   app_services_lecturas --> app_models_activo
   app_services_lecturas --> app_models_lectura_horometro
   app_services_lecturas --> app_services_capturas

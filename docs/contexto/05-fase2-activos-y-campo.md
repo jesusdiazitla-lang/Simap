@@ -502,6 +502,8 @@ partida natural del reporte de falla.
 | 7.6 next-pwa / Serwist | Service worker propio (`public/sw.js`) y cola con `idb` | next-pwa no publica desde 2022; lo necesario es acotado y así no hay caché de API por accidente. |
 | 8.2 Cookies | Next reenvía `/api/*` al backend; el navegador solo habla con un origen. `Origin` comprobado en métodos que escriben | — |
 | 8.4 Límites | Por usuario (campo 60/min, resolución de códigos 30/min) | — |
+| 7.5 Rechazados y descartados | Aviso con motivo en todas las pantallas con sesión | — |
+| 9.7 Observabilidad | `app.core.registro`: línea JSON por petición con `request_id`, empresa y usuario; eventos `campo.*` como métricas | Registros en vez de una librería de métricas, para no atarse a un proveedor. |
 | Plantilla de componentes | Ocho componentes genéricos, en la misma transacción que el alta de empresa; `POST /componentes/plantilla` para empresas anteriores | — |
 | RF-03 | Gestión de personal por el administrador (`/panel/usuarios`) | Estaba asignado a F1 sin tarea que lo construyera. |
 

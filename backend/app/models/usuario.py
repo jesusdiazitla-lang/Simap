@@ -47,9 +47,7 @@ class Usuario(IdUUID, Base):
         UniqueConstraint("empresa_id", "id", name="uq_usuarios_empresa_id_id"),
     )
 
-    empresa_id: Mapped[UUID] = mapped_column(
-        Uuid, ForeignKey("empresas.id"), nullable=False
-    )
+    empresa_id: Mapped[UUID] = mapped_column(Uuid, ForeignKey("empresas.id"), nullable=False)
     nombre: Mapped[str] = mapped_column(Text, nullable=False)
     correo: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
     password_hash: Mapped[str] = mapped_column(Text, nullable=False)

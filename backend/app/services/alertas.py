@@ -10,10 +10,11 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core import registro
 from app.core.config import get_settings
 from app.core.cursor import Cursor
 from app.models.activo import Activo
@@ -93,6 +94,9 @@ async def reportar(
         session, autor_id=autor_id, activo_id=activo_id, sintoma=sintoma, capturado_en=capturado_en
     )
     if repetida is not None:
+        # Deduplicación por ventana (sección 5.2). Si sube mucho, quizá la ventana es corta o un
+        # botón de algún teléfono se atasca.
+        registro.evento("campo.alerta_deduplicada", sintoma=sintoma)
         return "duplicado", repetida
 
     alerta = Alerta(
@@ -157,14 +161,26 @@ async def listar(
 async def revisar(
     session: AsyncSession, *, revisor_id: UUID, alerta_id: UUID, estado: str
 ) -> Alerta:
-    """Marca una alerta pendiente como revisada o descartada, y anota quién y cuándo."""
-    alerta: Alerta | None = await session.scalar(select(Alerta).where(Alerta.id == alerta_id))
-    if alerta is None:
-        raise AlertaNoEncontrada(str(alerta_id))
-    if alerta.estado != "pendiente":
-        raise TransicionNoPermitida(alerta.estado)
-    alerta.estado = estado
-    alerta.revisada_por = revisor_id
-    alerta.revisada_en = datetime.now(UTC)
-    await session.flush()
+    """Marca una alerta pendiente como revisada o descartada, y anota quién y cuándo.
+
+    Escritura condicionada (sección 9.4): la comprobación «sigue pendiente» va en el propio UPDATE.
+    Leer primero y escribir después deja pasar a dos supervisores que actúan a la vez: los dos leen
+    `pendiente` y el segundo pisa al primero. Con la condición en el WHERE, el segundo espera al
+    bloqueo de fila, vuelve a evaluarla, ya no se cumple y no toca nada.
+    """
+    resultado = await session.execute(
+        update(Alerta)
+        .where(Alerta.id == alerta_id, Alerta.estado == "pendiente")
+        .values(estado=estado, revisada_por=revisor_id, revisada_en=datetime.now(UTC))
+        .execution_options(synchronize_session=False)
+    )
+    if resultado.rowcount == 0:
+        actual = await session.scalar(select(Alerta.estado).where(Alerta.id == alerta_id))
+        if actual is None:
+            raise AlertaNoEncontrada(str(alerta_id))
+        raise TransicionNoPermitida(actual)
+    alerta = await session.scalar(
+        select(Alerta).where(Alerta.id == alerta_id).execution_options(populate_existing=True)
+    )
+    assert alerta is not None
     return alerta

@@ -36,9 +36,7 @@ pytestmark = requiere_base
 
 async def _fijar(conn: AsyncConnection, empresa_id: UUID | None) -> None:
     valor = str(empresa_id) if empresa_id else ""
-    await conn.execute(
-        text("SELECT set_config('app.empresa_id', :v, true)"), {"v": valor}
-    )
+    await conn.execute(text("SELECT set_config('app.empresa_id', :v, true)"), {"v": valor})
 
 
 async def _sembrar() -> tuple[UUID, UUID]:

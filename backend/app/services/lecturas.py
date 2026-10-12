@@ -30,6 +30,7 @@ from sqlalchemy import ColumnElement, and_, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core import registro
 from app.core.config import get_settings
 from app.core.cursor import Cursor
 from app.models.activo import Activo
@@ -158,6 +159,8 @@ async def registrar(
 
     if motivo is None:
         await _avanzar_vigente(session, activo_id=activo_id, valor=valor, capturado_en=capturado_en)
+    else:
+        registro.evento("campo.lectura_marcada", activo_id=str(activo_id))
     return "creado", lectura
 
 
@@ -239,15 +242,26 @@ async def resolver(
     - `reinicio`: el horómetro se cambió o se puso a cero. Si es la más reciente, el vigente pasa a
       ser su valor aunque sea menor; las lecturas siguientes se comparan con ella.
     """
-    lectura: Lectura | None = await session.scalar(select(Lectura).where(Lectura.id == lectura_id))
+    # Escritura condicionada, como en `alertas.revisar`: si dos supervisores resuelven a la vez,
+    # solo el primero cambia la fila; el segundo recibe «ya resuelta» en vez de pisar la decisión.
+    resultado = await session.execute(
+        update(Lectura)
+        .where(
+            Lectura.id == lectura_id,
+            Lectura.requiere_revision.is_(True),
+            Lectura.resolucion.is_(None),
+        )
+        .values(resolucion=resolucion, revisada_por=revisor_id, revisada_en=datetime.now(UTC))
+        .execution_options(synchronize_session=False)
+    )
+    lectura: Lectura | None = await session.scalar(
+        select(Lectura).where(Lectura.id == lectura_id).execution_options(populate_existing=True)
+    )
     if lectura is None:
         raise LecturaNoEncontrada(str(lectura_id))
-    if not lectura.requiere_revision or lectura.resolucion is not None:
+    if resultado.rowcount == 0:
         raise YaResuelta(str(lectura_id))
-    lectura.resolucion = resolucion
-    lectura.revisada_por = revisor_id
-    lectura.revisada_en = datetime.now(UTC)
-    await session.flush()
+    registro.evento("campo.lectura_resuelta", resolucion=resolucion)
     if resolucion in ("confirmada", "reinicio"):
         await _avanzar_vigente(
             session,

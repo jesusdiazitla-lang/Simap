@@ -99,3 +99,16 @@ def test_cargar_la_plantilla_solo_anade_lo_que_falta(
     anadidos = planta.pedir(planta.admin, "POST", "/componentes/plantilla").json()
     assert [c["nombre"] for c in anadidos] == ["Motor"]
     assert planta.pedir(planta.supervisor, "POST", "/componentes/plantilla").status_code == 403
+
+
+def test_editar_un_componente_con_nombre_nulo_es_un_422(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    planta = montar_planta(client, monkeypatch, "Planta")
+    creado = planta.pedir(planta.admin, "POST", "/componentes", json={"nombre": "Rodamiento"})
+    assert creado.status_code == 201, creado.text
+    for campo in ("nombre", "activo"):
+        resp = planta.pedir(
+            planta.admin, "PATCH", f"/componentes/{creado.json()['id']}", json={campo: None}
+        )
+        assert resp.status_code == 422, (campo, resp.text)

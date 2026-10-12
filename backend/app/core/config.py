@@ -6,8 +6,11 @@ producción sin modificaciones (04-fase1-fundamentos.md, sección 7.5).
 
 from functools import lru_cache
 
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+#: Valores de plantilla que nunca pueden firmar sesiones de verdad.
+SECRETOS_DE_EJEMPLO = frozenset({"change_me_in_production", "cambia-esto-por-un-secreto-propio"})
 
 
 class Settings(BaseSettings):
@@ -45,7 +48,11 @@ class Settings(BaseSettings):
     redis_url: str = "redis://localhost:6379/0"
 
     # --- Autenticación -------------------------------------------------------
-    jwt_secret: str = "change_me_in_production"
+    # Sin valor por defecto, a propósito (04-fase1, sección 6.5): con uno, un despliegue al que le
+    # faltara la variable arrancaría firmando las sesiones con un secreto que está en el
+    # repositorio, y cualquiera podría fabricarse un token de administrador. Así, sin la variable
+    # no arranca.
+    jwt_secret: str = Field(min_length=32)
     jwt_algorithm: str = "HS256"
     jwt_access_expire_minutes: int = 30
     jwt_refresh_expire_days: int = 7
@@ -59,6 +66,11 @@ class Settings(BaseSettings):
     # Rate limiting de /auth/login (sección 6.2): intentos por ventana.
     login_max_attempts: int = 5
     login_attempt_window_seconds: int = 60
+    # Por IP el tope es mayor y un acierto no lo reinicia. Mayor, porque una planta entera sale a
+    # internet por la misma IP y al empezar el turno entran todos a la vez. Sin reinicio, porque si
+    # acertar lo pusiera a cero, quien tenga una cuenta válida podría intercalar su propio login
+    # entre intentos contra cuentas ajenas y barrerlas sin tocar nunca el límite.
+    login_max_intentos_por_ip: int = 30
 
     # Cookies de sesión. `secure=True` exige HTTPS, así que en desarrollo local hay que ponerlo a
     # false o el navegador descartará la cookie y el login no funcionará. En cualquier otro entorno
@@ -89,6 +101,18 @@ class Settings(BaseSettings):
 
     # --- Motor de predicción (se usa a partir de F4) -------------------------
     risk_threshold: float = Field(default=0.25, ge=0.0, le=1.0)
+
+    @field_validator("jwt_secret")
+    @classmethod
+    def _secreto_propio(cls, valor: str) -> str:
+        # El valor de ejemplo de `.env.example` es público. Copiar la plantilla sin cambiarlo es el
+        # descuido más probable, y el más caro.
+        if valor in SECRETOS_DE_EJEMPLO:
+            raise ValueError(
+                "JWT_SECRET tiene el valor de ejemplo. Genera uno propio con: "
+                'python -c "import secrets; print(secrets.token_urlsafe(48))"'
+            )
+        return valor
 
 
 @lru_cache

@@ -11,6 +11,7 @@ from typing import Annotated
 
 from fastapi import Cookie, Depends, Header, HTTPException, status
 
+from app.core import registro
 from app.core.security import (
     Claims,
     ClaimsOperador,
@@ -81,9 +82,12 @@ async def get_claims(
     if not token:
         raise NO_AUTENTICADO
     try:
-        return decodificar_token(token, TipoToken.ACCESO)
+        claims = decodificar_token(token, TipoToken.ACCESO)
     except ErrorDeToken as exc:
         raise NO_AUTENTICADO from exc
+    # Desde aquí cada línea del registro de esta petición dice de qué empresa y de quién es.
+    registro.anotar_usuario(claims.empresa_id, claims.usuario_id)
+    return claims
 
 
 async def get_claims_refresco(
@@ -120,9 +124,11 @@ async def get_claims_operador(
     if not token:
         raise NO_AUTENTICADO
     try:
-        return decodificar_token_operador(token, TipoToken.ACCESO)
+        claims = decodificar_token_operador(token, TipoToken.ACCESO)
     except ErrorDeToken as exc:
         raise NO_AUTENTICADO from exc
+    registro.anotar_operador(claims.operador_id)
+    return claims
 
 
 async def get_claims_operador_refresco(

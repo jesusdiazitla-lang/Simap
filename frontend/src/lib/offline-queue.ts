@@ -162,6 +162,11 @@ export async function descartarRechazados(usuarioId: string): Promise<void> {
   await refrescar(usuarioId);
 }
 
+/** Quien tiene la sesión ya leyó el aviso de capturas ajenas descartadas. */
+export function olvidarAvisoDescartados(): void {
+  publicar({ descartadosAjenos: 0 });
+}
+
 async function purgarAjenosAntiguos(usuarioId: string): Promise<number> {
   const limite = Date.now() - DIAS_RETENCION_AJENOS * 86_400_000;
   const db = await base();

@@ -52,6 +52,15 @@ async def comprobar(
             raise DemasiadosIntentos(ventana)
 
 
+async def comprobar_login(almacen: AlmacenEfimero, *, clave_correo: str, clave_ip: str) -> None:
+    """Límite de una puerta de login: por correo con el tope normal y por IP con el suyo.
+
+    Tras un acierto solo se olvida `clave_correo` (ver `login_max_intentos_por_ip`).
+    """
+    await comprobar(almacen, [clave_correo])
+    await comprobar(almacen, [clave_ip], maximo=get_settings().login_max_intentos_por_ip)
+
+
 async def olvidar(almacen: AlmacenEfimero, claves: Sequence[str]) -> None:
     """Pone a cero los contadores tras un acierto, para no penalizar a quien solo se equivocó."""
     for clave in claves:

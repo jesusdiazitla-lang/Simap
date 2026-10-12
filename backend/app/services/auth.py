@@ -205,7 +205,8 @@ async def autenticar(
     registrados.
     """
     correo = correo.strip().lower()
-    await limites.comprobar(almacen, _clave_limite(correo, ip))
+    clave_correo, clave_ip = _clave_limite(correo, ip)
+    await limites.comprobar_login(almacen, clave_correo=clave_correo, clave_ip=clave_ip)
 
     # Habilita la politica login_lookup para ESTE correo. Sin esto RLS ocultaria la fila y todo
     # login fallaria: para saber la empresa hay que leer al usuario, y para leerlo hay que saber la
@@ -246,8 +247,9 @@ async def autenticar(
         raise EmpresaSuspendida(str(usuario.empresa_id))
 
     await registrar_intento(session, correo=correo, ip=ip, exitoso=True)
-    # Acerto: se olvidan los contadores para no penalizar a quien solo se equivoco un par de veces.
-    await limites.olvidar(almacen, _clave_limite(correo, ip))
+    # Acerto: se olvida el contador del correo para no penalizar a quien solo se equivoco un par de
+    # veces. El de la IP no: ver `login_max_intentos_por_ip`.
+    await limites.olvidar(almacen, [clave_correo])
     return _sesion_para(usuario)
 
 

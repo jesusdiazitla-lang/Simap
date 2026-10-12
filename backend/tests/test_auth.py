@@ -178,9 +178,7 @@ def test_acertar_la_contrasena_limpia_el_contador(
     for _ in range(2):
         client.post("/api/v1/auth/login", json={"correo": correo, "password": "mal-mal-mal-mal"})
     assert (
-        client.post(
-            "/api/v1/auth/login", json={"correo": correo, "password": PASSWORD}
-        ).status_code
+        client.post("/api/v1/auth/login", json={"correo": correo, "password": PASSWORD}).status_code
         == 200
     )
     # Y el contador quedo a cero: caben de nuevo los intentos completos.
@@ -192,6 +190,38 @@ def test_acertar_la_contrasena_limpia_el_contador(
             ).status_code
             == 401
         )
+
+
+def test_seccion84_acertar_no_reinicia_el_contador_de_la_ip(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Con una cuenta válida no se puede barrer otras intercalando el propio login.
+
+    Si acertar pusiera a cero el contador de la IP, cinco intentos contra cuentas ajenas, un acierto
+    propio, otros cinco, y así sin fin: el límite por IP no limitaría nada.
+    """
+    monkeypatch.setenv("LOGIN_MAX_INTENTOS_POR_IP", "8")
+    get_settings.cache_clear()
+    propio = _alta(monkeypatch)
+    for i in range(4):
+        cuerpo = {"correo": f"ajeno-{i}@example.com", "password": "clave-equivocada-larga"}
+        assert client.post("/api/v1/auth/login", json=cuerpo).status_code == 401
+    assert _entrar(client, propio).status_code == 200
+    for i in range(3):
+        cuerpo = {"correo": f"otro-{i}@example.com", "password": "clave-equivocada-larga"}
+        assert client.post("/api/v1/auth/login", json=cuerpo).status_code == 401
+    # Noveno intento desde la misma IP: el acierto de en medio no reinició nada.
+    cuerpo = {"correo": "uno-mas@example.com", "password": "clave-equivocada-larga"}
+    assert client.post("/api/v1/auth/login", json=cuerpo).status_code == 429
+
+
+def test_seccion84_el_tope_por_ip_es_mayor_que_el_de_por_correo(client: TestClient) -> None:
+    """Una planta entera sale por una IP: al empezar el turno entra todo el mundo a la vez."""
+    s = get_settings()
+    assert s.login_max_intentos_por_ip > s.login_max_attempts
+    for i in range(s.login_max_attempts + 1):
+        cuerpo = {"correo": f"turno-{i}@example.com", "password": "clave-equivocada-larga"}
+        assert client.post("/api/v1/auth/login", json=cuerpo).status_code == 401
 
 
 # --- Sesión, refresco y cierre -----------------------------------------------
@@ -308,9 +338,7 @@ def test_cambiar_la_clave_propia(client: TestClient, monkeypatch: pytest.MonkeyP
     client.cookies.clear()
     assert _entrar(client, correo).status_code == 401, "la clave anterior ya no sirve"
     assert (
-        client.post(
-            "/api/v1/auth/login", json={"correo": correo, "password": NUEVA}
-        ).status_code
+        client.post("/api/v1/auth/login", json={"correo": correo, "password": NUEVA}).status_code
         == 200
     )
 
@@ -388,9 +416,7 @@ def test_la_clave_nueva_se_guarda_como_la_leera_el_login(
     assert _cambiar(client, PASSWORD, f"{NUEVA} ").status_code == 200
     client.cookies.clear()
     assert (
-        client.post(
-            "/api/v1/auth/login", json={"correo": correo, "password": NUEVA}
-        ).status_code
+        client.post("/api/v1/auth/login", json={"correo": correo, "password": NUEVA}).status_code
         == 200
     )
 

@@ -49,14 +49,15 @@ teléfono y se envían solos cuando vuelve la conexión.
 
 ### En planta, con o sin cobertura
 
-- **Horómetro:** escribe lo que marca. Al lado ves la última lectura; si lo que escribes no cuadra
-  (es menor, o sube más horas de las que han pasado), SIMAP te pregunta antes de enviar. Suele ser
-  un dígito de más.
+- **Horómetro:** escribe lo que marca, en horas enteras: si marca 4821.5, escribe 4821. Al lado
+  ves la última lectura; si lo que escribes no cuadra (es menor, o sube más horas de las que han
+  pasado), SIMAP te pregunta antes de enviar. Suele ser un dígito de más.
 - **Alerta:** toca el síntoma (ruido, vibración, calor, olor, fuga u otro) y, si quieres, añade una
   nota. Si reportas lo mismo dos veces en pocos minutos, cuenta como una sola.
 - **Sin cobertura:** registra igual. Lo que envíes se guarda en el teléfono y arriba verás
   «Sin conexión · 1 por enviar». Cuando vuelva la red se envía solo y verás «Enviado». Aunque se
-  reintente varias veces, llega una sola vez.
+  reintente varias veces, llega una sola vez. Si algo no se pudo guardar (por ejemplo, el equipo
+  se dio de baja mientras tanto), SIMAP te lo dice con el motivo.
 - **Si la cámara no lee la etiqueta**, en **Escanear** puedes teclear el código impreso bajo el QR
   (por ejemplo `XK7P-2QH9`).
 

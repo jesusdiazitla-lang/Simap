@@ -12,7 +12,9 @@ from datetime import date, datetime
 from typing import Generic, Literal, TypeVar
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from app.core.config import get_settings
 
 T = TypeVar("T")
 
@@ -55,6 +57,15 @@ class ComponenteEditar(_Estricto):
     descripcion: str | None = Field(default=None, max_length=LARGO)
     activo: bool | None = None
 
+    @field_validator("nombre", "activo")
+    @classmethod
+    def _sin_nulos(cls, valor: object) -> object:
+        # Omitir un campo lo deja como está; enviarlo como null pedía vaciar una columna que no lo
+        # admite, y salía como un 500. El validador solo corre con los campos que vienen.
+        if valor is None:
+            raise ValueError("Este campo no se puede dejar vacío; omítelo para no cambiarlo.")
+        return valor
+
 
 class ComponenteOut(_Salida):
     id: UUID
@@ -83,11 +94,30 @@ class ActivoCrear(_FichaTecnica):
     #: compararse.
     horometro_inicial: int = Field(default=0, ge=0)
 
+    @field_validator("horometro_inicial")
+    @classmethod
+    def _dentro_del_rango(cls, valor: int) -> int:
+        # El mismo tope que una lectura (sección 5.1). Va en un validador y no en `le=` porque
+        # HOROMETRO_MAX es configuración y se lee al validar, no al importar el módulo. Sin tope, un
+        # número que no cabe en la columna llegaba a la base y salía como un 500.
+        if valor > get_settings().horometro_max:
+            raise ValueError("El horómetro inicial está fuera del rango admitido.")
+        return valor
+
 
 class ActivoEditar(_FichaTecnica):
     """Todo opcional: solo cambia lo que se envía. No admite `qr_code` ni `empresa_id`."""
 
     nombre: str | None = Field(default=None, min_length=2, max_length=CORTO)
+
+    @field_validator("nombre")
+    @classmethod
+    def _sin_nulos(cls, valor: object) -> object:
+        # Omitir un campo lo deja como está; enviarlo como null pedía vaciar una columna que no lo
+        # admite, y salía como un 500. El validador solo corre con los campos que vienen.
+        if valor is None:
+            raise ValueError("Este campo no se puede dejar vacío; omítelo para no cambiarlo.")
+        return valor
 
 
 class ActivoOut(_Salida):

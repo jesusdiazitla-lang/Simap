@@ -132,6 +132,7 @@ async def resolver(
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Lectura no encontrada.") from exc
     except lecturas.YaResuelta as exc:
         raise HTTPException(
-            status.HTTP_409_CONFLICT, "Esa lectura no está pendiente de revisión."
+            status.HTTP_409_CONFLICT,
+            "Esa lectura ya no está pendiente de revisión; quizá otra persona la resolvió.",
         ) from exc
     return LecturaOut.model_validate(lectura)

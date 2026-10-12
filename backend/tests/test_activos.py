@@ -9,6 +9,8 @@ from uuid import uuid4
 import pytest
 from fastapi.testclient import TestClient
 
+from app.core.config import get_settings
+from app.core.cursor import Cursor
 from app.services import activos as servicio
 from app.services import qr
 from tests.conftest import requiere_base
@@ -178,8 +180,47 @@ def test_listado_paginado_por_cursor_sin_repetir_ni_saltar(
 
 def test_cursor_manipulado_es_un_422(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
     planta = montar_planta(client, monkeypatch, "Planta")
-    resp = planta.pedir(planta.admin, "GET", "/activos", params={"cursor": "no-es-un-cursor"})
-    assert resp.status_code == 422
+    activo = planta.nuevo_activo()
+    # Legibles como cursor, pero con un valor que la base no puede comparar: antes eran un 500.
+    sin_zona = Cursor("2026-10-01T08:00:00", uuid4()).codificar()
+    no_es_fecha = Cursor("Compresor 1", uuid4()).codificar()
+    con_nulo = Cursor("Comp\x00resor", uuid4()).codificar()
+    for ruta, cursor in [
+        ("/activos", "no-es-un-cursor"),
+        ("/activos", con_nulo),
+        ("/alertas", sin_zona),
+        ("/alertas", no_es_fecha),
+        (f"/activos/{activo['id']}/lecturas", sin_zona),
+        ("/lecturas/por-revisar", no_es_fecha),
+    ]:
+        resp = planta.pedir(planta.admin, "GET", ruta, params={"cursor": cursor})
+        assert resp.status_code == 422, (ruta, resp.text)
+
+
+def test_seccion51_el_horometro_inicial_respeta_el_maximo(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    planta = montar_planta(client, monkeypatch, "Planta")
+    tope = get_settings().horometro_max
+    for valor in (tope + 1, 10**30):
+        resp = planta.pedir(
+            planta.admin, "POST", "/activos", json={"nombre": "Prensa", "horometro_inicial": valor}
+        )
+        assert resp.status_code == 422, resp.text
+    assert planta.nuevo_activo("Prensa", horometro_inicial=tope)["horometro_actual"] == tope
+
+
+def test_editar_con_nombre_nulo_es_un_422_y_no_lo_borra(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    planta = montar_planta(client, monkeypatch, "Planta")
+    activo = planta.nuevo_activo("Compresor 1")
+    resp = planta.pedir(planta.admin, "PATCH", f"/activos/{activo['id']}", json={"nombre": None})
+    assert resp.status_code == 422, resp.text
+    # Lo que sí puede quedar vacío se sigue pudiendo vaciar.
+    resp = planta.pedir(planta.admin, "PATCH", f"/activos/{activo['id']}", json={"ubicacion": None})
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["nombre"] == "Compresor 1"
 
 
 def test_la_etiqueta_es_un_svg_con_el_codigo_y_sin_cache_compartida(

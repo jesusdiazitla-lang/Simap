@@ -105,6 +105,25 @@ test("una lectura que no cuadra pide confirmación antes de enviarse", async ({ 
   }
 });
 
+test("un decimal se rechaza en vez de volverse un dígito de más", async ({ page, playwright }) => {
+  // Sección 5.1: el horómetro es un entero. Quitar el punto convertía 4801.5 en 48 015.
+  const e = await preparar(playwright);
+  try {
+    await entrarDesdeLaEtiqueta(page, e.activo.codigo, e.operario.correo, e.operario.clave);
+    await page.locator("#horometro-valor").fill("4801.5");
+    await page.getByRole("button", { name: "Registrar lectura" }).click();
+    await expect(page.getByText(/horas enteras, sin decimales/)).toBeVisible();
+    expect(await lecturasDe(e.admin, e.activo.id)).toEqual([4800]);
+
+    // El separador de miles bien puesto sí vale.
+    await page.locator("#horometro-valor").fill("4,801");
+    await page.getByRole("button", { name: "Registrar lectura" }).click();
+    await expect(page.getByText("Lectura registrada: 4,801 h.")).toBeVisible();
+  } finally {
+    await e.admin.dispose();
+  }
+});
+
 test("test_rf10_envio_sin_conexion_llega_una_sola_vez", async ({ page, context, playwright }) => {
   const e = await preparar(playwright);
   try {
@@ -234,6 +253,41 @@ test("el supervisor resuelve una lectura que no cuadraba", async ({ browser, pla
     const r = await e.admin.get(`${API}/activos/${e.activo.id}`);
     expect((await r.json()).horometro_actual).toBe(4800);
   } finally {
+    await e.admin.dispose();
+  }
+});
+
+test("lo enviado sin red que el servidor rechaza se le muestra a quien lo capturó", async ({ page, context, playwright }) => {
+  const e = await preparar(playwright);
+  try {
+    await entrarDesdeLaEtiqueta(page, e.activo.codigo, e.operario.correo, e.operario.clave);
+    await page.evaluate(async () => {
+      await navigator.serviceWorker.ready;
+      if (!navigator.serviceWorker.controller) {
+        await new Promise<void>((listo) =>
+          navigator.serviceWorker.addEventListener("controllerchange", () => listo(), { once: true }),
+        );
+      }
+    });
+
+    await context.setOffline(true);
+    await page.locator("#horometro-valor").fill("4801");
+    await page.getByRole("button", { name: "Registrar lectura" }).click();
+    await expect(page.getByText(/quedó guardada en el teléfono/)).toBeVisible();
+
+    // Mientras el operario no tiene red, el administrador da de baja el equipo.
+    expect((await e.admin.post(`${API}/activos/${e.activo.id}/baja`)).ok()).toBe(true);
+
+    await context.setOffline(false);
+    const aviso = page.getByRole("alert").filter({ hasText: "no se pudo guardar" });
+    await expect(aviso).toBeVisible({ timeout: 20_000 });
+    await expect(aviso).toContainText("dado de baja");
+    await page.screenshot({ path: "e2e/capturas/cola-rechazado.png", fullPage: true });
+
+    await aviso.getByRole("button", { name: "Entendido" }).click();
+    await expect(aviso).toHaveCount(0);
+  } finally {
+    await context.setOffline(false);
     await e.admin.dispose();
   }
 });

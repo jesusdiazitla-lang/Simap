@@ -142,3 +142,15 @@ def test_el_administrador_inicial_sigue_entrando(
 ) -> None:
     planta = montar_planta(client, monkeypatch, "Planta")
     assert entrar(client, planta.admin.correo, PASSWORD_ADMIN).id == planta.admin.id
+
+
+def test_editar_con_campos_nulos_es_un_422(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Omitir un campo lo deja como está; enviarlo como null llegaba a la base y salía como un 500.
+    planta = montar_planta(client, monkeypatch, "Planta")
+    for campo in ("nombre", "rol", "activo"):
+        resp = planta.pedir(
+            planta.admin, "PATCH", f"/usuarios/{planta.operario.id}", json={campo: None}
+        )
+        assert resp.status_code == 422, (campo, resp.text)

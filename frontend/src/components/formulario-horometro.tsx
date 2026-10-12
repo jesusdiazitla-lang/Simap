@@ -65,15 +65,25 @@ export function FormularioHorometro({
   const captura = useRef<{ cliente_id: string; capturado_en: string } | null>(null);
   const idFormulario = "form-horometro";
 
-  function numero(): number | null {
-    const limpio = valor.replace(/[\s.,]/g, "");
-    return /^\d{1,7}$/.test(limpio) ? Number(limpio) : null;
+  /**
+   * Horas enteras (05-fase2, sección 5.1). Admite separadores de miles bien puestos («48,215» o
+   * «48 215»), pero un punto o una coma en cualquier otro sitio es un decimal: quitarlo sin más
+   * convertía «4821.5» en 48 215, justo el dígito de más que esta pantalla intenta evitar.
+   */
+  function leer(): number | string {
+    const texto = valor.trim();
+    if (/^\d{1,7}$/.test(texto)) return Number(texto);
+    if (/^\d{1,3}([.,\s])\d{3}(\1\d{3})?$/.test(texto)) return Number(texto.replace(/\D/g, ""));
+    if (/^\d[\d.,\s]*[.,]\d{1,2}$/.test(texto)) {
+      return "El horómetro se anota en horas enteras, sin decimales. Escribe solo la parte entera.";
+    }
+    return "Escribe las horas que marca el horómetro, solo con números.";
   }
 
   async function enviar(confirmado: boolean): Promise<void> {
-    const n = numero();
-    if (n === null) {
-      setError("Escribe las horas que marca el horómetro, solo con números.");
+    const n = leer();
+    if (typeof n === "string") {
+      setError(n);
       return;
     }
     setError(undefined);

@@ -10,7 +10,7 @@ from __future__ import annotations
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
 from app.core.security import Rol
 
@@ -29,6 +29,15 @@ class UsuarioEditar(_Estricto):
     nombre: str | None = Field(default=None, min_length=2, max_length=200)
     rol: Rol | None = None
     activo: bool | None = None
+
+    @field_validator("nombre", "rol", "activo")
+    @classmethod
+    def _sin_nulos(cls, valor: object) -> object:
+        # Omitir un campo lo deja como está; enviarlo como null pedía vaciar una columna que no lo
+        # admite, y salía como un 500. El validador solo corre con los campos que vienen.
+        if valor is None:
+            raise ValueError("Este campo no se puede dejar vacío; omítelo para no cambiarlo.")
+        return valor
 
 
 class UsuarioDeEmpresaOut(BaseModel):

@@ -172,6 +172,9 @@ Cada funcionalidad se documenta con el mismo esquema:
 - **Cómo llegar:** apunta la cámara del teléfono a la etiqueta QR del equipo.
 - **Pasos:** 1) comprueba que el nombre de arriba es el de la máquina que tienes delante; 2) escribe
   las horas que marca el horómetro; 3) **Registrar lectura**.
+- **Solo horas enteras.** Si el horómetro marca decimales (por ejemplo 4821.5), escribe solo la
+  parte entera: 4821. SIMAP no acepta el punto ni la coma decimal, porque quitarlos sin más
+  convertiría 4821.5 en 48 215. Puedes escribir el separador de miles si te es más cómodo: 4,821.
 - **Resultado:** «Lectura registrada», y el horómetro del equipo se actualiza.
 - **Si no cuadra:** si el valor es menor que el último, o sube más horas de las que han pasado,
   SIMAP te pregunta antes de enviar. Puedes **Corregir** o **Enviar igualmente**. Si lo envías, se
@@ -202,6 +205,11 @@ Cada funcionalidad se documenta con el mismo esquema:
   cuando tú vuelvas a entrar. Cerrar sesión no lo borra.
 - Instala SIMAP en la pantalla de inicio del teléfono: algunos teléfonos borran los datos de las
   páginas que no se usan, y así lo pendiente está a salvo.
+- **Si algo no se pudo guardar**, verás arriba un aviso con el equipo, lo que registraste y el
+  motivo (por ejemplo, el equipo se dio de baja mientras no tenías red). No se volverá a enviar: si
+  sigue siendo necesario, regístralo otra vez desde el equipo y pulsa **Entendido**.
+- Si en un teléfono compartido alguien dejó registros sin enviar y no volvió a entrar en 7 días, se
+  descartan y SIMAP lo avisa a quien tenga la sesión.
 
 ### 5.3.2 ✅ Revisar alertas y lecturas que no cuadran
 - **Quién:** Supervisor o Administrador (el gerente solo consulta).
@@ -214,6 +222,9 @@ Cada funcionalidad se documenta con el mismo esquema:
   - **Error al teclear** — se conserva, pero no cuenta para nada.
   - **Se cambió el horómetro** (solo el administrador) — el equipo tiene un horómetro nuevo o se
     puso a cero. A partir de esa lectura, las siguientes se comparan con ella.
+- **Si dos personas revisan lo mismo a la vez**, cuenta la decisión de la primera. La segunda ve un
+  aviso de que otra persona ya la atendió: nadie pisa la decisión de otro. Recarga la página para
+  ver qué se decidió.
 
 ### 5.4 ⏳ Reportar una falla (se genera una orden de trabajo)
 - **Objetivo:** documentar una falla real y abrir la orden de trabajo.
@@ -411,6 +422,8 @@ En `http://<servidor>:8000/api/v1/health` aparece `"version"`.
 | «Por enviar» no cambia a «Enviado» | Sigue sin conexión, o tu sesión caducó | Al recuperar señal se envía solo; si te pide entrar, entra y se enviará. No borres los datos del navegador mientras tanto |
 | «No encontramos este equipo» al escanear | La etiqueta se regeneró, o es de otra empresa | Avisa a tu supervisor; puede que haya que reimprimirla |
 | «Ese equipo está dado de baja» | El administrador lo retiró | Si sigue funcionando, avísale |
+| «Sin decimales» al registrar el horómetro | Escribiste un punto o una coma decimal | Escribe solo la parte entera de las horas |
+| «Demasiados intentos» al entrar, aunque tu contraseña es correcta | Desde la red de la planta se han hecho muchos intentos fallidos en el último minuto | Espera un minuto y vuelve a entrar; si se repite, avisa al administrador |
 | La cámara no abre dentro de SIMAP | Falta permiso, o la conexión no es segura (HTTPS) | Usa la cámara del teléfono directamente, o teclea el código de la etiqueta |
 | No puedo marcar una orden como "Reparada" | Tu rol no lo permite | Solo el técnico de taller puede; el cierre lo autoriza supervisor o gerente |
 
@@ -447,5 +460,7 @@ En `http://<servidor>:8000/api/v1/health` aparece `"version"`.
 | 2026-10-02 | 0.6.0 | **Cambiar tu contraseña**, en el panel y en la consola del operador (nueva sección 5.0.1). Al cambiarla, o cuando te la restablecen, se cierran tus sesiones en otros aparatos. El acceso a la consola del operador pasa a tener límite de intentos. |
 | 2026-10-02 | 0.6.0 | Sin conexión, SIMAP muestra su propio aviso en lugar del error del navegador. Quien entra sin sesión va directo a la pantalla de acceso, sin pantallas intermedias. Corregida la sección 3.4, que describía un registro de intentos que ya no aparece en pantalla. |
 | 2026-10-07 | 0.7.0 | **Fase 2: equipos y registro de campo.** Equipos con etiqueta QR imprimible (5.1); horómetro (5.2) y alertas (5.3) desde el teléfono en tres pasos; **funciona sin cobertura** y lo pendiente se envía solo (5.3.1); bandeja de alertas y de lecturas que no cuadran, con reinicio del horómetro (5.3.2); el administrador gestiona su personal y el catálogo de componentes (5.9). |
+| 2026-10-11 | 0.7.1 | El horómetro solo admite horas enteras: un decimal se rechaza con un aviso en vez de convertirse en un dígito de más (5.2). Si dos supervisores revisan lo mismo a la vez, cuenta la primera decisión (5.3.2). |
+| 2026-10-11 | 0.7.0 | Lo enviado sin conexión que el servidor no acepta se avisa a quien lo capturó, con el motivo (5.3.1). |
 | 2026-10-07 | 0.7.0 | **Una sola pantalla de acceso para todos.** El operador de SIMAP entra por el mismo acceso que las plantas y SIMAP lo lleva a su consola (5.10). La dirección vieja de la consola lleva al acceso común. |
 | 2026-09-26 | 0.4.0 | **Las cuentas pasan a ser por invitación.** Se retira la posibilidad de que una empresa se registre sola: SIMAP se contrata por equipo, así que la cuenta la crea quien administra el servicio. Ver la sección 3.1. |

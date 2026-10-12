@@ -11,6 +11,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 
+import { AvisosCola } from "@/components/avisos-cola";
 import { BarraSesion } from "@/components/barra-sesion";
 import { Boton } from "@/components/boton";
 import { FechaHora, Marco, Panel } from "@/components/marco";
@@ -85,6 +86,7 @@ export function Pantalla({
 
   return (
     <Marco barra={<BarraSesion usuario={sesion.usuario} />} subtitulo={false}>
+      <AvisosCola usuario={sesion.usuario} />
       {children(sesion.usuario, sesion.sinRed)}
     </Marco>
   );

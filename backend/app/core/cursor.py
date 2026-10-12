@@ -43,9 +43,14 @@ class Cursor:
 
     def instante(self) -> datetime:
         try:
-            return datetime.fromisoformat(self.valor)
+            instante = datetime.fromisoformat(self.valor)
         except ValueError as exc:
             raise CursorInvalido("cursor ilegible") from exc
+        # Las columnas son `timestamptz`: un instante sin zona no se puede comparar con ellas y la
+        # base lo rechaza con un error que sale como 500.
+        if instante.tzinfo is None:
+            raise CursorInvalido("cursor sin zona horaria")
+        return instante
 
     def codificar(self) -> str:
         crudo = json.dumps({"v": self.valor, "i": str(self.id)})
@@ -56,6 +61,10 @@ class Cursor:
         try:
             relleno = "=" * (-len(valor) % 4)
             datos = json.loads(base64.urlsafe_b64decode(valor + relleno))
-            return cls(valor=str(datos["v"]), id=UUID(datos["i"]))
+            cursor = cls(valor=str(datos["v"]), id=UUID(datos["i"]))
         except (binascii.Error, ValueError, KeyError, TypeError) as exc:
             raise CursorInvalido("cursor ilegible") from exc
+        # PostgreSQL no admite el carácter nulo en un texto: compararlo con un nombre daría un 500.
+        if "\x00" in cursor.valor:
+            raise CursorInvalido("cursor ilegible")
+        return cursor

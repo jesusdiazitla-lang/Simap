@@ -28,3 +28,14 @@ def test_un_cursor_ilegible_se_rechaza(basura: str) -> None:
 def test_un_valor_que_no_es_fecha_se_rechaza_al_pedir_el_instante() -> None:
     with pytest.raises(CursorInvalido):
         Cursor("no es una fecha", uuid4()).instante()
+
+
+def test_un_instante_sin_zona_se_rechaza() -> None:
+    # Las columnas son timestamptz: compararlas con un instante sin zona es un error de la base.
+    with pytest.raises(CursorInvalido):
+        Cursor("2026-10-06T14:03:00", uuid4()).instante()
+
+
+def test_un_valor_con_caracter_nulo_se_rechaza() -> None:
+    with pytest.raises(CursorInvalido):
+        Cursor.decodificar(Cursor("Compresor\x00", uuid4()).codificar())

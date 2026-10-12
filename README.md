@@ -29,14 +29,15 @@ inventario de repuestos, en una arquitectura **multi-tenant** con aislamiento po
 | Capa | Tecnología | Carpeta |
 |---|---|---|
 | Backend | Python 3.11 · FastAPI · Pydantic v2 · SQLAlchemy 2 async + asyncpg · Alembic · python-jose (JWT) · argon2-cffi · qrcode · scipy (Weibull) · APScheduler · redis | `backend/` |
-| Frontend | Next.js 16 (App Router) · React 19 · TypeScript · Tailwind 4 · TanStack Query · react-hook-form + zod · html5-qrcode · Serwist (PWA) · Playwright | `frontend/` |
+| Frontend | Next.js 16 (App Router) · React 19 · TypeScript · Tailwind 4 · TanStack Query · react-hook-form + zod · idb · BarcodeDetector con jsQR de respaldo · service worker propio (PWA) · Playwright | `frontend/` |
 | Datos | PostgreSQL 16 con Row-Level Security · Redis 7 | `docker-compose.yml` |
 | Despliegue | Docker (backend) · Railway · Vercel · Supabase · Upstash · GitHub Actions | `backend/Dockerfile`, `.github/` |
 | Tooling | grimp · import-linter · dependency-cruiser · madge | `tools/graph/` |
 
 Desviaciones respecto a `02-arquitectura.md`, decididas al montar el repo: Python 3.11 local (doc: 3.12; el
-Dockerfile sí usa 3.12) · React 19 / Next 16 (doc: React 18; Next 16 exige React 19) · **Serwist** en lugar
-de `next-pwa` (sin mantenimiento y sin soporte para App Router; Serwist es su sucesor).
+Dockerfile sí usa 3.12) · React 19 / Next 16 (doc: React 18; Next 16 exige React 19) · **service worker propio**
+(`public/sw.js`) en lugar de `next-pwa`, sin mantenimiento (ver «Service worker») · **BarcodeDetector**
+del navegador con **jsQR** de respaldo en lugar de `html5-qrcode`.
 
 ### Dominio en dos líneas
 
@@ -92,6 +93,17 @@ SIMAP/
 
 Requisitos: Python 3.11+, Node 22+, git.
 
+**Día a día**, con todo ya instalado: dos terminales.
+
+```powershell
+.	ools\levantar-backend.ps1     # base de datos, migraciones y API en :8000
+.	ools\levantar-frontend.ps1    # compila y arranca en :3000 (con -Dev, modo desarrollo)
+```
+
+Cada uno libera su puerto si quedó un servidor colgado. El del frontend arranca por defecto la
+versión de producción, la única con modo sin conexión y acceso desde el teléfono, y muestra la
+dirección para abrirla en él. La instalación desde cero, paso a paso:
+
 ```powershell
 # 1) Clonar y preparar todo (venv, pip, npm, hooks)
 git clone <url> SIMAP; cd SIMAP
@@ -104,7 +116,8 @@ docker compose up -d db redis
 
 # 3) Backend
 .\.venv\Scripts\Activate.ps1
-cd backend; Copy-Item .env.example .env         # ajustar JWT_SECRET
+cd backend; Copy-Item .env.example .env         # poner un JWT_SECRET propio: sin él no arranca
+python -c "import secrets; print(secrets.token_urlsafe(48))"   # genera uno
 alembic upgrade head                            # crea las tablas y sus politicas RLS
 
 # 4) Sembrar el operador de SIMAP. Es el UNICO comando que hace falta, y solo esta vez:
@@ -316,6 +329,14 @@ supervisor la resuelve (revisión 0006):
 | `descartada` | Supervisor o administrador | Se conserva y no cuenta para nada |
 | `reinicio` | Solo administrador | El horómetro se cambió o se puso a cero: empieza una serie nueva |
 
+La resolución, igual que revisar o descartar una alerta, es también una **escritura condicionada**
+(`UPDATE … WHERE resolucion IS NULL`, `… WHERE estado = 'pendiente'`): si dos supervisores actúan a
+la vez, el segundo recibe 409 en lugar de pisar la decisión del primero (sección 9.4).
+
+El horómetro es un **entero**: el formulario rechaza los decimales («4821.5») en vez de quitar el
+separador, que lo convertía en 48 215. Acepta separadores de miles bien puestos («4,821»). El alta
+de un equipo aplica el mismo tope `HOROMETRO_MAX` al horómetro inicial que a cada lectura.
+
 El horómetro vigente se mueve con un **UPDATE condicionado**, sin leer antes ni bloquear: solo
 avanza, en valor y en tiempo, así que una lectura vieja que llega tarde nunca lo hace retroceder. El
 reinicio es el único caso en que puede bajar. **Para F4:** las horas desde la última falla tienen que
@@ -333,7 +354,10 @@ aparato compartido solo se envía lo de quien tiene la sesión, y lo de otros se
 días—; cerrar sesión no la borra; se sincroniza al volver la red, al volver a primer plano, al
 arrancar y con retroceso exponencial, sin depender de Background Sync, que no existe en iOS.
 `POST /campo/lotes` procesa cada ítem en su propio savepoint y valida cada uno por separado: un ítem
-malo vuelve como `rechazado` con su motivo y los demás entran.
+malo vuelve como `rechazado` con su motivo y los demás entran. En el teléfono, lo rechazado y lo
+descartado de otras personas se le muestra a quien corresponde en todas las pantallas con sesión
+(`src/components/avisos-cola.tsx`), con el motivo tal como lo escribe el servidor: callarlo haría
+creer a alguien que su lectura está en el sistema.
 
 ### Lo que la base impone además de RLS
 
@@ -372,7 +396,38 @@ Como defensa adicional contra CSRF, la API rechaza con 403 cualquier método que
 `Origin` que no es el del frontend.
 
 Detrás de ese reenvío la API ve la IP del servidor de Next. Para que el límite de login por IP vea la
-real, uvicorn debe arrancar con `--proxy-headers` y `FORWARDED_ALLOW_IPS` acotado a la IP del proxy.
+real, uvicorn arranca con `--proxy-headers` (`backend/Dockerfile`) y solo cree a `X-Forwarded-For`
+si la petición viene de una IP de `FORWARDED_ALLOW_IPS`. En local es `127.0.0.1`, que es donde
+corre Next; en el despliegue hay que poner la IP o la red del proxy real, nunca `*`: con `*`
+cualquiera se inventa la cabecera y esquiva el límite. Next solo rellena `X-Forwarded-For` si la
+petición no la trae: en producción la reescribe el hosting, pero en local un cliente podría
+inventarla. Aun así, el límite por correo sigue en pie.
+
+El límite tiene dos contadores. Por correo, `LOGIN_MAX_ATTEMPTS` (5), y un acierto lo pone a cero.
+Por IP, `LOGIN_MAX_INTENTOS_POR_IP` (30), más alto porque una planta entera sale a internet por una
+sola IP y al empezar el turno entra todo el mundo; un acierto **no** lo reinicia, o quien tuviera
+una cuenta válida podría intercalar su propio login entre intentos contra cuentas ajenas.
+
+### Registro y métricas
+
+Cada petición deja una línea JSON en la salida estándar (`app.core.registro`) con `request_id`,
+método, **plantilla** de la ruta (`/activos/{activo_id}`, nunca los valores), estado y duración, y la
+empresa y el usuario (u operador) cuando hay sesión. El `request_id` se devuelve en `X-Request-ID`;
+si la petición trae uno con forma válida, se respeta, para seguirla a través del proxy.
+
+Eventos de negocio, que son las métricas que pide la sección 9.7:
+
+| Evento | Campos | Para qué |
+|---|---|---|
+| `campo.lote` | `recibidos`, `creados`, `duplicados`, `rechazados` | Un salto en duplicados o rechazados delata un fallo de sincronización en los teléfonos |
+| `campo.lectura_marcada` | `activo_id` | Lecturas que no cuadran: muchas en un equipo apuntan a un horómetro averiado |
+| `campo.lectura_resuelta` | `resolucion` | Qué se hace con ellas |
+| `campo.alerta_deduplicada` | `sintoma` | Si sube mucho, la ventana es corta o un botón se atasca |
+
+**Nunca** se registran contraseñas, tokens, cookies, cuerpos de petición ni el texto de las notas:
+solo se escriben los campos que se pasan explícitamente. `tests/test_registro.py` lo comprueba. Son
+registros y no una librería de métricas para no atar el backend a un proveedor; cualquier recolector
+de logs los agrega.
 
 ### Nota sobre TLS en máquinas con Avast
 
@@ -495,7 +550,14 @@ de `src/app`; se avisan huérfanos (salvo convenciones de Next.js).
    cuerpo; `capturado_en` se acepta solo con zona horaria, hasta 5 minutos en el futuro y 14 días
    atrás; las notas se guardan tal cual y React las escapa (`dangerouslySetInnerHTML` prohibido con
    datos de usuarios).
-21. Antes de cada entrega: test automatizado de aislamiento entre tenants, OWASP Top 10 sobre lo nuevo,
+21. **El secreto de las sesiones no tiene valor por defecto.** `JWT_SECRET` es obligatorio, de al
+   menos 32 caracteres, y la API no arranca con el valor de `.env.example`: con un valor por
+   defecto, un despliegue al que le faltara la variable firmaría las sesiones con un secreto que está
+   en el repositorio (04-fase1, sección 6.5).
+22. **Una entrada mal formada es un 422, nunca un 500.** Un `null` en un campo que la base no admite,
+   un número que no cabe en la columna o un cursor manipulado se rechazan al validar, antes de llegar
+   a PostgreSQL.
+23. Antes de cada entrega: test automatizado de aislamiento entre tenants, OWASP Top 10 sobre lo nuevo,
    sin secretos en repo ni logs (`pip-audit` / `npm audit` en CI).
 
 > Si más adelante se añade PgBouncer, debe ir en **session pooling**. En transaction pooling la
@@ -723,20 +785,20 @@ npm run lint ; npm run graph:check
 <!-- graph:auto:start -->
 _Sección generada por `python tools/graph/graph.py docs`. No editar a mano; se sobrescribe en cada push a `main`._
 
-Última actualización: 2026-10-07 14:04 UTC
+Última actualización: 2026-10-11 23:56 UTC
 
 ### Estado del proyecto
 
 ```text
 === ESTADO DEL CÓDIGO ===
 
-[backend]  módulos: 47   LOC: 4782   TODO/FIXME: 0
-  con test: 37/47   stubs/vacíos: 0
-  por capa: api=11, cli=1, core=6, db=3, main=1, models=8, schemas=6, services=11
+[backend]  módulos: 48   LOC: 5035   TODO/FIXME: 0
+  con test: 39/48   stubs/vacíos: 0
+  por capa: api=11, cli=1, core=7, db=3, main=1, models=8, schemas=6, services=11
 
-[frontend]  módulos: 45   LOC: 6222   TODO/FIXME: 0
-  con test: 0/45   stubs/vacíos: 0
-  por capa: app=17, components=15, lib=12, src=1
+[frontend]  módulos: 46   LOC: 6341   TODO/FIXME: 0
+  con test: 0/46   stubs/vacíos: 0
+  por capa: app=17, components=16, lib=12, src=1
 
 ciclos de importación: 0
 
@@ -829,20 +891,21 @@ AVANCE GLOBAL: 30/50 tareas (60%)
 | `app.api.v1.routes.campo` | api | 6 | 1 | 23 | ✅ |
 | `app.api.v1.routes.componentes` | api | 6 | 1 | 53 | ✅ |
 | `app.api.v1.routes.health` | api | 2 | 1 | 9 | ✅ |
-| `app.api.v1.routes.lecturas` | api | 9 | 1 | 119 | ✅ |
+| `app.api.v1.routes.lecturas` | api | 9 | 1 | 120 | ✅ |
 | `app.api.v1.routes.operador` | api | 9 | 1 | 315 | ✅ |
 | `app.api.v1.routes.usuarios` | api | 5 | 1 | 66 | ✅ |
 | `app.cli` | cli | 5 | 0 | 189 | ✅ |
 | `app.core.almacen` | core | 1 | 6 | 112 | ✅ |
-| `app.core.auth` | core | 1 | 5 | 117 | ✅ |
-| `app.core.config` | core | 0 | 15 | 80 | — |
-| `app.core.cursor` | core | 0 | 4 | 48 | ✅ |
+| `app.core.auth` | core | 2 | 5 | 123 | ✅ |
+| `app.core.config` | core | 0 | 16 | 102 | ✅ |
+| `app.core.cursor` | core | 0 | 5 | 57 | ✅ |
 | `app.core.rbac` | core | 2 | 6 | 36 | ✅ |
+| `app.core.registro` | core | 0 | 5 | 99 | ✅ |
 | `app.core.security` | core | 1 | 17 | 225 | ✅ |
 | `app.db.deps` | db | 3 | 9 | 82 | ✅ |
 | `app.db.session` | db | 2 | 1 | 78 | ✅ |
 | `app.db.tenant` | db | 0 | 1 | 108 | ✅ |
-| `app.main` | main | 2 | 0 | 74 | — |
+| `app.main` | main | 4 | 0 | 111 | — |
 | `app.models.activo` | models | 1 | 7 | 66 | — |
 | `app.models.alerta` | models | 1 | 2 | 75 | — |
 | `app.models.base` | models | 0 | 8 | 32 | — |
@@ -850,21 +913,21 @@ AVANCE GLOBAL: 30/50 tareas (60%)
 | `app.models.empresa` | models | 1 | 4 | 19 | ✅ |
 | `app.models.lectura_horometro` | models | 1 | 3 | 88 | — |
 | `app.models.operador` | models | 1 | 3 | 68 | ✅ |
-| `app.models.usuario` | models | 2 | 4 | 63 | ✅ |
-| `app.schemas.activo` | schemas | 0 | 4 | 78 | — |
+| `app.models.usuario` | models | 2 | 4 | 61 | ✅ |
+| `app.schemas.activo` | schemas | 1 | 4 | 104 | — |
 | `app.schemas.auth` | schemas | 1 | 4 | 63 | ✅ |
 | `app.schemas.campo` | schemas | 0 | 4 | 106 | ✅ |
 | `app.schemas.health` | schemas | 0 | 1 | 6 | ✅ |
 | `app.schemas.operador` | schemas | 1 | 1 | 66 | ✅ |
-| `app.schemas.usuario` | schemas | 1 | 1 | 32 | ✅ |
+| `app.schemas.usuario` | schemas | 1 | 1 | 40 | ✅ |
 | `app.services.activos` | services | 4 | 2 | 167 | ✅ |
-| `app.services.alertas` | services | 5 | 2 | 145 | ✅ |
-| `app.services.auth` | services | 8 | 2 | 298 | ✅ |
-| `app.services.campo` | services | 4 | 1 | 101 | ✅ |
+| `app.services.alertas` | services | 6 | 2 | 160 | ✅ |
+| `app.services.auth` | services | 8 | 2 | 300 | ✅ |
+| `app.services.campo` | services | 5 | 1 | 111 | ✅ |
 | `app.services.capturas` | services | 2 | 6 | 53 | ✅ |
 | `app.services.componentes` | services | 1 | 3 | 83 | ✅ |
-| `app.services.lecturas` | services | 5 | 2 | 243 | ✅ |
-| `app.services.limites` | services | 2 | 5 | 44 | ✅ |
+| `app.services.lecturas` | services | 6 | 2 | 257 | ✅ |
+| `app.services.limites` | services | 2 | 5 | 50 | ✅ |
 | `app.services.operador` | services | 8 | 1 | 323 | ✅ |
 | `app.services.qr` | services | 0 | 2 | 84 | ✅ |
 | `app.services.usuarios` | services | 2 | 1 | 114 | ✅ |
@@ -890,29 +953,30 @@ AVANCE GLOBAL: 30/50 tareas (60%)
 | `src/app/panel/clave/page.tsx` | app | 3 | 0 | 65 | — |
 | `src/app/panel/page.tsx` | app | 3 | 0 | 87 | — |
 | `src/app/panel/usuarios/page.tsx` | app | 9 | 0 | 267 | — |
+| `src/components/avisos-cola.tsx` | components | 6 | 1 | 103 | — |
 | `src/components/barra-sesion.tsx` | components | 3 | 1 | 92 | — |
-| `src/components/boton.tsx` | components | 0 | 16 | 72 | — |
+| `src/components/boton.tsx` | components | 0 | 17 | 72 | — |
 | `src/components/campo.tsx` | components | 0 | 9 | 143 | — |
 | `src/components/escaner-qr.tsx` | components | 3 | 1 | 153 | — |
 | `src/components/estado.tsx` | components | 1 | 6 | 105 | — |
 | `src/components/formulario-activo.tsx` | components | 4 | 2 | 147 | — |
 | `src/components/formulario-alerta.tsx` | components | 9 | 1 | 147 | — |
 | `src/components/formulario-clave.tsx` | components | 3 | 2 | 165 | — |
-| `src/components/formulario-horometro.tsx` | components | 9 | 2 | 212 | — |
-| `src/components/iconos.tsx` | components | 0 | 7 | 82 | — |
+| `src/components/formulario-horometro.tsx` | components | 9 | 2 | 222 | — |
+| `src/components/iconos.tsx` | components | 0 | 8 | 82 | — |
 | `src/components/indicador-cola.tsx` | components | 2 | 1 | 77 | — |
 | `src/components/lecturas-por-revisar.tsx` | components | 6 | 1 | 119 | — |
 | `src/components/marco.tsx` | components | 0 | 15 | 163 | — |
-| `src/components/pantalla.tsx` | components | 5 | 10 | 106 | — |
+| `src/components/pantalla.tsx` | components | 6 | 10 | 108 | — |
 | `src/components/registro-sw.tsx` | components | 0 | 1 | 28 | — |
 | `src/lib/acceso.ts` | lib | 3 | 1 | 53 | — |
 | `src/lib/activos.ts` | lib | 1 | 12 | 114 | — |
 | `src/lib/api.ts` | lib | 0 | 22 | 182 | — |
-| `src/lib/auth.ts` | lib | 1 | 17 | 251 | — |
-| `src/lib/campo.ts` | lib | 2 | 7 | 141 | — |
+| `src/lib/auth.ts` | lib | 1 | 18 | 251 | — |
+| `src/lib/campo.ts` | lib | 2 | 8 | 141 | — |
 | `src/lib/captura.ts` | lib | 5 | 2 | 83 | — |
-| `src/lib/formato.ts` | lib | 0 | 7 | 31 | — |
-| `src/lib/offline-queue.ts` | lib | 4 | 4 | 332 | — |
+| `src/lib/formato.ts` | lib | 0 | 8 | 31 | — |
+| `src/lib/offline-queue.ts` | lib | 4 | 5 | 336 | — |
 | `src/lib/operador.ts` | lib | 1 | 3 | 121 | — |
 | `src/lib/qr.ts` | lib | 0 | 4 | 60 | — |
 | `src/lib/sesion.ts` | lib | 3 | 2 | 98 | — |

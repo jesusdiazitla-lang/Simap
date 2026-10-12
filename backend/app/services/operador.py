@@ -127,8 +127,8 @@ async def autenticar(
     diferencia de tiempo revela qué cuentas existen.
     """
     correo = correo.strip().lower()
-    claves = _clave_limite(correo, ip)
-    await limites.comprobar(almacen, claves)
+    clave_correo, clave_ip = _clave_limite(correo, ip)
+    await limites.comprobar_login(almacen, clave_correo=clave_correo, clave_ip=clave_ip)
 
     fila = await session.execute(select(Operador).where(Operador.correo == correo))
     operador: Operador | None = fila.scalar_one_or_none()
@@ -142,7 +142,7 @@ async def autenticar(
     if necesita_rehash(operador.password_hash):
         operador.password_hash = hash_password(password)
 
-    await limites.olvidar(almacen, claves)
+    await limites.olvidar(almacen, [clave_correo])
     return _sesion_para(operador, expira_en_segundos)
 
 

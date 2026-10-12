@@ -15,7 +15,7 @@
 import { useSyncExternalStore, type ReactNode } from "react";
 
 /** Versión que se muestra en la barra de estado. Coincide con la del manual de usuario. */
-const VERSION = "0.7.0";
+const VERSION = "0.7.1";
 
 interface MarcoProps {
   /** Lo que el usuario tiene delante. */
