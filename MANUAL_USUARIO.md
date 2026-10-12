@@ -17,7 +17,8 @@
    - [3.2 Si el aparato lo usa más gente](#32-si-el-aparato-lo-usa-más-gente)
    - [3.3 Si tu empresa aparece como suspendida](#33-si-tu-empresa-aparece-como-suspendida)
    - [3.4 Qué pasa si te equivocas al entrar](#34-qué-pasa-si-te-equivocas-al-entrar)
-   - [3.5 Cómo se ve SIMAP](#35-cómo-se-ve-simap)
+   - [3.5 Moverte por SIMAP: el menú](#35-moverte-por-simap-el-menú)
+   - [3.6 Cómo se ve SIMAP](#36-cómo-se-ve-simap)
 4. [Roles y qué puede hacer cada uno](#4-roles-y-qué-puede-hacer-cada-uno)
 5. [Funcionalidades](#5-funcionalidades)
    - [5.0 Entrar a SIMAP y ver el panel de tu turno](#50--entrar-a-simap-y-ver-el-panel-de-tu-turno)
@@ -116,7 +117,25 @@ hasta que se reactive, y entonces todo vuelve a estar donde estaba.
 - Tras **cinco intentos fallidos seguidos** hay que esperar un minuto. Es lo que impide que alguien
   pruebe contraseñas una tras otra.
 
-### 3.5 Cómo se ve SIMAP
+### 3.5 Moverte por SIMAP: el menú
+
+En el ordenador, el **menú está siempre a la izquierda**, agrupado por lo que vas a hacer:
+
+- **Inicio**: tu panel del turno.
+- **Campo**: escanear un equipo y, si eres operario, tus alertas.
+- **Equipos**: la lista de equipos y, si administras la planta, dar de alta uno nuevo y el catálogo
+  de componentes.
+- **Supervisión**: las alertas y las lecturas por revisar.
+- **Administración**: el personal de la empresa.
+- **Mi cuenta**: cambiar tu contraseña.
+
+Solo ves las partes que tu rol puede usar. Pulsa el nombre de un grupo para plegarlo o desplegarlo;
+SIMAP recuerda cómo lo dejaste en ese aparato. La página en la que estás aparece resaltada.
+
+En el **teléfono**, el menú no ocupa pantalla: pulsa **Menú**, arriba a la izquierda, y se abre
+desde ese lado. Se cierra al elegir una página, al tocar fuera o con el mismo botón.
+
+### 3.6 Cómo se ve SIMAP
 
 La pantalla es deliberadamente sobria: gris neutro, cajas con borde, un solo color de acción. Está
 pensada para parecerse a las herramientas de mantenimiento que ya se usan en la industria, no para
@@ -307,14 +326,14 @@ Cada funcionalidad se documenta con el mismo esquema:
 
 ### 5.9 ✅ Administrar el personal y el catálogo de componentes
 - **Quién:** Administrador.
-- **Personal** (**Personal** en el menú): da de alta a cada persona con su correo y su rol. SIMAP
+- **Personal** (**Administración → Personal** en el menú): da de alta a cada persona con su correo y su rol. SIMAP
   genera una **contraseña temporal** que se muestra **una sola vez**: cópiala y entrégasela; al
   entrar deberá cambiarla. Desde la misma lista puedes cambiarle el rol, darle una **Nueva clave** si
   se quedó fuera, o **Dar de baja** (no podrá entrar, su sesión abierta se cierra y lo que registró
   se conserva con su nombre).
 - No puedes quitarte a ti mismo el rol de administrador ni darte de baja, y la empresa nunca se
   queda sin un administrador activo: da de alta a otro antes.
-- **Catálogo de componentes** (**Componentes** en el menú): las partes de los equipos que pueden
+- **Catálogo de componentes** (**Equipos → Componentes** en el menú): las partes de los equipos que pueden
   fallar. Toda empresa empieza con ocho (motor, tren motriz, sistema hidráulico, bomba de aceite,
   rodamientos, correas y cadenas, refrigeración, eléctrico y control); si el tuyo está vacío,
   **Cargar catálogo inicial**. Puedes añadir, renombrar y desactivar, pero no borrar: las órdenes
@@ -460,6 +479,7 @@ En `http://<servidor>:8000/api/v1/health` aparece `"version"`.
 | 2026-10-02 | 0.6.0 | **Cambiar tu contraseña**, en el panel y en la consola del operador (nueva sección 5.0.1). Al cambiarla, o cuando te la restablecen, se cierran tus sesiones en otros aparatos. El acceso a la consola del operador pasa a tener límite de intentos. |
 | 2026-10-02 | 0.6.0 | Sin conexión, SIMAP muestra su propio aviso en lugar del error del navegador. Quien entra sin sesión va directo a la pantalla de acceso, sin pantallas intermedias. Corregida la sección 3.4, que describía un registro de intentos que ya no aparece en pantalla. |
 | 2026-10-07 | 0.7.0 | **Fase 2: equipos y registro de campo.** Equipos con etiqueta QR imprimible (5.1); horómetro (5.2) y alertas (5.3) desde el teléfono en tres pasos; **funciona sin cobertura** y lo pendiente se envía solo (5.3.1); bandeja de alertas y de lecturas que no cuadran, con reinicio del horómetro (5.3.2); el administrador gestiona su personal y el catálogo de componentes (5.9). |
+| 2026-10-11 | 0.7.2 | **Menú lateral en árbol**, agrupado por área de trabajo; en el teléfono se abre con el botón **Menú** (3.5). Las lecturas por revisar tienen su propia entrada en el menú. |
 | 2026-10-11 | 0.7.1 | El horómetro solo admite horas enteras: un decimal se rechaza con un aviso en vez de convertirse en un dígito de más (5.2). Si dos supervisores revisan lo mismo a la vez, cuenta la primera decisión (5.3.2). |
 | 2026-10-11 | 0.7.0 | Lo enviado sin conexión que el servidor no acepta se avisa a quien lo capturó, con el motivo (5.3.1). |
 | 2026-10-07 | 0.7.0 | **Una sola pantalla de acceso para todos.** El operador de SIMAP entra por el mismo acceso que las plantas y SIMAP lo lleva a su consola (5.10). La dirección vieja de la consola lleva al acceso común. |

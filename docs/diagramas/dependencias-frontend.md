@@ -29,8 +29,9 @@ graph LR
     src_components_campo_tsx["components/campo.tsx"]
     src_components_marco_tsx["components/marco.tsx"]
     src_components_pantalla_tsx["components/pantalla.tsx"]
-    src_components_avisos_cola_tsx["components/avisos-cola.tsx"]
+    src_components_arbol_navegacion_tsx["components/arbol-navegacion.tsx"]
     src_components_iconos_tsx["components/iconos.tsx"]
+    src_components_avisos_cola_tsx["components/avisos-cola.tsx"]
     src_components_barra_sesion_tsx["components/barra-sesion.tsx"]
     src_components_indicador_cola_tsx["components/indicador-cola.tsx"]
     src_components_estado_tsx["components/estado.tsx"]
@@ -68,25 +69,29 @@ graph LR
   src_components_formulario_activo_tsx --> src_lib_activos_ts
   src_components_formulario_activo_tsx --> src_lib_api_ts
   src_lib_activos_ts --> src_lib_api_ts
+  src_components_pantalla_tsx --> src_components_arbol_navegacion_tsx
   src_components_pantalla_tsx --> src_components_avisos_cola_tsx
   src_components_pantalla_tsx --> src_components_barra_sesion_tsx
   src_components_pantalla_tsx --> src_components_boton_tsx
   src_components_pantalla_tsx --> src_components_marco_tsx
   src_components_pantalla_tsx --> src_lib_auth_ts
   src_components_pantalla_tsx --> src_lib_sesion_ts
+  src_components_arbol_navegacion_tsx --> src_components_iconos_tsx
+  src_components_arbol_navegacion_tsx --> src_lib_auth_ts
+  src_lib_auth_ts --> src_lib_api_ts
   src_components_avisos_cola_tsx --> src_components_boton_tsx
   src_components_avisos_cola_tsx --> src_components_iconos_tsx
   src_components_avisos_cola_tsx --> src_lib_auth_ts
   src_components_avisos_cola_tsx --> src_lib_campo_ts
   src_components_avisos_cola_tsx --> src_lib_formato_ts
   src_components_avisos_cola_tsx --> src_lib_offline_queue_ts
-  src_lib_auth_ts --> src_lib_api_ts
   src_lib_campo_ts --> src_lib_activos_ts
   src_lib_campo_ts --> src_lib_api_ts
   src_lib_offline_queue_ts --> src_lib_activos_ts
   src_lib_offline_queue_ts --> src_lib_api_ts
   src_lib_offline_queue_ts --> src_lib_auth_ts
   src_lib_offline_queue_ts --> src_lib_campo_ts
+  src_components_barra_sesion_tsx --> src_components_arbol_navegacion_tsx
   src_components_barra_sesion_tsx --> src_components_indicador_cola_tsx
   src_components_barra_sesion_tsx --> src_lib_auth_ts
   src_components_barra_sesion_tsx --> src_lib_sesion_ts
@@ -208,6 +213,7 @@ graph LR
   src_app_page_tsx --> src_lib_auth_ts
   src_app_panel_clave_page_tsx --> src_components_formulario_clave_tsx
   src_app_panel_clave_page_tsx --> src_components_marco_tsx
+  src_app_panel_clave_page_tsx --> src_components_pantalla_tsx
   src_app_panel_clave_page_tsx --> src_lib_auth_ts
   src_app_panel_page_tsx --> src_components_marco_tsx
   src_app_panel_page_tsx --> src_components_pantalla_tsx

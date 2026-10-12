@@ -619,6 +619,23 @@ los bordes de control 3:1.
 | `/componentes` | Catálogo de componentes |
 | `/panel/usuarios` | Personal de la empresa |
 
+### Menú lateral (`src/components/arbol-navegacion.tsx`)
+
+La navegación es un árbol por área de trabajo (Campo, Equipos, Supervisión, Administración, Mi
+cuenta) definido en una sola tabla, `ARBOL` en `src/lib/auth.ts`: cada hoja declara qué roles la
+ven y `arbolPara(rol)` descarta las ramas que se quedan vacías. Las fases siguientes cuelgan sus
+pantallas de ahí (órdenes en F3, riesgo e inventario en F4) sin tocar el componente.
+
+- `Marco` recibe el árbol por `lateral` y lo fija a la izquierda desde `lg`; por debajo, `MenuMovil`
+  (en la barra, a la izquierda de la marca) lo abre en un cajón. Toda pantalla con sesión pasa por
+  `Pantalla`, que monta los dos; la de carga reserva la columna para que nada salte.
+- La hoja activa es la de ruta más larga que contiene la página (`hojaActual`), así `/activos/nuevo`
+  marca «Nuevo equipo» y no también «Todos los equipos».
+- «Lecturas por revisar» es un ancla dentro de `/alertas`; el panel se pinta siempre para quien
+  revisa, con estado vacío, para que el enlace nunca lleve a nada.
+- Las ramas plegadas se guardan en `localStorage` (`simap.menu.plegadas`) como preferencia del
+  aparato, con respaldo en memoria si el almacenamiento falla.
+
 ### Desvío por sesión (`src/proxy.ts`)
 
 El documento de F1 pide un `middleware.ts`; desde Next.js 16 esa convención se llama `proxy.ts`.
@@ -785,7 +802,7 @@ npm run lint ; npm run graph:check
 <!-- graph:auto:start -->
 _Sección generada por `python tools/graph/graph.py docs`. No editar a mano; se sobrescribe en cada push a `main`._
 
-Última actualización: 2026-10-11 23:56 UTC
+Última actualización: 2026-10-12 00:22 UTC
 
 ### Estado del proyecto
 
@@ -796,9 +813,9 @@ _Sección generada por `python tools/graph/graph.py docs`. No editar a mano; se 
   con test: 39/48   stubs/vacíos: 0
   por capa: api=11, cli=1, core=7, db=3, main=1, models=8, schemas=6, services=11
 
-[frontend]  módulos: 46   LOC: 6341   TODO/FIXME: 0
-  con test: 0/46   stubs/vacíos: 0
-  por capa: app=17, components=16, lib=12, src=1
+[frontend]  módulos: 47   LOC: 6702   TODO/FIXME: 0
+  con test: 0/47   stubs/vacíos: 0
+  por capa: app=17, components=17, lib=12, src=1
 
 ciclos de importación: 0
 
@@ -950,11 +967,12 @@ AVANCE GLOBAL: 30/50 tareas (60%)
 | `src/app/operador/clave/page.tsx` | app | 3 | 0 | 60 | — |
 | `src/app/operador/page.tsx` | app | 5 | 0 | 566 | — |
 | `src/app/page.tsx` | app | 2 | 0 | 44 | — |
-| `src/app/panel/clave/page.tsx` | app | 3 | 0 | 65 | — |
+| `src/app/panel/clave/page.tsx` | app | 4 | 0 | 55 | — |
 | `src/app/panel/page.tsx` | app | 3 | 0 | 87 | — |
 | `src/app/panel/usuarios/page.tsx` | app | 9 | 0 | 267 | — |
+| `src/components/arbol-navegacion.tsx` | components | 2 | 2 | 167 | — |
 | `src/components/avisos-cola.tsx` | components | 6 | 1 | 103 | — |
-| `src/components/barra-sesion.tsx` | components | 3 | 1 | 92 | — |
+| `src/components/barra-sesion.tsx` | components | 4 | 1 | 114 | — |
 | `src/components/boton.tsx` | components | 0 | 17 | 72 | — |
 | `src/components/campo.tsx` | components | 0 | 9 | 143 | — |
 | `src/components/escaner-qr.tsx` | components | 3 | 1 | 153 | — |
@@ -963,16 +981,16 @@ AVANCE GLOBAL: 30/50 tareas (60%)
 | `src/components/formulario-alerta.tsx` | components | 9 | 1 | 147 | — |
 | `src/components/formulario-clave.tsx` | components | 3 | 2 | 165 | — |
 | `src/components/formulario-horometro.tsx` | components | 9 | 2 | 222 | — |
-| `src/components/iconos.tsx` | components | 0 | 8 | 82 | — |
+| `src/components/iconos.tsx` | components | 0 | 9 | 130 | — |
 | `src/components/indicador-cola.tsx` | components | 2 | 1 | 77 | — |
-| `src/components/lecturas-por-revisar.tsx` | components | 6 | 1 | 119 | — |
-| `src/components/marco.tsx` | components | 0 | 15 | 163 | — |
-| `src/components/pantalla.tsx` | components | 6 | 10 | 108 | — |
+| `src/components/lecturas-por-revisar.tsx` | components | 6 | 1 | 139 | — |
+| `src/components/marco.tsx` | components | 0 | 15 | 209 | — |
+| `src/components/pantalla.tsx` | components | 7 | 11 | 121 | — |
 | `src/components/registro-sw.tsx` | components | 0 | 1 | 28 | — |
 | `src/lib/acceso.ts` | lib | 3 | 1 | 53 | — |
 | `src/lib/activos.ts` | lib | 1 | 12 | 114 | — |
 | `src/lib/api.ts` | lib | 0 | 22 | 182 | — |
-| `src/lib/auth.ts` | lib | 1 | 18 | 251 | — |
+| `src/lib/auth.ts` | lib | 1 | 19 | 306 | — |
 | `src/lib/campo.ts` | lib | 2 | 8 | 141 | — |
 | `src/lib/captura.ts` | lib | 5 | 2 | 83 | — |
 | `src/lib/formato.ts` | lib | 0 | 8 | 31 | — |

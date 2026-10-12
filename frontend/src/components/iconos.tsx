@@ -1,7 +1,7 @@
 /**
  * Iconos de la aplicación: trazo de 1,75 px, esquinas redondeadas, 20 × 20, color heredado.
  *
- * Dibujados aquí en lugar de traer una biblioteca entera para siete iconos. Todos con el mismo trazo
+ * Dibujados aquí en lugar de traer una biblioteca entera para unos pocos iconos. Todos con el mismo trazo
  * y la misma caja, para que se lean como un solo sistema. Siempre acompañan a un texto: son
  * decorativos para el lector de pantalla (`aria-hidden`), y el significado lo lleva la palabra.
  */
@@ -87,6 +87,61 @@ export function IconoImprimir({ className }: Props) {
     <Base className={className}>
       <path d="M7 9V3h10v6M7 17H4v-7a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v7h-3" />
       <path d="M7 14h10v7H7z" />
+    </Base>
+  );
+}
+
+// --- Menú lateral ------------------------------------------------------------
+
+export function IconoInicio({ className }: Props) {
+  return (
+    <Base className={className}>
+      <path d="M4 10.5L12 4l8 6.5V19a1 1 0 0 1-1 1h-4.5v-5.5h-5V20H5a1 1 0 0 1-1-1z" />
+    </Base>
+  );
+}
+
+export function IconoEquipos({ className }: Props) {
+  return (
+    <Base className={className}>
+      <path d="M3 20h18V9l-6 4V9l-6 4V5H5a2 2 0 0 0-2 2z" />
+      <path d="M7 16.5h2M13 16.5h2" />
+    </Base>
+  );
+}
+
+export function IconoRevision({ className }: Props) {
+  return (
+    <Base className={className}>
+      <path d="M8.5 4.5H6a1 1 0 0 0-1 1V20a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V5.5a1 1 0 0 0-1-1h-2.5" />
+      <path d="M8.5 3h7v3h-7z" />
+      <path d="M9 13.5l2 2 4-4.5" />
+    </Base>
+  );
+}
+
+export function IconoPersonal({ className }: Props) {
+  return (
+    <Base className={className}>
+      <circle cx="9" cy="8" r="3.5" />
+      <path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 4.6a3.5 3.5 0 0 1 0 6.8M18 14.2a6.5 6.5 0 0 1 3.5 5.8" />
+    </Base>
+  );
+}
+
+export function IconoCuenta({ className }: Props) {
+  return (
+    <Base className={className}>
+      <circle cx="12" cy="8" r="4" />
+      <path d="M4.5 20.5a7.5 7.5 0 0 1 15 0" />
+    </Base>
+  );
+}
+
+export function IconoDesplegar({ className }: Props) {
+  return (
+    <Base className={className}>
+      <path d="M6 9l6 6 6-6" />
     </Base>
   );
 }

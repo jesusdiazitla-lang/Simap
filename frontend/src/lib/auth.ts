@@ -169,38 +169,98 @@ export const ACCIONES_POR_ROL: Readonly<Record<Rol, readonly Accion[]>> = {
   ],
 };
 
-/** Una entrada de la barra de navegación. */
+/** Una página del menú lateral. */
 export interface Destino {
   readonly nombre: string;
   readonly ruta: string;
 }
 
+/** Áreas de trabajo del menú. La clave elige el icono; el nombre es lo que se lee. */
+export type Area = "campo" | "equipos" | "supervision" | "administracion" | "cuenta";
+
+/** Una rama del árbol: un área de trabajo con las páginas que el rol puede abrir en ella. */
+export interface Rama {
+  readonly area: Area;
+  readonly nombre: string;
+  readonly hojas: readonly Destino[];
+}
+
+const TODOS: readonly Rol[] = ["operario", "supervisor", "tecnico_taller", "gerente", "administrador"];
+
 /**
- * Navegación de la barra superior por rol. Solo pantallas que existen y que ese rol puede usar: la
- * API las rechazaría igual, pero un enlace que lleva a «no tienes permiso» es un callejón.
+ * El menú lateral entero, agrupado por lo que se hace y no por cómo se llama cada pantalla: así las
+ * órdenes de trabajo (F3) y el riesgo y el inventario (F4) tienen dónde colgar sin reordenar nada.
+ *
+ * Cada hoja dice qué roles la ven. Solo pantallas que existen y que ese rol puede usar: la API las
+ * rechazaría igual, pero un enlace que lleva a «no tienes permiso» es un callejón. Una rama que se
+ * queda sin hojas para un rol no se pinta.
  */
-export const NAVEGACION_POR_ROL: Readonly<Record<Rol, readonly Destino[]>> = {
-  operario: [
-    { nombre: "Escanear", ruta: "/escanear" },
-    { nombre: "Mis alertas", ruta: "/alertas" },
-  ],
-  supervisor: [
-    { nombre: "Escanear", ruta: "/escanear" },
-    { nombre: "Equipos", ruta: "/activos" },
-    { nombre: "Alertas", ruta: "/alertas" },
-  ],
-  tecnico_taller: [{ nombre: "Escanear", ruta: "/escanear" }],
-  gerente: [
-    { nombre: "Equipos", ruta: "/activos" },
-    { nombre: "Alertas", ruta: "/alertas" },
-  ],
-  administrador: [
-    { nombre: "Equipos", ruta: "/activos" },
-    { nombre: "Alertas", ruta: "/alertas" },
-    { nombre: "Componentes", ruta: "/componentes" },
-    { nombre: "Personal", ruta: "/panel/usuarios" },
-  ],
-};
+const ARBOL: readonly {
+  readonly area: Area;
+  readonly nombre: string;
+  readonly hojas: readonly (Destino & { readonly roles: readonly Rol[] })[];
+}[] = [
+  {
+    area: "campo",
+    nombre: "Campo",
+    hojas: [
+      { nombre: "Escanear equipo", ruta: "/escanear", roles: ["operario", "supervisor", "tecnico_taller"] },
+      { nombre: "Mis alertas", ruta: "/alertas", roles: ["operario"] },
+    ],
+  },
+  {
+    area: "equipos",
+    nombre: "Equipos",
+    hojas: [
+      { nombre: "Todos los equipos", ruta: "/activos", roles: ["supervisor", "gerente", "administrador"] },
+      { nombre: "Nuevo equipo", ruta: "/activos/nuevo", roles: ["administrador"] },
+      { nombre: "Componentes", ruta: "/componentes", roles: ["administrador"] },
+    ],
+  },
+  {
+    area: "supervision",
+    nombre: "Supervisión",
+    hojas: [
+      { nombre: "Alertas", ruta: "/alertas", roles: ["supervisor", "gerente", "administrador"] },
+      // Vive dentro de la pantalla de alertas; el ancla lleva directo a su panel.
+      { nombre: "Lecturas por revisar", ruta: "/alertas#lecturas-por-revisar", roles: ["supervisor", "administrador"] },
+    ],
+  },
+  {
+    area: "administracion",
+    nombre: "Administración",
+    hojas: [{ nombre: "Personal", ruta: "/panel/usuarios", roles: ["administrador"] }],
+  },
+  {
+    area: "cuenta",
+    nombre: "Mi cuenta",
+    hojas: [{ nombre: "Cambiar contraseña", ruta: "/panel/clave", roles: TODOS }],
+  },
+];
+
+/** Las ramas del menú que ve un rol, cada una solo con sus hojas. */
+export function arbolPara(rol: Rol): readonly Rama[] {
+  return ARBOL.map((r) => ({
+    area: r.area,
+    nombre: r.nombre,
+    hojas: r.hojas.filter((h) => h.roles.includes(rol)).map(({ nombre, ruta }) => ({ nombre, ruta })),
+  })).filter((r) => r.hojas.length > 0);
+}
+
+/**
+ * Qué hoja corresponde a la página abierta: la de ruta más larga que la contiene, para que en
+ * «/activos/nuevo» se marque «Nuevo equipo» y no también «Todos los equipos». Las hojas con ancla
+ * no cuentan: comparten página con otra, y marcar las dos diría que hay dos sitios abiertos.
+ */
+export function hojaActual(destinos: readonly Destino[], ruta: string): string | null {
+  let mejor: string | null = null;
+  for (const d of destinos) {
+    if (d.ruta.includes("#")) continue;
+    const coincide = d.ruta === "/panel" ? ruta === "/panel" : ruta === d.ruta || ruta.startsWith(`${d.ruta}/`);
+    if (coincide && (mejor === null || d.ruta.length > mejor.length)) mejor = d.ruta;
+  }
+  return mejor;
+}
 
 /**
  * Dónde aterriza cada rol al iniciar sesión.

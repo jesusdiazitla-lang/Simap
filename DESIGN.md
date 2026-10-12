@@ -271,14 +271,14 @@ Contenedor centrado de `max-w-6xl` (72rem) con 16 px de margen lateral en móvil
 
 El trabajo vive en paneles apilados con 24 px entre ellos; dentro, 20 px de relleno (24 px en `sm`), cabecera y pie separados por borde de 1 px. El ritmo de espaciado es de 4 en 4 (8, 12, 16, 20, 24, 32 px), con 8 y 12 px como huecos dominantes.
 
-Las tablas son tablas de verdad en escritorio (cabecera en Caption, filas separadas por `borde`, cifras alineadas a la derecha) y se apilan en móvil: la cabecera se oculta y cada fila pasa a una rejilla de dos columnas con el nombre a la izquierda y horómetro y estado a la derecha. La navegación vive en la barra desde `lg`; por debajo, en un desplegable con la palabra «Menú».
+Las tablas son tablas de verdad en escritorio (cabecera en Caption, filas separadas por `borde`, cifras alineadas a la derecha) y se apilan en móvil: la cabecera se oculta y cada fila pasa a una rejilla de dos columnas con el nombre a la izquierda y horómetro y estado a la derecha. Con sesión, la aplicación ocupa todo el ancho: menú lateral de 240 px a la izquierda desde `lg`, fijo bajo una barra superior que también queda fija, y el contenido en su contenedor de `max-w-6xl` a la derecha. Por debajo de `lg` el menú sale en un cajón desde la izquierda con el botón «Menú». La pantalla de carga reserva la columna vacía para que nada salte cuando llega la sesión.
 
 ## Elevation & Depth
 
-Sistema plano. La separación entre contenido y fondo la da el contraste entre `superficie` y `lienzo` más un borde de 1 px; nada flota. La única sombra del sistema es la del desplegable de navegación móvil, que se superpone de verdad al contenido.
+Sistema plano. La separación entre contenido y fondo la da el contraste entre `superficie` y `lienzo` más un borde de 1 px; nada flota. La única sombra del sistema es la del cajón de navegación móvil, que se superpone de verdad al contenido.
 
 ### Shadow Vocabulary
-- **Desplegable móvil** (`box-shadow: 0 8px 16px -12px rgb(0 0 0 / 0.35)`): solo bajo el menú desplegable de la barra en pantallas estrechas.
+- **Cajón móvil** (`box-shadow: 8px 0 16px -12px rgb(0 0 0 / 0.35)`): solo en el borde derecho del cajón del menú en pantallas estrechas, sobre un fondo atenuado `rgb(0 0 0 / 0.32)` que cierra el cajón al tocarlo.
 
 ### Named Rules
 **The Flat Panel Rule.** Ningún panel, tarjeta, botón ni campo lleva sombra. Si algo necesita destacarse, se hace con borde, peso o el azul de acción, no con elevación.
@@ -316,8 +316,11 @@ Dos variantes y ninguna más; sólidos, sin animación de entrada ni de pulsaci�
 - **Error / Disabled:** borde `error`, mensaje en la ranura de error que está siempre reservada (24 px mínimo) para que la geometría no se mueva; `aria-invalid` y `aria-live`. Deshabilitado: fondo `superficie-alterna`, texto tenue. Las contraseñas llevan un conmutador «Ver/Ocultar» en texto azul con `aria-pressed`, y siempre se puede pegar.
 
 ### Navigation
-- **Escritorio (`lg`):** enlaces de 36 px en Body small 500, texto `texto-suave`; hover y página actual sobre `superficie-alterna` con texto `texto`; `aria-current="page"`. Nombre y rol de la sesión a la derecha desde `xl`; «Cerrar sesión» como control con caja de 36 px.
-- **Móvil:** un `<details>` con la palabra «Menú» (nunca un icono de tres rayas) que despliega un panel a todo el ancho bajo la barra, con enlaces de 48 px.
+Menú en árbol (`ArbolNavegacion`), agrupado por área de trabajo y no por pantalla: **Inicio** suelto arriba, y las ramas **Campo**, **Equipos**, **Supervisión**, **Administración** y **Mi cuenta**. Cada rol ve solo las hojas que puede abrir; una rama sin hojas no se pinta.
+- **Rama:** botón de fila completa con icono de área a la izquierda, nombre en Body small 600 `texto` y chevron a la derecha (girado −90° si está plegada, sin animación); `aria-expanded` y `aria-controls`. Las ramas plegadas se recuerdan en el navegador.
+- **Hoja:** Body small 500 en `texto-suave`, colgada de una guía vertical de 1 px `borde` alineada con el centro del icono de la rama. Hover y página actual sobre `superficie-alterna` con `texto`; la actual además en 600 y con su tramo de guía oscurecido a `texto` (1 px, neutro: es posición, no acción). `aria-current="page"` en la hoja de ruta más larga que contiene la página abierta.
+- **Escritorio (`lg`):** columna de 240 px, `superficie` con borde derecho de 1 px, filas de 36 px, fija bajo la barra superior (que queda fija). La marca «SIMAP» se alinea encima de la columna. Nombre y rol de la sesión a la derecha de la barra desde `lg`; «Cerrar sesión» como control con caja de 36 px.
+- **Móvil:** botón con la palabra «Menú» (nunca un icono de tres rayas) a la izquierda de la marca, lejos de «Cerrar sesión»; abre el mismo árbol en un cajón de `min(20rem, 85vw)` desde la izquierda con filas de 48 px y la sesión arriba. Abierto, el botón conserva la palabra y pasa a borde `accion` sobre `accion-halo`. Se cierra con Escape, tocando el fondo o al elegir una página.
 
 ### Baldosas de opción
 Radios reales presentados como baldosas de un toque (56 px de alto, rejilla de 2 columnas en móvil y 3 en `sm`), para elegir un síntoma o un rol sin listas desplegables. Elegida: borde de 2 px `accion`, fondo `accion-halo`, texto `accion` y marca de verificación; la selección va en azul porque es interacción, no estado de la máquina. El foco se dibuja en la baldosa con `:has(:focus-visible)`. El filtro segmentado de listas usa el mismo lenguaje en una tira con divisores de 1 px.
@@ -337,7 +340,7 @@ Barras estáticas en `superficie-alterna` con radio de control, separadas por bo
 - **Do** mantener el texto del botón cambiante mientras está ocupado, sin deshabilitarlo visualmente.
 - **Do** acompañar todo estado con palabra, y los de atención también con icono.
 - **Do** usar insignia neutra para la criticidad.
-- **Do** dar 48 px de alto a campos, botones y enlaces del menú móvil; 56 px a baldosas y al campo de la cifra.
+- **Do** dar 48 px de alto a campos, botones y filas del cajón del menú; 56 px a baldosas y al campo de la cifra.
 - **Do** formatear cifras, fechas y horas con `es-DO` desde el formateador común, con cifras tabulares.
 - **Do** auditar claro y oscuro por separado: texto a 4.5:1, bordes de control a 3:1.
 - **Do** apilar las tablas en móvil en una rejilla de dos columnas en vez de forzar desplazamiento horizontal.

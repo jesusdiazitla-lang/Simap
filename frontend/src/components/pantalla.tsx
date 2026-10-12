@@ -11,8 +11,9 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 
+import { ArbolNavegacion } from "@/components/arbol-navegacion";
 import { AvisosCola } from "@/components/avisos-cola";
-import { BarraSesion } from "@/components/barra-sesion";
+import { BarraSesion, MenuMovil } from "@/components/barra-sesion";
 import { Boton } from "@/components/boton";
 import { FechaHora, Marco, Panel } from "@/components/marco";
 import type { Rol, Usuario } from "@/lib/auth";
@@ -46,7 +47,9 @@ export function Pantalla({
 
   if (sesion.tipo === "cargando") {
     return (
-      <Marco barra={<FechaHora />}>
+      // Columna del menú reservada (vacía) y sin subtítulo: la misma geometría que la pantalla
+      // cargada, para que nada salte cuando llega la sesión.
+      <Marco barra={<FechaHora />} lateral={null} subtitulo={false}>
         <Panel titulo={cargando}>
           <Esqueleto />
         </Panel>
@@ -69,7 +72,12 @@ export function Pantalla({
 
   if (sesion.tipo === "sin-permiso") {
     return (
-      <Marco barra={<BarraSesion usuario={sesion.usuario} />} subtitulo={false}>
+      <Marco
+        barra={<BarraSesion usuario={sesion.usuario} />}
+        lateral={<ArbolNavegacion usuario={sesion.usuario} />}
+        menu={<MenuMovil usuario={sesion.usuario} />}
+        subtitulo={false}
+      >
         <div className="mx-auto max-w-xl">
           <Panel titulo="Esta pantalla no es para tu rol">
             <p className="pb-4 text-[0.9375rem] leading-6 text-texto-suave">
@@ -85,7 +93,12 @@ export function Pantalla({
   }
 
   return (
-    <Marco barra={<BarraSesion usuario={sesion.usuario} />} subtitulo={false}>
+    <Marco
+      barra={<BarraSesion usuario={sesion.usuario} />}
+      lateral={<ArbolNavegacion usuario={sesion.usuario} />}
+      menu={<MenuMovil usuario={sesion.usuario} />}
+      subtitulo={false}
+    >
       <AvisosCola usuario={sesion.usuario} />
       {children(sesion.usuario, sesion.sinRed)}
     </Marco>

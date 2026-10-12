@@ -12,7 +12,8 @@
  * - **Error al teclear**: se conserva, pero no cuenta para nada.
  * - **Se cambió el horómetro** (solo el administrador): empieza una serie nueva de horas.
  *
- * Si no hay nada pendiente, la sección no aparece: un panel vacío más en la pantalla solo estorba.
+ * Si no hay nada pendiente, el panel lo dice en una línea en vez de desaparecer: el menú lateral
+ * lleva aquí («Supervisión → Lecturas por revisar»), y un clic que no muestra nada parecería roto.
  */
 
 import Link from "next/link";
@@ -30,6 +31,9 @@ import {
 } from "@/lib/campo";
 import { fechaHora, horas } from "@/lib/formato";
 
+/** Ancla del menú lateral; `scroll-mt` deja el título a la vista bajo la barra fija. */
+const ANCLA = "lecturas-por-revisar";
+
 export function LecturasPorRevisar({ esAdministrador }: { readonly esAdministrador: boolean }) {
   const [lista, setLista] = useState<readonly LecturaPorRevisar[] | null>(null);
 
@@ -41,25 +45,43 @@ export function LecturasPorRevisar({ esAdministrador }: { readonly esAdministrad
     return () => control.abort();
   }, []);
 
-  if (lista === null || lista.length === 0) return null;
+  // La sección llega después de montar, cuando ya pasó el salto del navegador al ancla: si se vino
+  // desde el menú, se baja ahora.
+  useEffect(() => {
+    if (lista !== null && window.location.hash === `#${ANCLA}`) {
+      document.getElementById(ANCLA)?.scrollIntoView({ block: "start" });
+    }
+  }, [lista]);
+
+  if (lista === null) return null;
 
   return (
-    <Panel
-      nivel={2}
-      titulo={`Lecturas por revisar (${lista.length})`}
-      descripcion="No cuadraban con el historial del equipo. Hasta que decidas, el horómetro del equipo no se mueve con ellas."
-    >
-      <ul className="divide-y divide-borde">
-        {lista.map((l) => (
-          <Fila
-            key={l.id}
-            lectura={l}
-            esAdministrador={esAdministrador}
-            alResolver={() => setLista((actual) => (actual ?? []).filter((x) => x.id !== l.id))}
-          />
-        ))}
-      </ul>
-    </Panel>
+    <div id={ANCLA} className="scroll-mt-20">
+      {lista.length === 0 ? (
+        <Panel nivel={2} titulo="Lecturas por revisar">
+          <p className="text-[0.9375rem] leading-6 text-texto-suave">
+            Ninguna pendiente. Aquí aparecen las lecturas que no cuadran con el historial de su equipo.
+          </p>
+        </Panel>
+      ) : (
+        <Panel
+          nivel={2}
+          titulo={`Lecturas por revisar (${lista.length})`}
+          descripcion="No cuadraban con el historial del equipo. Hasta que decidas, el horómetro del equipo no se mueve con ellas."
+        >
+          <ul className="divide-y divide-borde">
+            {lista.map((l) => (
+              <Fila
+                key={l.id}
+                lectura={l}
+                esAdministrador={esAdministrador}
+                alResolver={() => setLista((actual) => (actual ?? []).filter((x) => x.id !== l.id))}
+              />
+            ))}
+          </ul>
+        </Panel>
+      )}
+    </div>
   );
 }
 

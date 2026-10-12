@@ -42,7 +42,9 @@ teléfono y se envían solos cuando vuelve la conexión.
 
 1. Abre la dirección en el navegador. Verás la pantalla de acceso.
 2. Escribe tu correo y tu contraseña y pulsa **Entrar**.
-3. Verás el panel de tu turno, con lo que tu rol puede hacer.
+3. Verás el panel de tu turno, con lo que tu rol puede hacer. El **menú está a la izquierda**,
+   agrupado por área (Campo, Equipos, Supervisión, Administración, Mi cuenta); en el teléfono se
+   abre con el botón **Menú**.
 4. En planta: apunta la **cámara del teléfono** a la etiqueta QR del equipo. Se abre su pantalla:
    comprueba que el nombre es el de la máquina que tienes delante, escribe el horómetro o elige el
    síntoma, y envía. Tres pasos.

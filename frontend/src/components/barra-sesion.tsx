@@ -1,49 +1,92 @@
 "use client";
 
 /**
- * Barra superior de toda pantalla con sesión: navegación del rol, quién está dentro, estado de la
- * cola y «Cerrar sesión», siempre a la vista.
+ * Barra superior de toda pantalla con sesión: quién está dentro, estado de la cola y «Cerrar
+ * sesión», siempre a la vista.
  *
- * En pantalla ancha la navegación va en la propia barra. En el móvil no cabe sin desbordar, y
- * esconderla detrás de un icono de tres rayas la vuelve invisible para quien no lo conoce; va en un
- * desplegable con la palabra «Menú», hecho con `<details>`, que funciona con teclado y lector de
- * pantalla sin una línea de JavaScript propia.
+ * La navegación no va aquí: desde `lg` vive en el menú lateral del marco. Por debajo, el botón
+ * «Menú» (`MenuMovil`) —con palabra, no un icono de tres rayas que quien no lo conoce no ve— abre ese
+ * mismo árbol en un cajón desde la izquierda, para que el operario no pierda pantalla con un menú
+ * siempre fijo. Lo coloca el marco a la izquierda, lejos de «Cerrar sesión».
  */
 
-import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
+import { ArbolNavegacion } from "@/components/arbol-navegacion";
 import { IndicadorCola } from "@/components/indicador-cola";
-import { etiquetaDeRol, NAVEGACION_POR_ROL, type Usuario } from "@/lib/auth";
+import { etiquetaDeRol, type Usuario } from "@/lib/auth";
 import { cerrarSesion } from "@/lib/sesion";
 
-function Enlaces({ usuario, vertical }: { readonly usuario: Usuario; readonly vertical: boolean }) {
+/** Botón «Menú» y su cajón, para pantallas estrechas. El marco lo coloca junto a la marca. */
+export function MenuMovil({ usuario }: { readonly usuario: Usuario }) {
+  const [abierto, setAbierto] = useState(false);
+  const boton = useRef<HTMLButtonElement>(null);
   const ruta = usePathname();
-  const destinos = [{ nombre: "Inicio", ruta: "/panel" }, ...NAVEGACION_POR_ROL[usuario.rol]];
+  const [rutaAlAbrir, setRutaAlAbrir] = useState(ruta);
+
+  // Si la ruta cambia con el cajón abierto (atrás del navegador), se cierra: el cajón pertenecía a
+  // la pantalla anterior. Se ajusta durante el render, no en un efecto, como recomienda React.
+  if (abierto && ruta !== rutaAlAbrir) {
+    setAbierto(false);
+  }
+
+  useEffect(() => {
+    if (!abierto) return;
+    function alTeclear(e: KeyboardEvent): void {
+      if (e.key === "Escape") {
+        setAbierto(false);
+        boton.current?.focus();
+      }
+    }
+    document.addEventListener("keydown", alTeclear);
+    return () => document.removeEventListener("keydown", alTeclear);
+  }, [abierto]);
+
   return (
-    <ul className={vertical ? "flex flex-col" : "flex items-center gap-1"}>
-      {destinos.map((d) => {
-        const actual = d.ruta === "/panel" ? ruta === "/panel" : ruta.startsWith(d.ruta);
-        return (
-          <li key={d.ruta}>
-            <Link
-              href={d.ruta}
-              aria-current={actual ? "page" : undefined}
-              className={[
-                "flex items-center whitespace-nowrap rounded-[var(--radius-control)] text-[0.875rem] font-medium transition-colors",
-                vertical ? "h-12 px-3" : "h-9 px-3",
-                actual
-                  ? "bg-superficie-alterna text-texto"
-                  : "text-texto-suave hover:bg-superficie-alterna hover:text-texto",
-              ].join(" ")}
-            >
-              {d.nombre}
-            </Link>
-          </li>
-        );
-      })}
-    </ul>
+    <div className="lg:hidden">
+      <button
+        ref={boton}
+        type="button"
+        aria-expanded={abierto}
+        aria-controls="menu-movil"
+        onClick={() => {
+          setRutaAlAbrir(ruta);
+          setAbierto((a) => !a);
+        }}
+        className={[
+          "flex h-9 cursor-pointer items-center rounded-[var(--radius-control)] border px-3 text-[0.8125rem] font-medium transition-colors",
+          // Abierto se marca como control activo; la palabra no cambia, para que nunca se lea
+          // «Cerrar …» al lado de «Cerrar sesión».
+          abierto
+            ? "border-accion bg-accion-halo text-accion"
+            : "border-borde-fuerte text-texto hover:border-accion hover:text-accion",
+        ].join(" ")}
+      >
+        Menú
+      </button>
+
+      {abierto ? (
+        <>
+          {/* Fondo atenuado: dice que el contenido sigue ahí debajo, y tocarlo cierra el cajón. */}
+          <div
+            aria-hidden="true"
+            onClick={() => setAbierto(false)}
+            className="fixed inset-x-0 bottom-0 top-14 z-20 bg-[rgb(0_0_0/0.32)]"
+          />
+          <nav
+            id="menu-movil"
+            aria-label="Principal"
+            className="fixed bottom-0 left-0 top-14 z-30 w-[min(20rem,85vw)] overflow-y-auto border-r border-borde bg-superficie px-3 pb-6 pt-3 shadow-[8px_0_16px_-12px_rgb(0_0_0/0.35)]"
+          >
+            <p className="truncate px-2 pb-3 text-[0.8125rem] text-texto-tenue">
+              {usuario.nombre} · {etiquetaDeRol(usuario.rol)}
+            </p>
+            <ArbolNavegacion usuario={usuario} tactil alNavegar={() => setAbierto(false)} />
+          </nav>
+        </>
+      ) : null}
+    </div>
   );
 }
 
@@ -64,31 +107,12 @@ export function BarraSesion({ usuario }: { readonly usuario: Usuario }) {
 
   return (
     <div className="flex min-w-0 items-center gap-2">
-      <nav aria-label="Principal" className="hidden lg:block">
-        <Enlaces usuario={usuario} vertical={false} />
-      </nav>
-
       <IndicadorCola />
 
-      <div className="hidden min-w-0 text-right xl:block">
+      <div className="hidden min-w-0 text-right lg:block">
         <p className="truncate text-[0.8125rem] font-medium leading-4 text-texto">{usuario.nombre}</p>
         <p className="truncate text-[0.75rem] leading-4 text-texto-tenue">{etiquetaDeRol(usuario.rol)}</p>
       </div>
-
-      <details className="relative lg:hidden">
-        <summary className="flex h-9 cursor-pointer list-none items-center rounded-[var(--radius-control)] border border-borde-fuerte px-3 text-[0.8125rem] font-medium text-texto [&::-webkit-details-marker]:hidden">
-          Menú
-        </summary>
-        <nav
-          aria-label="Principal"
-          className="fixed inset-x-0 top-14 z-20 border-b border-borde bg-superficie px-4 py-2 shadow-[0_8px_16px_-12px_rgb(0_0_0/0.35)]"
-        >
-          <p className="px-3 pb-1 pt-1 text-[0.8125rem] text-texto-tenue">
-            {usuario.nombre} · {etiquetaDeRol(usuario.rol)}
-          </p>
-          <Enlaces usuario={usuario} vertical />
-        </nav>
-      </details>
 
       <button
         type="button"

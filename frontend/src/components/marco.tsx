@@ -1,11 +1,11 @@
 "use client";
 
 /**
- * Marco de la aplicación: barra superior, contenido y barra de estado.
+ * Marco de la aplicación: barra superior, menú lateral, contenido y barra de estado.
  *
- * Es la estructura que reconoce quien ya usa un CMMS: una franja de identificación arriba, el
- * trabajo en el medio sobre un lienzo gris, y una barra de estado abajo con la versión y a quién
- * acudir. Nada de esto es decorativo; cada zona responde a una pregunta que el usuario se hace de
+ * Es la estructura que reconoce quien ya usa un CMMS: una franja de identificación arriba, el menú
+ * en árbol a la izquierda, el trabajo en el medio sobre un lienzo gris, y una barra de estado abajo
+ * con la versión y a quién acudir. Nada de esto es decorativo; cada zona responde a una pregunta que el usuario se hace de
  * verdad: dónde estoy, qué tengo que hacer, y a quién aviso si falla.
  *
  * Sustituye a la hoja de bitácora de la primera versión, que el usuario rechazó por poco sobria
@@ -15,7 +15,7 @@
 import { useSyncExternalStore, type ReactNode } from "react";
 
 /** Versión que se muestra en la barra de estado. Coincide con la del manual de usuario. */
-const VERSION = "0.7.1";
+const VERSION = "0.7.2";
 
 interface MarcoProps {
   /** Lo que el usuario tiene delante. */
@@ -38,15 +38,45 @@ interface MarcoProps {
    * enlaces, el estado de la cola y quién está dentro, en un portátil ya no cabe y se cortaba.
    */
   readonly subtitulo?: boolean;
+  /**
+   * Menú lateral (`ArbolNavegacion`). Desde `lg` queda fijo a la izquierda y la barra superior se
+   * queda arriba al desplazarse, para que el menú no se vaya con el contenido. Por debajo de `lg`
+   * no se pinta aquí: lo abre el botón «Menú» de la barra.
+   */
+  readonly lateral?: ReactNode;
+  /**
+   * Botón que abre el menú en pantallas estrechas. Va a la izquierda, junto a la marca: es el lado
+   * del que sale el cajón, y lo aleja de «Cerrar sesión», que no pide confirmación.
+   */
+  readonly menu?: ReactNode;
 }
 
-export function Marco({ children, barra, centrado = false, subtitulo = true }: MarcoProps) {
+export function Marco({ children, barra, centrado = false, subtitulo = true, lateral, menu }: MarcoProps) {
+  const conLateral = lateral !== undefined;
   return (
     <div className="flex min-h-dvh flex-col bg-lienzo">
       {/* Barra y pie no se imprimen: lo que se imprime en SIMAP es una etiqueta, no la pantalla. */}
-      <header className="border-b border-borde bg-superficie print:hidden">
-        <div className="mx-auto flex h-14 w-full max-w-6xl items-center justify-between gap-4 px-4 sm:px-6">
-          <div className="flex min-w-0 items-baseline gap-3">
+      <header
+        className={[
+          "border-b border-borde bg-superficie print:hidden",
+          conLateral ? "sticky top-0 z-30" : "",
+        ].join(" ")}
+      >
+        <div
+          className={[
+            "flex h-14 w-full items-center justify-between gap-4 px-4 sm:px-6",
+            // Con menú lateral la aplicación ocupa todo el ancho, como un CMMS; la marca queda
+            // encima de la columna del menú.
+            conLateral ? "lg:pl-0" : "mx-auto max-w-6xl",
+          ].join(" ")}
+        >
+          <div
+            className={[
+              "flex min-w-0 items-center gap-3",
+              conLateral ? "lg:w-60 lg:shrink-0 lg:px-5" : "",
+            ].join(" ")}
+          >
+            {menu}
             <span className="text-[0.9375rem] font-bold tracking-[0.08em] text-texto">SIMAP</span>
             {/* El nombre largo solo en pantalla ancha: en móvil roba sitio y no aporta nada a
                 quien ya está dentro del sistema. */}
@@ -63,23 +93,40 @@ export function Marco({ children, barra, centrado = false, subtitulo = true }: M
         </div>
       </header>
 
-      <main className="flex-1">
-        <div
-          className={[
-            "mx-auto w-full max-w-6xl px-4 py-8 sm:px-6 sm:py-10",
-            centrado ? "sm:pt-[12vh]" : "",
-          ].join(" ")}
-        >
-          {children}
-        </div>
-      </main>
+      <div className="flex flex-1">
+        {/* Con `lateral={null}` la columna se reserva vacía: así la pantalla de carga tiene la
+            misma geometría que la cargada y nada salta cuando llega el menú. */}
+        {conLateral ? (
+          <aside className="hidden w-60 shrink-0 border-r border-borde bg-superficie print:hidden lg:block">
+            <nav
+              aria-label="Principal"
+              className="sticky top-14 max-h-[calc(100dvh-3.5rem)] overflow-y-auto px-3 py-4"
+            >
+              {lateral}
+            </nav>
+          </aside>
+        ) : null}
 
-      <footer className="border-t border-borde bg-superficie print:hidden">
-        <div className="mx-auto flex w-full max-w-6xl flex-col gap-1 px-4 py-3 text-[0.75rem] leading-5 text-texto-tenue sm:flex-row sm:items-center sm:justify-between sm:px-6">
-          <span>SIMAP v{VERSION}</span>
-          <span>Soporte: el administrador de SIMAP en tu planta</span>
+        <div className="flex min-w-0 flex-1 flex-col">
+          <main className="flex-1">
+            <div
+              className={[
+                "mx-auto w-full max-w-6xl px-4 py-8 sm:px-6 sm:py-10",
+                centrado ? "sm:pt-[12vh]" : "",
+              ].join(" ")}
+            >
+              {children}
+            </div>
+          </main>
+
+          <footer className="border-t border-borde bg-superficie print:hidden">
+            <div className="mx-auto flex w-full max-w-6xl flex-col gap-1 px-4 py-3 text-[0.75rem] leading-5 text-texto-tenue sm:flex-row sm:items-center sm:justify-between sm:px-6">
+              <span>SIMAP v{VERSION}</span>
+              <span>Soporte: el administrador de SIMAP en tu planta</span>
+            </div>
+          </footer>
         </div>
-      </footer>
+      </div>
     </div>
   );
 }
