@@ -135,4 +135,12 @@ async def resolver(
             status.HTTP_409_CONFLICT,
             "Esa lectura ya no está pendiente de revisión; quizá otra persona la resolvió.",
         ) from exc
+    except lecturas.LecturaDeOrden as exc:
+        # La registró un reporte de falla: se confirma desde la orden (F3, 5.3).
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            f"Esta lectura es la de la falla {exc}: confírmala desde esa orden.",
+        ) from exc
+    except activos.ReinicioInvalido as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
     return LecturaOut.model_validate(lectura)

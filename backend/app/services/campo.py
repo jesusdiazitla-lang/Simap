@@ -21,11 +21,15 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import registro
-from app.schemas.campo import ItemAlerta, ItemLectura, ItemLote, ResultadoItem
-from app.services import alertas, lecturas
+from app.schemas.campo import ItemAlerta, ItemFalla, ItemLectura, ItemLote, ResultadoItem
+from app.services import alertas, lecturas, ordenes
 from app.services.capturas import CapturaInvalida
 
-_VALIDADOR: TypeAdapter[ItemLectura | ItemAlerta] = TypeAdapter(ItemLote)
+_VALIDADOR: TypeAdapter[ItemLectura | ItemAlerta | ItemFalla] = TypeAdapter(ItemLote)
+
+#: Roles que pueden reportar una falla (F3, tabla 11.1). Los demás ítems del lote los admite la
+#: ruta, que deja pasar a operario y supervisor.
+REPORTAN_FALLA = ("supervisor", "administrador")
 
 
 def _cliente_id(crudo: dict[str, Any]) -> UUID | None:
@@ -50,6 +54,7 @@ async def procesar_lote(
     *,
     empresa_id: UUID,
     autor_id: UUID,
+    rol: str,
     items: list[dict[str, Any]],
 ) -> list[ResultadoItem]:
     resultados: list[ResultadoItem] = []
@@ -65,9 +70,37 @@ async def procesar_lote(
             )
             continue
 
+        if isinstance(item, ItemFalla) and rol not in REPORTAN_FALLA:
+            resultados.append(
+                ResultadoItem(
+                    indice=indice,
+                    cliente_id=item.cliente_id,
+                    estado="rechazado",
+                    codigo="sin_permiso",
+                    motivo="Tu rol no puede reportar fallas. Avisa a tu supervisor.",
+                )
+            )
+            continue
+
+        orden_id = numero = None
         try:
             async with session.begin_nested():
-                if isinstance(item, ItemLectura):
+                if isinstance(item, ItemFalla):
+                    estado, orden = await ordenes.reportar_falla(
+                        session,
+                        ordenes.Actor(empresa_id=empresa_id, usuario_id=autor_id, rol=rol),
+                        activo_id=item.activo_id,
+                        componente_id=item.componente_id,
+                        horometro=item.horometro,
+                        descripcion=item.descripcion,
+                        capturado_en=item.capturado_en,
+                        cliente_id=item.cliente_id,
+                        temperatura=item.temperatura,
+                        codigo_error=item.codigo_error,
+                        alerta_id=item.alerta_id,
+                    )
+                    orden_id, numero = orden.id, orden.numero
+                elif isinstance(item, ItemLectura):
                     estado, _ = await lecturas.registrar(
                         session,
                         empresa_id=empresa_id,
@@ -88,10 +121,29 @@ async def procesar_lote(
                         capturado_en=item.capturado_en,
                         cliente_id=item.cliente_id,
                     )
-        except CapturaInvalida as exc:
+        except ordenes.Conflicto as exc:
+            # «No se creó: ya existe OT-0009» (F3, 9.5). No se reintenta: daría lo mismo.
             resultados.append(
                 ResultadoItem(
-                    indice=indice, cliente_id=item.cliente_id, estado="rechazado", motivo=str(exc)
+                    indice=indice,
+                    cliente_id=item.cliente_id,
+                    estado="rechazado",
+                    codigo=exc.codigo,
+                    motivo=str(exc),
+                    orden_id=exc.orden_id,
+                    numero=exc.numero,
+                )
+            )
+            continue
+        except (CapturaInvalida, ordenes.ReferenciaInvalida, ordenes.UsuarioInactivo) as exc:
+            motivo = (
+                "Tu usuario está dado de baja."
+                if isinstance(exc, ordenes.UsuarioInactivo)
+                else str(exc)
+            )
+            resultados.append(
+                ResultadoItem(
+                    indice=indice, cliente_id=item.cliente_id, estado="rechazado", motivo=motivo
                 )
             )
             continue
@@ -112,6 +164,8 @@ async def procesar_lote(
                 indice=indice,
                 cliente_id=item.cliente_id,
                 estado="creado" if estado == "creado" else "duplicado",
+                orden_id=orden_id,
+                numero=numero,
             )
         )
     # Métrica de sincronización (sección 9.7): un salto en duplicados o rechazados delata un fallo

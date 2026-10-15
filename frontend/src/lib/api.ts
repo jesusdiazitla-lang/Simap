@@ -41,6 +41,11 @@ export class ErrorApi extends Error {
     readonly campos: ErroresDeCampo = {},
     /** Segundos que pide esperar un 429, si el servidor los indicó. */
     readonly esperaSegundos?: number,
+    /**
+     * Código estable de un 409 de las órdenes de trabajo (`orden_abierta_existente`,
+     * `estado_cambiado`, `alerta_no_disponible`), y la orden a la que se refiere si la hay.
+     */
+    readonly conflicto?: Conflicto,
   ) {
     super(mensaje);
     this.name = "ErrorApi";
@@ -50,6 +55,24 @@ export class ErrorApi extends Error {
   get esFalloDeRed(): boolean {
     return this.estado === 0;
   }
+}
+
+/** El `detail` de un 409 de órdenes (06-fase3, 8.1): un código para el programa y un mensaje. */
+export interface Conflicto {
+  readonly codigo: string;
+  readonly ordenId: string | null;
+  readonly numero: number | null;
+}
+
+interface DetalleConflicto {
+  readonly codigo: string;
+  readonly mensaje: string;
+  readonly orden_id: string | null;
+  readonly numero: number | null;
+}
+
+function esConflicto(valor: unknown): valor is DetalleConflicto {
+  return typeof valor === "object" && valor !== null && "codigo" in valor && "mensaje" in valor;
 }
 
 /** Forma de un error de validación de FastAPI (Pydantic v2). */
@@ -88,6 +111,7 @@ function camposDesdeDetalle(detalle: unknown): ErroresDeCampo {
 
 function mensajeDesdeDetalle(detalle: unknown, porDefecto: string): string {
   if (typeof detalle === "string" && detalle.trim() !== "") return detalle;
+  if (esConflicto(detalle)) return detalle.mensaje;
   return porDefecto;
 }
 
@@ -151,6 +175,9 @@ async function lanzarSiFalla(resp: Response): Promise<void> {
     mensajeDesdeDetalle(detalle, porDefecto),
     camposDesdeDetalle(detalle),
     reintentar !== null ? Number(reintentar) : undefined,
+    esConflicto(detalle)
+      ? { codigo: detalle.codigo, ordenId: detalle.orden_id, numero: detalle.numero }
+      : undefined,
   );
 }
 

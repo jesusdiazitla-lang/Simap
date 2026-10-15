@@ -28,6 +28,8 @@
    - [5.3 Reportar una alerta](#53--reportar-una-alerta-el-equipo-sigue-funcionando)
    - [5.3.1 Trabajar sin cobertura](#531--trabajar-sin-cobertura)
    - [5.3.2 Revisar alertas y lecturas que no cuadran](#532--revisar-alertas-y-lecturas-que-no-cuadran)
+   - [5.4 Reportar una falla](#54--reportar-una-falla-se-abre-una-orden-de-trabajo)
+   - [5.5 Seguir y cerrar una orden de trabajo](#55--seguir-y-cerrar-una-orden-de-trabajo)
    - [5.9 Administrar el personal y el catálogo de componentes](#59--administrar-el-personal-y-el-catálogo-de-componentes)
    - [5.10 La consola del operador de SIMAP](#510--la-consola-del-operador-de-simap)
 6. [Cómo calcula SIMAP el riesgo de un equipo](#6-cómo-calcula-simap-el-riesgo-de-un-equipo)
@@ -156,10 +158,10 @@ Tres cosas que sí notarás:
 | Rol | Puede hacer |
 |---|---|
 | **Operario** | Escanear el QR de un equipo, registrar lecturas de horómetro y reportar alertas. |
-| **Supervisor** | Todo lo del operario, además de reportar fallas, revisar alertas y ver el historial de su planta. |
-| **Técnico de taller** | Cambiar el estado de una orden de trabajo (en taller / reparada) y registrar el trabajo y repuestos. |
-| **Gerente / Stakeholder** | Ver paneles e indicadores de su empresa, en modo de solo lectura. Autorizar cierres. |
-| **Administrador** | Gestionar usuarios, equipos, catálogo de componentes, inventario y configuración de la empresa. |
+| **Supervisor** | Todo lo del operario, además de reportar fallas, revisar alertas, y autorizar, rechazar o cancelar órdenes de trabajo. |
+| **Técnico de taller** | Llevar una orden al taller, registrar el trabajo realizado y marcarla como reparada. Es el único rol que puede marcarla reparada. (Los repuestos llegan en la fase 4.) |
+| **Gerente / Stakeholder** | Consultar las órdenes de trabajo y, más adelante, los indicadores de su empresa. Solo lectura: no autoriza cierres. |
+| **Administrador** | Gestionar usuarios, equipos y catálogo de componentes; lo mismo que el supervisor con las órdenes, además de corregir una orden cerrada y reiniciar un horómetro. |
 
 ## 5. Funcionalidades
 
@@ -245,26 +247,84 @@ Cada funcionalidad se documenta con el mismo esquema:
   aviso de que otra persona ya la atendió: nadie pisa la decisión de otro. Recarga la página para
   ver qué se decidió.
 
-### 5.4 ⏳ Reportar una falla (se genera una orden de trabajo)
-- **Objetivo:** documentar una falla real y abrir la orden de trabajo.
-- **Quién:** Supervisor.
-- **Cómo llegar:** escanea el QR o busca el equipo → **Reportar falla**. Si partes de una alerta pendiente,
-  el formulario viene pre-llenado y la alerta queda vinculada a la orden.
-- **Pasos:** 1) horómetro actual; 2) temperatura (si aplica); 3) código de error del panel (si tiene);
-  4) componente afectado (del catálogo); 5) descripción; 6) **Enviar**.
-- **Resultado:** se crea una **orden de trabajo en estado "Reportada"**, el equipo queda marcado en falla y
-  se actualizan su horómetro y fecha de última falla.
+### 5.4 ✅ Reportar una falla (se abre una orden de trabajo)
+- **Objetivo:** documentar una falla real y abrir la orden de trabajo para el taller.
+- **Quién:** Supervisor o Administrador.
+- **Cómo llegar:**
+  - **Desde el equipo:** escanea su QR → **Reportar falla** → **Reportar una falla**.
+  - **Desde una alerta:** en **Supervisión → Alertas**, en una alerta pendiente o revisada, pulsa
+    **Convertir en orden**. La orden queda vinculada a la alerta, y la alerta pasa a «En orden de
+    trabajo».
+- **Pasos:** 1) toca el **componente** que falló (si son muchos, escribe en el buscador); si no sabes
+  cuál es, elige **Otro (por identificar)** y corrígelo después en la orden; 2) escribe las **horas
+  del horómetro**; 3) si la tiene, la **temperatura** y el **código de error** del panel del equipo;
+  4) describe **qué pasó**; 5) **Reportar falla**.
+- **Resultado:** nace la orden con su número (**OT-0001**, **OT-0002**…, una secuencia propia de tu
+  empresa), en estado **Reportada**. El equipo aparece **En falla** en su pantalla y en la lista de
+  equipos, para todo el personal, mientras la orden esté abierta.
+- **Cosas que conviene saber:**
+  - Un componente que ya tiene una orden abierta en ese equipo aparece **gris, con su número**: no
+    se puede abrir otra para lo mismo. Si dos personas lo intentan a la vez, SIMAP abre una sola y a
+    la otra le dice cuál existe.
+  - El horómetro se comprueba igual que una lectura (5.2). Si no cuadra con el historial, la orden
+    se abre igualmente, marcada **Horómetro por confirmar**: un supervisor lo confirma desde la orden.
+  - Lo que escribas queda **para siempre** en la orden: no pongas datos personales.
+  - **Sin cobertura** (supervisor): la falla se guarda en el teléfono y se envía sola al volver la
+    red. Arriba verás **«Un reporte de falla sin enviar»** hasta que llegue; todavía no tiene número.
+    Si al llegar resulta que ese componente ya tenía orden abierta, verás **«No se creó: ya existe
+    OT-0009»** con el enlace. El administrador necesita conexión para reportar.
 
-### 5.5 ⏳ Seguir y cerrar una orden de trabajo
-- **Objetivo:** llevar la reparación de principio a fin con trazabilidad.
-- **Quién:** Técnico de taller (reparación); Supervisor o Gerente (autorización de cierre).
-- **Cómo llegar:** menú **Órdenes** → selecciona la orden.
-- **Estados:** `Reportada → En taller → Reparada → Cerrada`.
-- **Pasos:** 1) el técnico marca **En taller** al recibir el equipo; 2) repara y registra **qué hizo** y **qué
-  repuestos usó**; 3) marca **Reparada** (SIMAP descuenta los repuestos del inventario); 4) un supervisor o
-  gerente revisa y **Autoriza el cierre**.
-- **Resultado:** la orden queda **Cerrada** con quién reportó, reparó y autorizó, y con el **tiempo fuera de
-  servicio** calculado. Si el cierre se rechaza, la orden vuelve a "En taller" con una nota.
+### 5.5 ✅ Seguir y cerrar una orden de trabajo
+- **Objetivo:** llevar la reparación de principio a fin, con cada responsable registrado.
+- **Cómo llegar:** **Mantenimiento → Órdenes de trabajo**. Se abre en **Abiertas**; **Cerradas** y
+  **Canceladas** son el historial. La lista y la orden se actualizan solas cada 30 segundos.
+- **Estados:** `Reportada → En taller → Reparada → Cerrada`, más **Cancelada**.
+
+**Técnico de taller**
+1. Abre la orden y pulsa **Llevar al taller** cuando el equipo entra.
+2. Al terminar, escribe el **trabajo realizado** y elige el **tipo de intervención**:
+   - **Reemplazo**: se cambió el componente por uno nuevo. Su vida vuelve a empezar.
+   - **Reparación** o **Ajuste**: el mismo componente sigue; no cuenta como nuevo.
+3. **Marcar como reparada**. La orden queda «Reparada · por autorizar».
+
+**Supervisor o administrador**
+1. En una orden reparada, **Revisar y autorizar** muestra lo que vas a firmar: el trabajo, el técnico,
+   el tipo de intervención y el tiempo fuera de servicio hasta ese momento.
+2. **Autorizar y cerrar**: la orden queda **Cerrada** y el equipo sale del taller. SIMAP calcula el
+   **tiempo fuera de servicio**: el tiempo de calendario desde la falla hasta tu autorización.
+3. Si el trabajo no está bien: **Rechazar el cierre**, con el motivo. La orden vuelve a «En taller»;
+   lo que escribió el técnico no se pierde, queda en el historial.
+4. **Cancelar la orden**, con motivo, si se reportó por error o está duplicada. No se borra: queda en
+   el historial, el componente queda libre y, si venía de una alerta, la alerta vuelve a «Revisada».
+5. Mientras está abierta puedes **corregir los datos de la falla** (componente, descripción, código
+   de error); queda anotado en el historial.
+
+**Todos los que la ven**: el **Historial** dice quién hizo cada paso, con qué rol y cuándo, aunque esa
+persona ya no esté en la empresa. Técnico, supervisor y administrador pueden **añadir una nota** en
+cualquier momento, también con la orden cerrada. El **gerente** consulta las órdenes pero no las mueve.
+
+- **Si otra persona se adelantó** (por ejemplo, alguien la canceló mientras tú la autorizabas), la
+  orden se recarga y un aviso te dice quién la movió y a qué estado.
+- **Sin conexión**, los botones de la orden se desactivan: un cambio de estado necesita saber cómo
+  está la orden en ese momento.
+- Una orden **Cerrada** o **Cancelada** ya no cambia. La única excepción es la **corrección
+  administrativa** (5.5.1).
+
+#### 5.5.1 ✅ Corregir una orden cerrada (administrador)
+- **Para qué:** un error de digitación en una orden ya cerrada: el tipo de intervención, el trabajo
+  realizado, el código de error.
+- **Cómo:** en la orden cerrada, **Corrección administrativa → Corregir…**, cambia lo necesario y
+  escribe **por qué se corrige**. Queda en el historial con los valores de antes y de después.
+- No se pueden corregir el estado, el número, las fechas ni los responsables.
+- Cambiar el tipo de intervención cambia cómo cuenta esa falla para el cálculo de riesgo.
+
+#### 5.5.2 ✅ Cambio o reinicio del horómetro (administrador)
+- **Para qué:** cuando a un equipo se le cambia el horómetro o se pone a cero. El aparato vuelve a un
+  número bajo, pero las horas que el equipo ha trabajado no se pierden.
+- **Cómo:** en la pantalla del equipo, **Gestión del equipo → Cambio o reinicio del horómetro…**,
+  escribe lo que marca ahora y **Reiniciar**.
+- Las lecturas que alguien tomó antes del cambio y llegan después (desde un teléfono sin red) quedan
+  marcadas para revisar.
 
 ### 5.6 ⏳ Gestionar el inventario de repuestos
 - **Objetivo:** saber qué repuestos hay y avisar antes de quedarse sin ellos.
@@ -284,7 +344,8 @@ Cada funcionalidad se documenta con el mismo esquema:
 
 ### 5.8 ⏳ Paneles por rol
 - **Operario:** tus reportes recientes.
-- **Supervisor:** alertas pendientes de revisión y órdenes abiertas de tu planta.
+- **Supervisor:** alertas pendientes de revisión y órdenes abiertas de tu planta. *(Las órdenes ya
+  están en **Mantenimiento → Órdenes de trabajo**; el panel con indicadores llega en la fase 5.)*
 - **Gerente:** disponibilidad, tiempo medio entre fallas (MTBF), costo de repuestos usados y equipos de mayor riesgo.
 
 ### 5.0 ✅ Entrar a SIMAP y ver el panel de tu turno
@@ -479,6 +540,7 @@ En `http://<servidor>:8000/api/v1/health` aparece `"version"`.
 | 2026-10-02 | 0.6.0 | **Cambiar tu contraseña**, en el panel y en la consola del operador (nueva sección 5.0.1). Al cambiarla, o cuando te la restablecen, se cierran tus sesiones en otros aparatos. El acceso a la consola del operador pasa a tener límite de intentos. |
 | 2026-10-02 | 0.6.0 | Sin conexión, SIMAP muestra su propio aviso en lugar del error del navegador. Quien entra sin sesión va directo a la pantalla de acceso, sin pantallas intermedias. Corregida la sección 3.4, que describía un registro de intentos que ya no aparece en pantalla. |
 | 2026-10-07 | 0.7.0 | **Fase 2: equipos y registro de campo.** Equipos con etiqueta QR imprimible (5.1); horómetro (5.2) y alertas (5.3) desde el teléfono en tres pasos; **funciona sin cobertura** y lo pendiente se envía solo (5.3.1); bandeja de alertas y de lecturas que no cuadran, con reinicio del horómetro (5.3.2); el administrador gestiona su personal y el catálogo de componentes (5.9). |
+| 2026-10-14 | 0.8.0 | **Fase 3: órdenes de trabajo.** Reportar una falla desde el equipo o desde una alerta abre una orden numerada (5.4); el taller la lleva de «Reportada» a «Reparada» y un supervisor autoriza su salida, con el tiempo fuera de servicio calculado; rechazo de cierre, cancelación con motivo, notas e historial completo con cada responsable (5.5). Corrección administrativa de una orden cerrada (5.5.1) y reinicio del horómetro sin perder las horas del equipo (5.5.2). Los equipos con una orden abierta aparecen **En falla**. Nueva rama **Mantenimiento** en el menú. |
 | 2026-10-11 | 0.7.2 | **Menú lateral en árbol**, agrupado por área de trabajo; en el teléfono se abre con el botón **Menú** (3.5). Las lecturas por revisar tienen su propia entrada en el menú. |
 | 2026-10-11 | 0.7.1 | El horómetro solo admite horas enteras: un decimal se rechaza con un aviso en vez de convertirse en un dígito de más (5.2). Si dos supervisores revisan lo mismo a la vez, cuenta la primera decisión (5.3.2). |
 | 2026-10-11 | 0.7.0 | Lo enviado sin conexión que el servidor no acepta se avisa a quien lo capturó, con el motivo (5.3.1). |

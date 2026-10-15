@@ -18,6 +18,7 @@ graph LR
     app_api_v1_routes_health["api.v1.routes.health"]
     app_api_v1_routes_lecturas["api.v1.routes.lecturas"]
     app_api_v1_routes_operador["api.v1.routes.operador"]
+    app_api_v1_routes_ordenes["api.v1.routes.ordenes"]
     app_api_v1_routes_usuarios["api.v1.routes.usuarios"]
   end
   subgraph app[app]
@@ -32,6 +33,7 @@ graph LR
     app_core_auth["core.auth"]
     app_core_config["core.config"]
     app_core_cursor["core.cursor"]
+    app_core_eventos_dominio["core.eventos_dominio"]
     app_core_rbac["core.rbac"]
     app_core_registro["core.registro"]
     app_core_security["core.security"]
@@ -57,6 +59,7 @@ graph LR
     app_models_empresa["models.empresa"]
     app_models_lectura_horometro["models.lectura_horometro"]
     app_models_operador["models.operador"]
+    app_models_orden_trabajo["models.orden_trabajo"]
     app_models_usuario["models.usuario"]
   end
   subgraph schemas[schemas]
@@ -66,6 +69,7 @@ graph LR
     app_schemas_campo["schemas.campo"]
     app_schemas_health["schemas.health"]
     app_schemas_operador["schemas.operador"]
+    app_schemas_orden_trabajo["schemas.orden_trabajo"]
     app_schemas_usuario["schemas.usuario"]
   end
   subgraph services[services]
@@ -79,6 +83,8 @@ graph LR
     app_services_lecturas["services.lecturas"]
     app_services_limites["services.limites"]
     app_services_operador["services.operador"]
+    app_services_ordenes["services.ordenes"]
+    app_services_ordenes_estados["services.ordenes_estados"]
     app_services_qr["services.qr"]
     app_services_usuarios["services.usuarios"]
   end
@@ -97,6 +103,7 @@ graph LR
   app_api_v1_router --> app_api_v1_routes_health
   app_api_v1_router --> app_api_v1_routes_lecturas
   app_api_v1_router --> app_api_v1_routes_operador
+  app_api_v1_router --> app_api_v1_routes_ordenes
   app_api_v1_router --> app_api_v1_routes_usuarios
   app_api_v1_routes_activos --> app_api_v1_comun
   app_api_v1_routes_activos --> app_core_config
@@ -104,7 +111,9 @@ graph LR
   app_api_v1_routes_activos --> app_core_security
   app_api_v1_routes_activos --> app_db_deps
   app_api_v1_routes_activos --> app_models_activo
+  app_api_v1_routes_activos --> app_models_orden_trabajo
   app_api_v1_routes_activos --> app_schemas_activo
+  app_api_v1_routes_activos --> app_schemas_orden_trabajo
   app_api_v1_routes_activos --> app_services_activos
   app_api_v1_routes_activos --> app_services_qr
   app_api_v1_routes_alertas --> app_api_v1_comun
@@ -154,6 +163,17 @@ graph LR
   app_api_v1_routes_operador --> app_schemas_operador
   app_api_v1_routes_operador --> app_services_limites
   app_api_v1_routes_operador --> app_services_operador
+  app_api_v1_routes_ordenes --> app_api_v1_comun
+  app_api_v1_routes_ordenes --> app_core_config
+  app_api_v1_routes_ordenes --> app_core_rbac
+  app_api_v1_routes_ordenes --> app_core_security
+  app_api_v1_routes_ordenes --> app_db_deps
+  app_api_v1_routes_ordenes --> app_schemas_activo
+  app_api_v1_routes_ordenes --> app_schemas_orden_trabajo
+  app_api_v1_routes_ordenes --> app_services_activos
+  app_api_v1_routes_ordenes --> app_services_capturas
+  app_api_v1_routes_ordenes --> app_services_ordenes
+  app_api_v1_routes_ordenes --> app_services_ordenes_estados
   app_api_v1_routes_usuarios --> app_core_rbac
   app_api_v1_routes_usuarios --> app_core_security
   app_api_v1_routes_usuarios --> app_db_deps
@@ -167,6 +187,7 @@ graph LR
   app_core_almacen --> app_core_config
   app_core_auth --> app_core_registro
   app_core_auth --> app_core_security
+  app_core_eventos_dominio --> app_core_registro
   app_core_rbac --> app_core_auth
   app_core_rbac --> app_core_security
   app_core_security --> app_core_config
@@ -186,6 +207,7 @@ graph LR
   app_models --> app_models_empresa
   app_models --> app_models_lectura_horometro
   app_models --> app_models_operador
+  app_models --> app_models_orden_trabajo
   app_models --> app_models_usuario
   app_models_activo --> app_models_base
   app_models_alerta --> app_models_base
@@ -193,15 +215,20 @@ graph LR
   app_models_empresa --> app_models_base
   app_models_lectura_horometro --> app_models_base
   app_models_operador --> app_models_base
+  app_models_orden_trabajo --> app_models_base
   app_models_usuario --> app_core_security
   app_models_usuario --> app_models_base
   app_schemas_activo --> app_core_config
+  app_schemas_activo --> app_schemas_orden_trabajo
   app_schemas_auth --> app_core_security
+  app_schemas_campo --> app_schemas_orden_trabajo
   app_schemas_operador --> app_schemas_auth
   app_schemas_usuario --> app_core_security
   app_services_activos --> app_core_cursor
   app_services_activos --> app_models_activo
+  app_services_activos --> app_models_componente
   app_services_activos --> app_models_lectura_horometro
+  app_services_activos --> app_models_orden_trabajo
   app_services_activos --> app_services_qr
   app_services_alertas --> app_core_config
   app_services_alertas --> app_core_cursor
@@ -222,6 +249,7 @@ graph LR
   app_services_campo --> app_services_alertas
   app_services_campo --> app_services_capturas
   app_services_campo --> app_services_lecturas
+  app_services_campo --> app_services_ordenes
   app_services_capturas --> app_core_config
   app_services_capturas --> app_models_activo
   app_services_componentes --> app_models_componente
@@ -230,6 +258,8 @@ graph LR
   app_services_lecturas --> app_core_registro
   app_services_lecturas --> app_models_activo
   app_services_lecturas --> app_models_lectura_horometro
+  app_services_lecturas --> app_models_orden_trabajo
+  app_services_lecturas --> app_services_activos
   app_services_lecturas --> app_services_capturas
   app_services_limites --> app_core_almacen
   app_services_limites --> app_core_config
@@ -241,6 +271,22 @@ graph LR
   app_services_operador --> app_models_usuario
   app_services_operador --> app_services_componentes
   app_services_operador --> app_services_limites
+  app_services_ordenes --> app_core_cursor
+  app_services_ordenes --> app_core_registro
+  app_services_ordenes --> app_db_session
+  app_services_ordenes --> app_models_activo
+  app_services_ordenes --> app_models_alerta
+  app_services_ordenes --> app_models_componente
+  app_services_ordenes --> app_models_lectura_horometro
+  app_services_ordenes --> app_models_orden_trabajo
+  app_services_ordenes --> app_models_usuario
+  app_services_ordenes --> app_services_capturas
+  app_services_ordenes --> app_services_lecturas
+  app_services_ordenes_estados --> app_core_eventos_dominio
+  app_services_ordenes_estados --> app_core_registro
+  app_services_ordenes_estados --> app_models_alerta
+  app_services_ordenes_estados --> app_models_orden_trabajo
+  app_services_ordenes_estados --> app_services_ordenes
   app_services_usuarios --> app_core_security
   app_services_usuarios --> app_models_usuario
 ```

@@ -57,6 +57,15 @@ class EstrategiaTenant(ABC):
         base no hace falta nada.
         """
 
+    async def permitir_correccion(self, session: AsyncSession) -> None:
+        """Deja modificar una orden cerrada durante esta transacción (corrección administrativa).
+
+        En PostgreSQL lo impide un trigger (revisión 0007) y esto lo abre por una transacción. En
+        los motores sin ese trigger no hay nada que abrir: la inmutabilidad queda solo a cargo del
+        servicio, otra garantía que se pierde al cambiar de motor.
+        """
+        return None
+
 
 class RowLevelSecurityPostgres(EstrategiaTenant):
     """PostgreSQL: el aislamiento lo aplica la base con RLS.
@@ -74,6 +83,8 @@ class RowLevelSecurityPostgres(EstrategiaTenant):
     VARIABLE = "app.empresa_id"
     #: Variable que habilita la política `login_lookup` para un único correo.
     VARIABLE_CORREO = "app.login_correo"
+    #: Variable que deja pasar la corrección administrativa de una orden cerrada (revisión 0007).
+    VARIABLE_CORRECCION = "app.correccion"
 
     async def fijar_empresa(self, session: AsyncSession, empresa_id: UUID) -> None:
         await session.execute(
@@ -98,6 +109,18 @@ class RowLevelSecurityPostgres(EstrategiaTenant):
         await session.execute(
             text("SELECT set_config(:variable, :correo, true)"),
             {"variable": self.VARIABLE_CORREO, "correo": correo},
+        )
+
+    async def permitir_correccion(self, session: AsyncSession) -> None:
+        """Abre el trigger `ot_inmutable` durante esta transacción y solo esta.
+
+        `is_local => true`: la corrección no se filtra a la siguiente petición que reutilice la
+        conexión (06-fase3, 7.7). Solo la llama la corrección administrativa, que siempre deja su
+        evento en el historial.
+        """
+        await session.execute(
+            text("SELECT set_config(:variable, 'on', true)"),
+            {"variable": self.VARIABLE_CORRECCION},
         )
 
 

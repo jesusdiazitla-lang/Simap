@@ -75,7 +75,7 @@ class Persona:
 
 @dataclass
 class Planta:
-    """Una empresa con un administrador, un supervisor, un operario y un gerente."""
+    """Una empresa con su personal: los cinco roles (06-fase3, sección 3)."""
 
     client: TestClient
     admin: Persona
@@ -92,6 +92,67 @@ class Planta:
     @property
     def gerente(self) -> Persona:
         return self.personas["gerente"]
+
+    @property
+    def tecnico(self) -> Persona:
+        return self.personas["tecnico_taller"]
+
+    def componente(self, nombre: str = "Motor") -> str:
+        """Id de un componente de la plantilla inicial, que toda empresa nueva recibe."""
+        resp = self.pedir(self.admin, "GET", "/componentes")
+        assert resp.status_code == 200, resp.text
+        for c in resp.json()["items"] if isinstance(resp.json(), dict) else resp.json():
+            if c["nombre"] == nombre:
+                return str(c["id"])
+        raise AssertionError(f"La plantilla no tiene el componente {nombre!r}")
+
+    def falla(
+        self,
+        activo_id: str,
+        *,
+        componente_id: str | None = None,
+        horometro: int = 4801,
+        quien: Persona | None = None,
+        **extra: Any,
+    ) -> httpx.Response:
+        """Reporta una falla (F3, 6.2). Por defecto el supervisor, sobre el motor del equipo."""
+        cuerpo: dict[str, Any] = {
+            "cliente_id": str(uuid4()),
+            "capturado_en": ahora().isoformat(),
+            "componente_id": componente_id or self.componente(),
+            "horometro": horometro,
+            "descripcion": "Se detuvo por sobrecalentamiento al arrancar",
+        }
+        cuerpo.update(extra)
+        return self.pedir(
+            quien or self.supervisor, "POST", f"/activos/{activo_id}/fallas", json=cuerpo
+        )
+
+    def orden(self, activo_id: str, **extra: Any) -> dict[str, Any]:
+        """Una orden recién reportada, para las pruebas que parten de ella."""
+        resp = self.falla(activo_id, **extra)
+        assert resp.status_code == 201, resp.text
+        return dict(resp.json()["orden"])
+
+    def mover(self, quien: Persona, orden_id: str, accion: str, **cuerpo: Any) -> httpx.Response:
+        """Una transición: `en-taller`, `reparada`, `cerrar`, `rechazar-cierre`, `cancelar`."""
+        return self.pedir(
+            quien, "POST", f"/ordenes/{orden_id}/{accion}", json=cuerpo if cuerpo else None
+        )
+
+    def reparar(self, orden_id: str, tipo: str = "reemplazo") -> httpx.Response:
+        return self.mover(
+            self.tecnico,
+            orden_id,
+            "reparada",
+            trabajo_realizado="Se cambió el rodamiento del lado acople y se alineó el eje.",
+            tipo_intervencion=tipo,
+        )
+
+    def llevar_a_reparada(self, orden_id: str, tipo: str = "reemplazo") -> None:
+        assert self.mover(self.tecnico, orden_id, "en-taller").status_code == 200
+        resp = self.reparar(orden_id, tipo)
+        assert resp.status_code == 200, resp.text
 
     def pedir(self, quien: Persona, metodo: str, ruta: str, **kwargs: Any) -> httpx.Response:
         self.client.cookies.clear()
@@ -148,7 +209,7 @@ def montar_planta(client: TestClient, monkeypatch: pytest.MonkeyPatch, nombre: s
     # dar_de_alta cambia sys.stdin; se restaura para no afectar a otros pasos de la prueba.
     monkeypatch.setattr(sys, "stdin", sys.__stdin__)
     planta = Planta(client=client, admin=entrar(client, correo_admin, PASSWORD_ADMIN))
-    for rol in ("supervisor", "operario", "gerente"):
+    for rol in ("supervisor", "operario", "gerente", "tecnico_taller"):
         correo = f"{rol}-{uuid4().hex}@example.com"
         alta = planta.pedir(
             planta.admin,

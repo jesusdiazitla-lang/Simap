@@ -55,14 +55,27 @@ EMPRESAS_DE_PRUEBA = [
 #: Correo de los operadores que crean las pruebas.
 OPERADORES_DE_PRUEBA = "op-%@simap.do"
 
-#: Lo que las pruebas e2e de la fase 2 crean DENTRO de la empresa de demostración (que no se borra):
-#: un equipo y un operario por ejecución. Explícito, igual que lo de arriba.
-EQUIPOS_E2E = "Compresor E2E %"
-PERSONAS_E2E = "operario-e2e-%@example.com"
+#: Lo que las pruebas e2e crean DENTRO de la empresa de demostración (que no se borra): equipos y
+#: personas por ejecución (fase 2: un compresor y un operario; fase 3: una prensa, una supervisora y
+#: un técnico). Explícito, igual que lo de arriba.
+EQUIPOS_E2E = ("Compresor E2E %", "Prensa E2E %")
+PERSONAS_E2E = (
+    "operario-e2e-%@example.com",
+    "supervisor-e2e-%@example.com",
+    "tecnico_taller-e2e-%@example.com",
+)
 
 #: Tablas de negocio, de hija a madre: el orden en que hay que vaciarlas para no chocar con las
 #: llaves foráneas. Al añadir una tabla con empresa_id en una fase nueva, añadirla aquí.
-TABLAS_DE_NEGOCIO = ("alertas", "lecturas_horometro", "activos", "componentes")
+TABLAS_DE_NEGOCIO = (
+    "orden_eventos",
+    "ordenes_trabajo",
+    "ordenes_contador",
+    "alertas",
+    "lecturas_horometro",
+    "activos",
+    "componentes",
+)
 
 
 async def limpiar(ejecutar: bool) -> int:
@@ -131,23 +144,35 @@ async def limpiar(ejecutar: bool) -> int:
                     ),
                     params,
                 )
-            # Lo que dejan las pruebas e2e dentro de la empresa de demostración.
-            params_e2e = {"eq": EQUIPOS_E2E, "pe": PERSONAS_E2E}
-            for tabla in ("alertas", "lecturas_horometro"):
-                await conn.execute(
-                    text(
-                        f"DELETE FROM {tabla} WHERE activo_id IN"
-                        " (SELECT id FROM activos WHERE nombre LIKE :eq)"
-                        " OR registrado_por IN (SELECT id FROM usuarios WHERE correo LIKE :pe)"
-                        if tabla == "lecturas_horometro"
-                        else f"DELETE FROM {tabla} WHERE activo_id IN"
-                        " (SELECT id FROM activos WHERE nombre LIKE :eq)"
-                        " OR reportado_por IN (SELECT id FROM usuarios WHERE correo LIKE :pe)"
-                    ),
-                    params_e2e,
-                )
-            await conn.execute(text("DELETE FROM activos WHERE nombre LIKE :eq"), params_e2e)
-            await conn.execute(text("DELETE FROM usuarios WHERE correo LIKE :pe"), params_e2e)
+            # Lo que dejan las pruebas e2e dentro de la empresa de demostración. Las órdenes van
+            # primero: apuntan a los equipos, a las alertas, a las lecturas y a las personas.
+            params_e2e: dict[str, str] = {
+                **{f"eq{i}": v for i, v in enumerate(EQUIPOS_E2E)},
+                **{f"pe{i}": v for i, v in enumerate(PERSONAS_E2E)},
+            }
+            equipos = "SELECT id FROM activos WHERE " + " OR ".join(
+                f"nombre LIKE :eq{i}" for i in range(len(EQUIPOS_E2E))
+            )
+            personas = "SELECT id FROM usuarios WHERE " + " OR ".join(
+                f"correo LIKE :pe{i}" for i in range(len(PERSONAS_E2E))
+            )
+            ordenes = (
+                f"SELECT id FROM ordenes_trabajo WHERE activo_id IN ({equipos})"
+                f" OR reportado_por IN ({personas}) OR reparado_por IN ({personas})"
+                f" OR autorizado_por IN ({personas})"
+            )
+            for sentencia in (
+                f"DELETE FROM orden_eventos WHERE orden_id IN ({ordenes})"
+                f" OR usuario_id IN ({personas})",
+                f"DELETE FROM ordenes_trabajo WHERE id IN ({ordenes})",
+                f"DELETE FROM alertas WHERE activo_id IN ({equipos})"
+                f" OR reportado_por IN ({personas}) OR revisada_por IN ({personas})",
+                f"DELETE FROM lecturas_horometro WHERE activo_id IN ({equipos})"
+                f" OR registrado_por IN ({personas}) OR revisada_por IN ({personas})",
+                f"DELETE FROM activos WHERE id IN ({equipos})",
+                f"DELETE FROM usuarios WHERE id IN ({personas})",
+            ):
+                await conn.execute(text(sentencia), params_e2e)
 
             await conn.execute(
                 text(

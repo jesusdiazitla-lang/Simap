@@ -22,6 +22,7 @@ import {
   IconoEquipos,
   IconoEscanear,
   IconoInicio,
+  IconoMantenimiento,
   IconoPersonal,
   IconoRevision,
 } from "@/components/iconos";
@@ -29,6 +30,7 @@ import { arbolPara, hojaActual, type Area, type Usuario } from "@/lib/auth";
 
 const ICONO_DE_AREA: Readonly<Record<Area, ComponentType<{ className?: string }>>> = {
   campo: IconoEscanear,
+  mantenimiento: IconoMantenimiento,
   equipos: IconoEquipos,
   supervision: IconoRevision,
   administracion: IconoPersonal,

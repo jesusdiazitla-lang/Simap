@@ -24,28 +24,13 @@ import type { Usuario } from "@/lib/auth";
 import { nuevaCaptura, type Lectura } from "@/lib/campo";
 import { enviarLectura } from "@/lib/captura";
 import { hace, horas } from "@/lib/formato";
-
-/** Holgura al comparar el salto con las horas de reloj. Igual que `HOROMETRO_TOLERANCIA_HORAS`. */
-const TOLERANCIA_HORAS = 2;
+import { leerHorometro, motivoDeDuda } from "@/lib/horometro";
 
 type Aviso =
   | { readonly tipo: "hecho"; readonly texto: string }
   | { readonly tipo: "revision"; readonly texto: string }
   | { readonly tipo: "encolado" }
   | { readonly tipo: "error"; readonly texto: string };
-
-function motivoDeDuda(activo: Activo, valor: number): string | null {
-  if (activo.horometro_actualizado_en === null) return null;
-  if (valor < activo.horometro_actual) {
-    return `Es menor que la última lectura (${horas(activo.horometro_actual)}). ¿Se cambió o reinició el horómetro, o es un error al teclear?`;
-  }
-  const horasReloj = (Date.now() - new Date(activo.horometro_actualizado_en).getTime()) / 3_600_000;
-  const salto = valor - activo.horometro_actual;
-  if (salto > horasReloj + TOLERANCIA_HORAS) {
-    return `Sube ${horas(salto)} desde la última lectura, y solo han pasado ${horas(Math.max(0, Math.round(horasReloj)))} de reloj. ¿Hay un dígito de más?`;
-  }
-  return null;
-}
 
 export function FormularioHorometro({
   usuario,
@@ -65,23 +50,8 @@ export function FormularioHorometro({
   const captura = useRef<{ cliente_id: string; capturado_en: string } | null>(null);
   const idFormulario = "form-horometro";
 
-  /**
-   * Horas enteras (05-fase2, sección 5.1). Admite separadores de miles bien puestos («48,215» o
-   * «48 215»), pero un punto o una coma en cualquier otro sitio es un decimal: quitarlo sin más
-   * convertía «4821.5» en 48 215, justo el dígito de más que esta pantalla intenta evitar.
-   */
-  function leer(): number | string {
-    const texto = valor.trim();
-    if (/^\d{1,7}$/.test(texto)) return Number(texto);
-    if (/^\d{1,3}([.,\s])\d{3}(\1\d{3})?$/.test(texto)) return Number(texto.replace(/\D/g, ""));
-    if (/^\d[\d.,\s]*[.,]\d{1,2}$/.test(texto)) {
-      return "El horómetro se anota en horas enteras, sin decimales. Escribe solo la parte entera.";
-    }
-    return "Escribe las horas que marca el horómetro, solo con números.";
-  }
-
   async function enviar(confirmado: boolean): Promise<void> {
-    const n = leer();
+    const n = leerHorometro(valor);
     if (typeof n === "string") {
       setError(n);
       return;

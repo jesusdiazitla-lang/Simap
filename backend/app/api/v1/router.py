@@ -11,6 +11,7 @@ from app.api.v1.routes import (
     health,
     lecturas,
     operador,
+    ordenes,
     usuarios,
 )
 
@@ -29,3 +30,6 @@ api_router.include_router(lecturas.router)
 api_router.include_router(lecturas.revision)
 api_router.include_router(alertas.router)
 api_router.include_router(campo.router)
+
+# Fase 3: órdenes de trabajo.
+api_router.include_router(ordenes.router)

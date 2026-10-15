@@ -27,9 +27,20 @@ import type { Activo } from "@/lib/activos";
 import type { Usuario } from "@/lib/auth";
 import type { Sintoma } from "@/lib/campo";
 
+/** Lo que lleva un reporte de falla encolado (F3, 9.5). */
+export interface DatosFalla {
+  readonly componente_id: string;
+  readonly componente_nombre: string;
+  readonly horometro: number;
+  readonly temperatura: number | null;
+  readonly codigo_error: string | null;
+  readonly descripcion: string;
+  readonly alerta_id: string | null;
+}
+
 export interface ItemCola {
   readonly cliente_id: string;
-  readonly tipo: "lectura" | "alerta";
+  readonly tipo: "lectura" | "alerta" | "falla";
   readonly activo_id: string;
   /** Nombre del equipo, para que la lista de pendientes se entienda sin red. */
   readonly equipo: string;
@@ -37,12 +48,17 @@ export interface ItemCola {
   readonly valor?: number;
   readonly sintoma?: Sintoma;
   readonly nota?: string | null;
+  readonly falla?: DatosFalla;
   readonly usuario_id: string;
   readonly empresa_id: string;
   readonly encolado_en: number;
   intentos: number;
   estado: "pendiente" | "rechazado";
   motivo: string | null;
+  /** Rechazo con código estable: `orden_abierta_existente` trae la orden que ya existía. */
+  codigo?: string | null;
+  orden_id?: string | null;
+  numero?: number | null;
 }
 
 interface EquipoGuardado {
@@ -86,6 +102,8 @@ function disponible(): boolean {
 export interface EstadoCola {
   readonly enLinea: boolean;
   readonly pendientes: number;
+  /** Reportes de falla sin enviar. Se avisan aparte, más visibles: perder uno es lo más grave. */
+  readonly fallasPendientes: readonly ItemCola[];
   readonly rechazados: readonly ItemCola[];
   readonly sincronizando: boolean;
   /** Cuándo llegó al servidor lo último que se envió desde la cola, para decir «Enviado». */
@@ -97,6 +115,7 @@ export interface EstadoCola {
 const ESTADO_SERVIDOR: EstadoCola = {
   enLinea: true,
   pendientes: 0,
+  fallasPendientes: [],
   rechazados: [],
   sincronizando: false,
   ultimoEnvio: null,
@@ -147,6 +166,7 @@ async function refrescar(usuarioId: string): Promise<void> {
   const items = await itemsDe(usuarioId);
   publicar({
     pendientes: items.filter((i) => i.estado === "pendiente").length,
+    fallasPendientes: items.filter((i) => i.estado === "pendiente" && i.tipo === "falla"),
     rechazados: items.filter((i) => i.estado === "rechazado"),
   });
 }
@@ -187,6 +207,27 @@ interface ResultadoItem {
   readonly cliente_id: string | null;
   readonly estado: "creado" | "duplicado" | "rechazado";
   readonly motivo: string | null;
+  readonly codigo?: string | null;
+  readonly orden_id?: string | null;
+  readonly numero?: number | null;
+}
+
+/** Lo que se envía al servidor por cada ítem: solo lo que su tipo admite. */
+function paraEnviar(item: ItemCola): Record<string, unknown> {
+  const comun = { cliente_id: item.cliente_id, activo_id: item.activo_id, capturado_en: item.capturado_en };
+  if (item.tipo === "lectura") return { tipo: "lectura", ...comun, valor: item.valor };
+  if (item.tipo === "alerta") return { tipo: "alerta", ...comun, sintoma: item.sintoma, nota: item.nota ?? null };
+  const f = item.falla;
+  return {
+    tipo: "falla",
+    ...comun,
+    componente_id: f?.componente_id,
+    horometro: f?.horometro,
+    temperatura: f?.temperatura ?? null,
+    codigo_error: f?.codigo_error ?? null,
+    descripcion: f?.descripcion,
+    alerta_id: f?.alerta_id ?? null,
+  };
 }
 
 /**
@@ -209,26 +250,7 @@ export async function sincronizar(usuarioId: string): Promise<number> {
 
     for (let i = 0; i < pendientes.length; i += MAX_LOTE) {
       const lote = pendientes.slice(i, i + MAX_LOTE);
-      const cuerpo = {
-        items: lote.map((item) =>
-          item.tipo === "lectura"
-            ? {
-                tipo: "lectura",
-                cliente_id: item.cliente_id,
-                activo_id: item.activo_id,
-                valor: item.valor,
-                capturado_en: item.capturado_en,
-              }
-            : {
-                tipo: "alerta",
-                cliente_id: item.cliente_id,
-                activo_id: item.activo_id,
-                sintoma: item.sintoma,
-                nota: item.nota ?? null,
-                capturado_en: item.capturado_en,
-              },
-        ),
-      };
+      const cuerpo = { items: lote.map(paraEnviar) };
       const respuesta = await llamar<{ resultados: ResultadoItem[] }>("/campo/lotes", {
         method: "POST",
         cuerpo,
@@ -240,7 +262,17 @@ export async function sincronizar(usuarioId: string): Promise<number> {
         const item = lote[r.indice];
         if (item === undefined) continue;
         if (r.estado === "rechazado") {
-          await tx.store.put({ ...item, estado: "rechazado", motivo: r.motivo, intentos: item.intentos + 1 });
+          // No se reintenta: daría el mismo resultado. Una falla de un componente que ya tiene orden
+          // abierta vuelve con esa orden, para que quien la capturó pueda abrirla.
+          await tx.store.put({
+            ...item,
+            estado: "rechazado",
+            motivo: r.motivo,
+            codigo: r.codigo ?? null,
+            orden_id: r.orden_id ?? null,
+            numero: r.numero ?? null,
+            intentos: item.intentos + 1,
+          });
         } else {
           await tx.store.delete(item.cliente_id);
           enviados += 1;
@@ -375,5 +407,5 @@ export async function olvidarDatosDeSesion(): Promise<void> {
   await tx.objectStore("equipos").clear();
   await tx.objectStore("sesion").clear();
   await tx.done;
-  publicar({ pendientes: 0, rechazados: [] });
+  publicar({ pendientes: 0, fallasPendientes: [], rechazados: [] });
 }

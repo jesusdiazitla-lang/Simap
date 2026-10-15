@@ -153,17 +153,40 @@ milestones:
   - name: "F3 - Órdenes de trabajo (semanas 7-8)"
     rf: [RF-11, RF-12, RF-13, RF-14, RF-15, RF-16, RNF-06]
     done_when: "Una falla sigue su ciclo completo hasta cerrarse, con cada responsable visible en el historial."
+    # Alcance y criterios: docs/contexto/06-fase3-ordenes-de-trabajo.md. Las ocho decisiones de su
+    # sección 4 las confirmó el usuario el 2026-10-14.
     tasks:
-      - name: "Reporte de falla del supervisor → crea orden en 'reportada' y actualiza el activo"
+      - name: "Migración 0007: órdenes, contador, eventos, trigger de inmutabilidad, vista security_invoker, offset del horómetro"
+        status: done
+        # tests/test_orden_trabajo.py (defensas de la base) y test_aislamiento_fase3.py (RLS, guardias).
+      - name: "Reporte de falla del supervisor → crea orden en 'reportada' con número correlativo y lectura"
         modules: [app.models.orden_trabajo, app.schemas.orden_trabajo, app.services.ordenes, app.api.v1.routes.ordenes]
-      - name: "Máquina de estados reportada→en_taller→reparada→cerrada con transiciones por rol"
+      - name: "Máquina de estados con Cancelada y rechazo de cierre, transiciones por rol y UPDATE condicionado"
         modules: [app.services.ordenes_estados]
+        # tests/test_ordenes_estados.py recorre la tabla 11.1 completa; test_concurrencia_ordenes.py
+        # prueba las carreras con conexiones simultáneas reales.
       - name: "Trazabilidad reportado_por / reparado_por / autorizado_por y tiempo fuera de servicio"
-        status: pending
+        status: done
+        # Historial de solo adición en orden_eventos, con rol_al_momento.
       - name: "Vincular alerta previa a la orden (alerta_origen_id) y pre-llenar el formulario"
+        status: done
+        modules: ["src/app/activos/[id]/falla/page.tsx"]
+      - name: "Reinicio del horómetro (offset) y confirmación del horómetro desde la orden"
+        status: done
+      - name: "Evento de dominio orden_cerrada, publicado después del commit"
+        modules: [app.core.eventos_dominio]
+      - name: "Frontend: formulario de falla, bandeja y detalle de orden con acciones por rol"
+        modules: [src/app/ordenes/page.tsx, "src/app/ordenes/[id]/page.tsx", src/components/formulario-falla.tsx, src/components/acciones-orden.tsx, src/components/historial-orden.tsx, src/lib/ordenes.ts]
+        # Nombres en minúsculas con guiones, como el resto de componentes (el plan decía FormularioFalla.tsx).
+      - name: "Falla sin conexión sobre la cola de la fase 2"
+        status: done
+        # e2e/ordenes.spec.ts: test_rf10_falla_sin_conexion_llega_una_sola_vez.
+      - name: "Datos de demostración (empresa Demo, Weibull conocida)"
+        status: done
+        # tools/seed_demo.py. Datos SIMULADOS: la tesis debe declararlo.
+      - name: "Prueba con un teléfono real: reportar una falla desde el QR"
         status: pending
-      - name: "Frontend: formulario de falla, detalle de orden y cambio de estado"
-        modules: [src/app/ordenes/page.tsx, "src/app/ordenes/[id]/page.tsx", src/components/FormularioFalla.tsx]
+        # Física, como la de F2. Necesita HTTPS para la cámara.
 
   - name: "F4 - Predicción e inventario (semanas 9-12)"
     rf: [RF-17, RF-18, RF-19, RF-20, RF-21, RF-22, RF-23, RF-24, RF-25, RF-26]

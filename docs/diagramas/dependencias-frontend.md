@@ -7,6 +7,7 @@ graph LR
   subgraph app[app]
     src_app_activos__id__editar_page_tsx["app/activos/[id]/editar/page.tsx"]
     src_app_activos__id__etiqueta_page_tsx["app/activos/[id]/etiqueta/page.tsx"]
+    src_app_activos__id__falla_page_tsx["app/activos/[id]/falla/page.tsx"]
     src_app_activos_nuevo_page_tsx["app/activos/nuevo/page.tsx"]
     src_app_activos_page_tsx["app/activos/page.tsx"]
     src_app_alertas_page_tsx["app/alertas/page.tsx"]
@@ -18,6 +19,8 @@ graph LR
     src_app_login_page_tsx["app/login/page.tsx"]
     src_app_operador_clave_page_tsx["app/operador/clave/page.tsx"]
     src_app_operador_page_tsx["app/operador/page.tsx"]
+    src_app_ordenes__id__page_tsx["app/ordenes/[id]/page.tsx"]
+    src_app_ordenes_page_tsx["app/ordenes/page.tsx"]
     src_app_page_tsx["app/page.tsx"]
     src_app_panel_clave_page_tsx["app/panel/clave/page.tsx"]
     src_app_panel_page_tsx["app/panel/page.tsx"]
@@ -34,13 +37,16 @@ graph LR
     src_components_avisos_cola_tsx["components/avisos-cola.tsx"]
     src_components_barra_sesion_tsx["components/barra-sesion.tsx"]
     src_components_indicador_cola_tsx["components/indicador-cola.tsx"]
+    src_components_formulario_falla_tsx["components/formulario-falla.tsx"]
+    src_components_formulario_horometro_tsx["components/formulario-horometro.tsx"]
     src_components_estado_tsx["components/estado.tsx"]
     src_components_lecturas_por_revisar_tsx["components/lecturas-por-revisar.tsx"]
     src_components_formulario_alerta_tsx["components/formulario-alerta.tsx"]
-    src_components_formulario_horometro_tsx["components/formulario-horometro.tsx"]
     src_components_escaner_qr_tsx["components/escaner-qr.tsx"]
     src_components_registro_sw_tsx["components/registro-sw.tsx"]
     src_components_formulario_clave_tsx["components/formulario-clave.tsx"]
+    src_components_acciones_orden_tsx["components/acciones-orden.tsx"]
+    src_components_historial_orden_tsx["components/historial-orden.tsx"]
   end
   subgraph lib[lib]
     src_lib_activos_ts["lib/activos.ts"]
@@ -49,11 +55,14 @@ graph LR
     src_lib_campo_ts["lib/campo.ts"]
     src_lib_formato_ts["lib/formato.ts"]
     src_lib_offline_queue_ts["lib/offline-queue.ts"]
+    src_lib_ordenes_ts["lib/ordenes.ts"]
     src_lib_sesion_ts["lib/sesion.ts"]
     src_lib_captura_ts["lib/captura.ts"]
+    src_lib_horometro_ts["lib/horometro.ts"]
     src_lib_qr_ts["lib/qr.ts"]
     src_lib_acceso_ts["lib/acceso.ts"]
     src_lib_operador_ts["lib/operador.ts"]
+    src_lib_sondeo_ts["lib/sondeo.ts"]
     src_lib_usuarios_ts["lib/usuarios.ts"]
   end
   subgraph src[src]
@@ -85,12 +94,17 @@ graph LR
   src_components_avisos_cola_tsx --> src_lib_campo_ts
   src_components_avisos_cola_tsx --> src_lib_formato_ts
   src_components_avisos_cola_tsx --> src_lib_offline_queue_ts
+  src_components_avisos_cola_tsx --> src_lib_ordenes_ts
   src_lib_campo_ts --> src_lib_activos_ts
   src_lib_campo_ts --> src_lib_api_ts
   src_lib_offline_queue_ts --> src_lib_activos_ts
   src_lib_offline_queue_ts --> src_lib_api_ts
   src_lib_offline_queue_ts --> src_lib_auth_ts
   src_lib_offline_queue_ts --> src_lib_campo_ts
+  src_lib_ordenes_ts --> src_lib_activos_ts
+  src_lib_ordenes_ts --> src_lib_api_ts
+  src_lib_ordenes_ts --> src_lib_auth_ts
+  src_lib_ordenes_ts --> src_lib_offline_queue_ts
   src_components_barra_sesion_tsx --> src_components_arbol_navegacion_tsx
   src_components_barra_sesion_tsx --> src_components_indicador_cola_tsx
   src_components_barra_sesion_tsx --> src_lib_auth_ts
@@ -105,6 +119,40 @@ graph LR
   src_app_activos__id__etiqueta_page_tsx --> src_components_marco_tsx
   src_app_activos__id__etiqueta_page_tsx --> src_components_pantalla_tsx
   src_app_activos__id__etiqueta_page_tsx --> src_lib_activos_ts
+  src_app_activos__id__falla_page_tsx --> src_components_formulario_falla_tsx
+  src_app_activos__id__falla_page_tsx --> src_components_marco_tsx
+  src_app_activos__id__falla_page_tsx --> src_components_pantalla_tsx
+  src_app_activos__id__falla_page_tsx --> src_lib_activos_ts
+  src_app_activos__id__falla_page_tsx --> src_lib_api_ts
+  src_app_activos__id__falla_page_tsx --> src_lib_auth_ts
+  src_components_formulario_falla_tsx --> src_components_boton_tsx
+  src_components_formulario_falla_tsx --> src_components_campo_tsx
+  src_components_formulario_falla_tsx --> src_components_formulario_horometro_tsx
+  src_components_formulario_falla_tsx --> src_components_iconos_tsx
+  src_components_formulario_falla_tsx --> src_lib_activos_ts
+  src_components_formulario_falla_tsx --> src_lib_api_ts
+  src_components_formulario_falla_tsx --> src_lib_auth_ts
+  src_components_formulario_falla_tsx --> src_lib_campo_ts
+  src_components_formulario_falla_tsx --> src_lib_formato_ts
+  src_components_formulario_falla_tsx --> src_lib_horometro_ts
+  src_components_formulario_falla_tsx --> src_lib_ordenes_ts
+  src_components_formulario_horometro_tsx --> src_components_boton_tsx
+  src_components_formulario_horometro_tsx --> src_components_campo_tsx
+  src_components_formulario_horometro_tsx --> src_components_iconos_tsx
+  src_components_formulario_horometro_tsx --> src_lib_activos_ts
+  src_components_formulario_horometro_tsx --> src_lib_api_ts
+  src_components_formulario_horometro_tsx --> src_lib_auth_ts
+  src_components_formulario_horometro_tsx --> src_lib_campo_ts
+  src_components_formulario_horometro_tsx --> src_lib_captura_ts
+  src_components_formulario_horometro_tsx --> src_lib_formato_ts
+  src_components_formulario_horometro_tsx --> src_lib_horometro_ts
+  src_lib_captura_ts --> src_lib_activos_ts
+  src_lib_captura_ts --> src_lib_api_ts
+  src_lib_captura_ts --> src_lib_auth_ts
+  src_lib_captura_ts --> src_lib_campo_ts
+  src_lib_captura_ts --> src_lib_offline_queue_ts
+  src_lib_horometro_ts --> src_lib_activos_ts
+  src_lib_horometro_ts --> src_lib_formato_ts
   src_app_activos_nuevo_page_tsx --> src_components_formulario_activo_tsx
   src_app_activos_nuevo_page_tsx --> src_components_marco_tsx
   src_app_activos_nuevo_page_tsx --> src_components_pantalla_tsx
@@ -112,6 +160,7 @@ graph LR
   src_app_activos_page_tsx --> src_components_boton_tsx
   src_app_activos_page_tsx --> src_components_campo_tsx
   src_app_activos_page_tsx --> src_components_estado_tsx
+  src_app_activos_page_tsx --> src_components_iconos_tsx
   src_app_activos_page_tsx --> src_components_pantalla_tsx
   src_app_activos_page_tsx --> src_lib_activos_ts
   src_app_activos_page_tsx --> src_lib_api_ts
@@ -140,8 +189,10 @@ graph LR
   src_app_componentes_page_tsx --> src_lib_activos_ts
   src_app_componentes_page_tsx --> src_lib_api_ts
   src_app_equipo_page_tsx --> src_components_boton_tsx
+  src_app_equipo_page_tsx --> src_components_campo_tsx
   src_app_equipo_page_tsx --> src_components_estado_tsx
   src_app_equipo_page_tsx --> src_components_formulario_alerta_tsx
+  src_app_equipo_page_tsx --> src_components_formulario_falla_tsx
   src_app_equipo_page_tsx --> src_components_formulario_horometro_tsx
   src_app_equipo_page_tsx --> src_components_iconos_tsx
   src_app_equipo_page_tsx --> src_components_marco_tsx
@@ -151,7 +202,9 @@ graph LR
   src_app_equipo_page_tsx --> src_lib_auth_ts
   src_app_equipo_page_tsx --> src_lib_campo_ts
   src_app_equipo_page_tsx --> src_lib_formato_ts
+  src_app_equipo_page_tsx --> src_lib_horometro_ts
   src_app_equipo_page_tsx --> src_lib_offline_queue_ts
+  src_app_equipo_page_tsx --> src_lib_ordenes_ts
   src_app_equipo_page_tsx --> src_lib_qr_ts
   src_components_formulario_alerta_tsx --> src_components_boton_tsx
   src_components_formulario_alerta_tsx --> src_components_formulario_horometro_tsx
@@ -162,20 +215,6 @@ graph LR
   src_components_formulario_alerta_tsx --> src_lib_campo_ts
   src_components_formulario_alerta_tsx --> src_lib_captura_ts
   src_components_formulario_alerta_tsx --> src_lib_formato_ts
-  src_components_formulario_horometro_tsx --> src_components_boton_tsx
-  src_components_formulario_horometro_tsx --> src_components_campo_tsx
-  src_components_formulario_horometro_tsx --> src_components_iconos_tsx
-  src_components_formulario_horometro_tsx --> src_lib_activos_ts
-  src_components_formulario_horometro_tsx --> src_lib_api_ts
-  src_components_formulario_horometro_tsx --> src_lib_auth_ts
-  src_components_formulario_horometro_tsx --> src_lib_campo_ts
-  src_components_formulario_horometro_tsx --> src_lib_captura_ts
-  src_components_formulario_horometro_tsx --> src_lib_formato_ts
-  src_lib_captura_ts --> src_lib_activos_ts
-  src_lib_captura_ts --> src_lib_api_ts
-  src_lib_captura_ts --> src_lib_auth_ts
-  src_lib_captura_ts --> src_lib_campo_ts
-  src_lib_captura_ts --> src_lib_offline_queue_ts
   src_app_escanear_page_tsx --> src_components_boton_tsx
   src_app_escanear_page_tsx --> src_components_campo_tsx
   src_app_escanear_page_tsx --> src_components_escaner_qr_tsx
@@ -209,6 +248,34 @@ graph LR
   src_app_operador_page_tsx --> src_components_marco_tsx
   src_app_operador_page_tsx --> src_lib_api_ts
   src_app_operador_page_tsx --> src_lib_operador_ts
+  src_app_ordenes__id__page_tsx --> src_components_acciones_orden_tsx
+  src_app_ordenes__id__page_tsx --> src_components_estado_tsx
+  src_app_ordenes__id__page_tsx --> src_components_historial_orden_tsx
+  src_app_ordenes__id__page_tsx --> src_components_iconos_tsx
+  src_app_ordenes__id__page_tsx --> src_components_marco_tsx
+  src_app_ordenes__id__page_tsx --> src_components_pantalla_tsx
+  src_app_ordenes__id__page_tsx --> src_lib_api_ts
+  src_app_ordenes__id__page_tsx --> src_lib_auth_ts
+  src_app_ordenes__id__page_tsx --> src_lib_formato_ts
+  src_app_ordenes__id__page_tsx --> src_lib_ordenes_ts
+  src_app_ordenes__id__page_tsx --> src_lib_sondeo_ts
+  src_components_acciones_orden_tsx --> src_components_boton_tsx
+  src_components_acciones_orden_tsx --> src_components_iconos_tsx
+  src_components_acciones_orden_tsx --> src_lib_activos_ts
+  src_components_acciones_orden_tsx --> src_lib_api_ts
+  src_components_acciones_orden_tsx --> src_lib_auth_ts
+  src_components_acciones_orden_tsx --> src_lib_ordenes_ts
+  src_components_historial_orden_tsx --> src_lib_auth_ts
+  src_components_historial_orden_tsx --> src_lib_formato_ts
+  src_components_historial_orden_tsx --> src_lib_ordenes_ts
+  src_app_ordenes_page_tsx --> src_components_boton_tsx
+  src_app_ordenes_page_tsx --> src_components_estado_tsx
+  src_app_ordenes_page_tsx --> src_components_pantalla_tsx
+  src_app_ordenes_page_tsx --> src_lib_api_ts
+  src_app_ordenes_page_tsx --> src_lib_auth_ts
+  src_app_ordenes_page_tsx --> src_lib_formato_ts
+  src_app_ordenes_page_tsx --> src_lib_ordenes_ts
+  src_app_ordenes_page_tsx --> src_lib_sondeo_ts
   src_app_page_tsx --> src_components_marco_tsx
   src_app_page_tsx --> src_lib_auth_ts
   src_app_panel_clave_page_tsx --> src_components_formulario_clave_tsx

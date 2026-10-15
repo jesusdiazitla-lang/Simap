@@ -15,7 +15,8 @@ import { useEffect, useState } from "react";
 
 import { Boton } from "@/components/boton";
 import { Campo } from "@/components/campo";
-import { Criticidad, EstadoEquipo } from "@/components/estado";
+import { Criticidad, EstadoEquipo, Insignia } from "@/components/estado";
+import { IconoAviso } from "@/components/iconos";
 import { EnlaceBoton, Esqueleto, Pantalla } from "@/components/pantalla";
 import { ErrorApi } from "@/lib/api";
 import { listarActivos, type Activo, type EstadoActivo } from "@/lib/activos";
@@ -221,7 +222,15 @@ function TablaEquipos({ items }: { readonly items: readonly Activo[] }) {
               ) : null}
             </td>
             <td className="col-start-2 row-start-2 justify-self-end md:py-3">
-              <EstadoEquipo estado={a.estado} />
+              <span className="flex flex-col items-end gap-1 md:items-start">
+                <EstadoEquipo estado={a.estado} />
+                {/* Tiene una orden de trabajo abierta (F3): derivado en el servidor. */}
+                {a.en_falla ? (
+                  <Insignia tono="falla" icono={<IconoAviso className="h-3.5 w-3.5" />}>
+                    En falla
+                  </Insignia>
+                ) : null}
+              </span>
             </td>
           </tr>
         ))}

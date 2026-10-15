@@ -16,7 +16,7 @@
 
 import type { ReactNode } from "react";
 
-import { IconoAviso, IconoBaja } from "@/components/iconos";
+import { IconoAviso, IconoBaja, IconoPendiente } from "@/components/iconos";
 
 type Tono = "ok" | "aviso" | "falla" | "neutro";
 
@@ -111,4 +111,50 @@ export function RequiereRevision({
         </Insignia>
       );
   }
+}
+
+/**
+ * Estado de una orden de trabajo (06-fase3). Es el estado de la **máquina** vista desde el taller,
+ * así que usa los colores de estado: reportada es una máquina en falla (rojo); en taller y reparada,
+ * en manos del taller (ámbar); cerrada, de vuelta en servicio (verde). Cancelada no dice nada de la
+ * máquina, y va en neutro.
+ */
+export function EstadoOrdenInsignia({
+  estado,
+}: {
+  readonly estado: "reportada" | "en_taller" | "reparada" | "cerrada" | "cancelada";
+}) {
+  switch (estado) {
+    case "reportada":
+      return (
+        <Insignia tono="falla" icono={<IconoAviso className="h-3.5 w-3.5" />}>
+          Reportada
+        </Insignia>
+      );
+    case "en_taller":
+      return (
+        <Insignia tono="aviso" icono={<IconoPendiente className="h-3.5 w-3.5" />}>
+          En taller
+        </Insignia>
+      );
+    case "reparada":
+      return (
+        <Insignia tono="aviso" icono={<IconoPendiente className="h-3.5 w-3.5" />}>
+          Reparada · por autorizar
+        </Insignia>
+      );
+    case "cerrada":
+      return <Insignia tono="ok">Cerrada</Insignia>;
+    default:
+      return <Insignia tono="neutro">Cancelada</Insignia>;
+  }
+}
+
+/** El horómetro de la falla no cuadraba: la orden sigue su ciclo, pero la fase 4 no la usa aún. */
+export function HorometroEnRevision() {
+  return (
+    <Insignia tono="aviso" icono={<IconoAviso className="h-3.5 w-3.5" />}>
+      Horómetro por confirmar
+    </Insignia>
+  );
 }

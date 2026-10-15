@@ -16,6 +16,9 @@ from app.models.base import Base, IdUUID, _ahora
 #: Catálogo con el que nace toda empresa (05-fase2-activos-y-campo.md, sección 2). Genérico a
 #: propósito: cubre lo que falla en la mayoría de equipos industriales con horómetro, y el
 #: administrador lo ajusta a su planta. Cambiarlo aquí solo afecta a las empresas nuevas.
+#: Nombre del componente comodín. La fase 4 lo excluye del ajuste por su nombre.
+COMPONENTE_POR_IDENTIFICAR = "Otro (por identificar)"
+
 PLANTILLA_INICIAL: tuple[tuple[str, str], ...] = (
     ("Motor", "Motor eléctrico o de combustión que acciona el equipo."),
     ("Tren motriz", "Transmisión, caja de cambios, ejes y acoplamientos."),
@@ -25,6 +28,9 @@ PLANTILLA_INICIAL: tuple[tuple[str, str], ...] = (
     ("Correas y cadenas", "Elementos de transmisión flexibles."),
     ("Sistema de refrigeración", "Radiador, ventiladores, intercambiadores y refrigerante."),
     ("Sistema eléctrico y de control", "Cableado, tableros, sensores y autómatas."),
+    # Para reportar una falla sin saber aún qué la causó (F3, 6.2). Se corrige en la orden mientras
+    # esté abierta, y la fase 4 no ajusta modelo con él.
+    (COMPONENTE_POR_IDENTIFICAR, "Falla cuyo componente aún no se conoce; se corrige en la orden."),
 )
 
 

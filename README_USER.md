@@ -23,7 +23,7 @@ que el equipo vuelva a producción, incluyendo los repuestos usados.
 |---|---|
 | **Operario** | Escanear el QR del equipo, anotar el horómetro y reportar una alerta en tres toques. |
 | **Supervisor** | Reportar fallas, revisar las alertas de tu planta y seguir las órdenes de trabajo. |
-| **Técnico de taller** | Registrar qué reparaste y qué repuestos usaste; marcar la orden como reparada. |
+| **Técnico de taller** | Tomar las órdenes del taller, registrar qué reparaste y marcarlas como reparadas. |
 | **Gerente** | Ver indicadores: disponibilidad, tiempo medio entre fallas, costo de repuestos, equipos en riesgo. |
 | **Administrador** | Dar de alta usuarios, equipos (con su QR imprimible), el catálogo de componentes y el inventario. |
 
@@ -110,10 +110,18 @@ al nombre de quien tenga la sesión abierta.
 | Horómetro y alertas desde el teléfono, también sin cobertura | 2 | ✅ Disponible |
 | Revisión de alertas y de lecturas que no cuadran | 2 | ✅ Disponible |
 | Personal de la empresa y catálogo de componentes | 2 | ✅ Disponible |
-| Órdenes de trabajo con trazabilidad | 3 | ⏳ Pendiente |
+| Órdenes de trabajo: reportar una falla, taller, autorizar el cierre | 3 | ✅ Disponible |
 | Predicción de riesgo e inventario de repuestos | 4 | ⏳ Pendiente |
 | Paneles por rol | 5 | ⏳ Pendiente |
 | API en funcionamiento (`/api/v1/health`) | — | ✅ Disponible |
+
+**La fase 3 está construida.** Una falla se reporta desde la etiqueta del equipo (o desde una
+alerta) y abre una **orden de trabajo** numerada. El técnico la lleva al taller y registra lo que
+hizo; el supervisor revisa lo que va a firmar y **autoriza la salida** del equipo, y SIMAP calcula
+cuánto tiempo estuvo fuera de servicio. Cada paso queda con el nombre y el rol de quien lo dio, y una
+orden cerrada ya no se puede cambiar (salvo una corrección del administrador, que también queda
+anotada). Mientras haya una orden abierta, el equipo aparece **En falla** para todo el personal.
+Queda probarla en un teléfono real.
 
 **La fase 2 está construida.** Los equipos llevan su etiqueta QR, el personal registra el
 horómetro y las alertas desde el teléfono —también sin cobertura—, y el supervisor revisa lo que no

@@ -35,6 +35,8 @@ from app.core.config import get_settings
 from app.core.cursor import Cursor
 from app.models.activo import Activo
 from app.models.lectura_horometro import LecturaHorometro as Lectura
+from app.models.orden_trabajo import OrdenTrabajo
+from app.services import activos
 from app.services.capturas import CapturaInvalida, activo_en_servicio, validar_instante
 
 
@@ -203,6 +205,14 @@ class YaResuelta(Exception):
     """La lectura no está pendiente: no se marcó, o alguien ya la resolvió."""
 
 
+class LecturaDeOrden(Exception):
+    """La lectura la registró un reporte de falla: se confirma desde su orden."""
+
+    def __init__(self, numero: int) -> None:
+        super().__init__(f"OT-{numero:04d}")
+        self.numero = numero
+
+
 async def por_revisar(
     session: AsyncSession, *, cursor: Cursor | None, limite: int
 ) -> tuple[list[tuple[Lectura, str, str, int]], Cursor | None]:
@@ -233,15 +243,31 @@ async def por_revisar(
 
 
 async def resolver(
-    session: AsyncSession, *, revisor_id: UUID, lectura_id: UUID, resolucion: str
+    session: AsyncSession,
+    *,
+    revisor_id: UUID,
+    lectura_id: UUID,
+    resolucion: str,
+    desde_orden: bool = False,
 ) -> Lectura:
     """Resuelve una lectura marcada (revisión 0006). Deja constancia de quién y cuándo.
 
     - `confirmada`: pasa a contar y, si es la más reciente, mueve el horómetro vigente hacia arriba.
     - `descartada`: se conserva, no cuenta.
-    - `reinicio`: el horómetro se cambió o se puso a cero. Si es la más reciente, el vigente pasa a
-      ser su valor aunque sea menor; las lecturas siguientes se comparan con ella.
+    - `reinicio`: el horómetro se cambió o se puso a cero. Pasa por
+      `activos.reiniciar_horometro`, que ajusta el offset para que las horas acumuladas del equipo
+      no se pierdan (06-fase3, 5.1); las lecturas siguientes se comparan con esta.
+
+    Una lectura que registró un reporte de falla se resuelve desde su orden (06-fase3, 5.3): la
+    marca de la orden y la de la lectura son la misma decisión, y resolver una sin la otra dejaría
+    la orden fuera de la fase 4 para siempre. `desde_orden` lo usa solo el servicio de órdenes.
     """
+    if not desde_orden:
+        orden = await session.scalar(
+            select(OrdenTrabajo.numero).where(OrdenTrabajo.lectura_id == lectura_id)
+        )
+        if orden is not None:
+            raise LecturaDeOrden(orden)
     # Escritura condicionada, como en `alertas.revisar`: si dos supervisores resuelven a la vez,
     # solo el primero cambia la fila; el segundo recibe «ya resuelta» en vez de pisar la decisión.
     resultado = await session.execute(
@@ -262,13 +288,22 @@ async def resolver(
     if resultado.rowcount == 0:
         raise YaResuelta(str(lectura_id))
     registro.evento("campo.lectura_resuelta", resolucion=resolucion)
-    if resolucion in ("confirmada", "reinicio"):
+    if resolucion == "confirmada":
         await _avanzar_vigente(
             session,
             activo_id=lectura.activo_id,
             valor=lectura.valor_horometro,
             capturado_en=lectura.capturado_en,
-            aunque_baje=resolucion == "reinicio",
+        )
+    elif resolucion == "reinicio":
+        await activos.reiniciar_horometro(
+            session,
+            empresa_id=lectura.empresa_id,
+            autor_id=revisor_id,
+            activo_id=lectura.activo_id,
+            nuevo=lectura.valor_horometro,
+            capturado_en=lectura.capturado_en,
+            lectura=lectura,
         )
     return lectura
 

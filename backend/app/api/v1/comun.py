@@ -6,10 +6,12 @@ capa de API y no en `services/`.
 
 from __future__ import annotations
 
+import hashlib
 from collections.abc import Awaitable, Callable
 from typing import Annotated
 
-from fastapi import Depends, HTTPException, Query, status
+from fastapi import Depends, HTTPException, Query, Request, Response, status
+from pydantic import BaseModel
 
 from app.core.almacen import AlmacenEfimero, get_almacen
 from app.core.auth import ClaimsActuales
@@ -82,6 +84,21 @@ def leer_cursor(cursor: Annotated[str | None, Query(max_length=500)] = None) -> 
 def leer_limite(limite: Annotated[int, Query(ge=1)] = 50) -> int:
     """Tamaño de página, recortado al máximo del servidor (sección 9.1) en vez de rechazado."""
     return min(limite, get_settings().pagina_max)
+
+
+def con_etag(request: Request, modelo: BaseModel) -> Response:
+    """Respuesta JSON con `ETag`, y 304 si el cliente ya tiene esa versión (06-fase3, 9.4).
+
+    La lista y el detalle de órdenes se consultan cada 30 segundos mientras la pestaña está visible.
+    El ETag se calcula sobre el cuerpo, así que ahorra red pero no la consulta, que con los índices
+    de la fase es barata. `private`: ningún proxy intermedio guarda datos de una empresa.
+    """
+    cuerpo = modelo.model_dump_json().encode()
+    etag = '"' + hashlib.sha256(cuerpo).hexdigest()[:32] + '"'
+    cabeceras = {"ETag": etag, "Cache-Control": "private, no-cache"}
+    if request.headers.get("if-none-match") == etag:
+        return Response(status_code=status.HTTP_304_NOT_MODIFIED, headers=cabeceras)
+    return Response(content=cuerpo, media_type="application/json", headers=cabeceras)
 
 
 CursorDePagina = Annotated[Cursor | None, Depends(leer_cursor)]

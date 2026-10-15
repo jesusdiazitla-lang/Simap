@@ -22,20 +22,24 @@
  * del teléfono.
  */
 
+import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 import { EstadoEquipo, Criticidad, EstadoAlertaInsignia, RequiereRevision } from "@/components/estado";
 import { FormularioAlerta } from "@/components/formulario-alerta";
+import { FormularioFalla } from "@/components/formulario-falla";
 import { FormularioHorometro } from "@/components/formulario-horometro";
 import { IconoAviso, IconoImprimir } from "@/components/iconos";
 import { Panel } from "@/components/marco";
 import { EnlaceBoton, Esqueleto, Pantalla } from "@/components/pantalla";
 import { Boton } from "@/components/boton";
+import { Campo } from "@/components/campo";
 import { ErrorApi } from "@/lib/api";
 import {
   activoPorCodigo,
   darDeBaja,
   regenerarCodigo,
+  reiniciarHorometro,
   type Activo,
 } from "@/lib/activos";
 import type { Usuario } from "@/lib/auth";
@@ -48,6 +52,8 @@ import {
 } from "@/lib/campo";
 import { fecha, fechaHora, hace, horas } from "@/lib/formato";
 import { equipoGuardado, guardarEquipo } from "@/lib/offline-queue";
+import { leerHorometro } from "@/lib/horometro";
+import { ETIQUETA_ESTADO_ORDEN, numeroOrden } from "@/lib/ordenes";
 import { normalizarCodigo, presentarCodigo } from "@/lib/qr";
 
 type Carga =
@@ -174,6 +180,9 @@ function FichaEquipo({
   const capturaEnCampo = (rol === "operario" || rol === "supervisor") && activo.estado === "activo";
   const veHistorial = rol === "supervisor" || rol === "administrador" || rol === "gerente";
   const gestiona = rol === "administrador";
+  // Reportar falla: supervisor y administrador (06-fase3, tabla 11.1). Funciona sin red: se queda en
+  // la cola del teléfono, como una lectura.
+  const reportaFalla = (rol === "supervisor" || rol === "administrador") && activo.estado === "activo";
 
   const alRegistrar = useCallback((l: Lectura) => {
     setActivo((a) =>
@@ -201,6 +210,8 @@ function FichaEquipo({
 
       <Identidad activo={activo} />
 
+      <EnFalla activo={activo} veOrdenes={rol !== "operario"} />
+
       {activo.estado === "baja" ? (
         <p className="flex gap-2 rounded-[var(--radius-control)] border border-borde-fuerte bg-superficie px-3 py-2.5 text-[0.9375rem] leading-6 text-texto">
           <IconoAviso className="mt-0.5 text-texto-suave" />
@@ -223,6 +234,8 @@ function FichaEquipo({
             </Panel>
           </>
         ) : null}
+
+        {reportaFalla ? <ReportarFalla usuario={usuario} activo={activo} /> : null}
 
         <FichaTecnica activo={activo} />
 
@@ -287,7 +300,6 @@ function FichaTecnica({ activo }: { readonly activo: Activo }) {
     ["Modelo", activo.modelo],
     ["Número de serie", activo.numero_serie],
     ["Instalado", activo.fecha_instalacion === null ? null : fecha(activo.fecha_instalacion)],
-    ["Última falla", activo.fecha_ultima_falla === null ? null : fecha(activo.fecha_ultima_falla)],
   ];
   return (
     <Panel nivel={2} titulo="Ficha técnica">
@@ -374,7 +386,150 @@ function Gestion({ activo, alCambiar }: { readonly activo: Activo; readonly alCa
             {error}
           </p>
         ) : null}
+
+        <ReiniciarHorometro activo={activo} alCambiar={alCambiar} />
       </div>
+    </Panel>
+  );
+}
+
+/**
+ * Cambio o reinicio del horómetro (06-fase3, 5.1). Solo el administrador, y con confirmación
+ * explícita: el valor del aparato vuelve a un número bajo, pero las horas de vida del equipo —lo
+ * que mide el cálculo de riesgo— no se pierden.
+ */
+function ReiniciarHorometro({
+  activo,
+  alCambiar,
+}: {
+  readonly activo: Activo;
+  readonly alCambiar: (a: Activo) => void;
+}) {
+  const [abierto, setAbierto] = useState(false);
+  const [valor, setValor] = useState("0");
+  const [error, setError] = useState<string | undefined>();
+  const [enCurso, setEnCurso] = useState(false);
+  const [hecho, setHecho] = useState<string | null>(null);
+  const acumuladas = (activo.horometro_offset ?? 0) + activo.horometro_actual;
+
+  async function confirmar(): Promise<void> {
+    const n = leerHorometro(valor);
+    if (typeof n === "string") {
+      setError(n);
+      return;
+    }
+    setError(undefined);
+    setEnCurso(true);
+    try {
+      const actualizado = await reiniciarHorometro(activo.id, n);
+      alCambiar(actualizado);
+      setHecho(
+        `Horómetro reiniciado en ${horas(n)}. El equipo conserva sus ${horas(acumuladas)} acumuladas.`,
+      );
+      setAbierto(false);
+    } catch (e) {
+      setError(e instanceof ErrorApi ? e.message : "No se pudo reiniciar el horómetro.");
+    } finally {
+      setEnCurso(false);
+    }
+  }
+
+  if (!abierto) {
+    return (
+      <div className="flex flex-col gap-2 border-t border-borde pt-3">
+        <Boton tipo="button" variante="secundario" onClick={() => setAbierto(true)}>
+          Cambio o reinicio del horómetro…
+        </Boton>
+        {hecho !== null ? (
+          <p role="status" className="text-[0.875rem] text-texto-suave">
+            {hecho}
+          </p>
+        ) : null}
+      </div>
+    );
+  }
+  return (
+    <div role="region" aria-label="Reiniciar horómetro" className="flex flex-col gap-3 rounded-[var(--radius-control)] border border-estado-aviso bg-superficie-alterna p-3">
+      <p className="text-[0.9375rem] leading-6 text-texto">
+        Úsalo cuando el horómetro se cambió por uno nuevo o se puso a cero. Ahora marca{" "}
+        {horas(activo.horometro_actual)}; el equipo acumula {horas(acumuladas)} y las conservará.
+      </p>
+      <Campo
+        etiqueta="Qué marca el horómetro ahora"
+        nombre="nuevo"
+        valor={valor}
+        onCambio={setValor}
+        error={error}
+        modoTeclado="numeric"
+        maxLength={9}
+        autoComplete="off"
+        grande
+      />
+      <div className="grid grid-cols-2 gap-2">
+        <Boton tipo="button" variante="secundario" onClick={() => setAbierto(false)}>
+          Cancelar
+        </Boton>
+        <Boton tipo="button" onClick={() => void confirmar()} enCurso={enCurso} textoEnCurso="Un momento…">
+          Reiniciar
+        </Boton>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Aviso de equipo en falla (06-fase3, sección 8): lo ve cualquiera, operario incluido, para no
+ * registrar lecturas de rutina sobre una máquina que está en el taller sin saberlo. Quien puede ver
+ * las órdenes tiene además el enlace a cada una.
+ */
+function EnFalla({ activo, veOrdenes }: { readonly activo: Activo; readonly veOrdenes: boolean }) {
+  const abiertas = activo.ordenes_abiertas ?? [];
+  if (abiertas.length === 0) return null;
+  return (
+    <section
+      aria-label="Equipo en falla"
+      className="flex gap-3 rounded-[var(--radius-control)] border border-estado-falla bg-superficie px-4 py-3"
+    >
+      <IconoAviso className="mt-0.5 text-estado-falla" />
+      <div className="min-w-0">
+        <p className="text-[0.9375rem] font-semibold leading-6 text-texto">
+          En falla: {abiertas.length === 1 ? "una orden abierta" : `${abiertas.length} órdenes abiertas`}
+        </p>
+        <ul className="flex flex-col gap-0.5 pt-0.5">
+          {abiertas.map((o) => (
+            <li key={o.id} className="text-[0.9375rem] leading-6 text-texto-suave">
+              {veOrdenes ? (
+                <Link href={`/ordenes/${o.id}`} className="font-mono font-semibold text-accion underline-offset-2 hover:underline">
+                  {numeroOrden(o.numero)}
+                </Link>
+              ) : (
+                <span className="font-mono font-semibold text-texto">{numeroOrden(o.numero)}</span>
+              )}{" "}
+              · {o.componente_nombre} · {ETIQUETA_ESTADO_ORDEN[o.estado]}
+            </li>
+          ))}
+        </ul>
+      </div>
+    </section>
+  );
+}
+
+/** Reportar una falla desde la propia pantalla del equipo: escanear, completar, enviar. */
+function ReportarFalla({ usuario, activo }: { readonly usuario: Usuario; readonly activo: Activo }) {
+  const [abierto, setAbierto] = useState(false);
+  return (
+    <Panel
+      nivel={2}
+      titulo="Reportar falla"
+      descripcion="El equipo se detuvo o hay que llevarlo al taller: abre una orden de trabajo."
+    >
+      {abierto ? (
+        <FormularioFalla usuario={usuario} activo={activo} />
+      ) : (
+        <Boton tipo="button" variante="secundario" anchoCompleto onClick={() => setAbierto(true)}>
+          Reportar una falla
+        </Boton>
+      )}
     </Panel>
   );
 }

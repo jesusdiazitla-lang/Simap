@@ -26,6 +26,10 @@ async def lote(
     de su cola y reenviaría el lote para siempre.
     """
     resultados = await campo.procesar_lote(
-        session, empresa_id=claims.empresa_id, autor_id=claims.usuario_id, items=datos.items
+        session,
+        empresa_id=claims.empresa_id,
+        autor_id=claims.usuario_id,
+        rol=claims.rol.value,
+        items=datos.items,
     )
     return LoteSalida(resultados=resultados)

@@ -436,6 +436,112 @@ para pip, `tools/setup.ps1` genera un bundle combinado (certifi + CA de Avast) e
 `~/.certs/ca-bundle-avast.pem` y lo registra en `.venv/pip.ini`. **No** se desactiva
 la verificación de certificados.
 
+## Fase 3: órdenes de trabajo
+
+Alcance y criterios en [`docs/contexto/06-fase3-ordenes-de-trabajo.md`](docs/contexto/06-fase3-ordenes-de-trabajo.md).
+Las **ocho decisiones** de su sección 4 las confirmó el usuario el 2026-10-14 tal como se proponían:
+estado **Cancelada** con motivo; cierran supervisor y administrador (el gerente solo lee); quien
+repara no autoriza, quien reportó sí puede; solo el tipo **reemplazo** renueva la vida de un
+componente; tiempo fuera de servicio de calendario, de la falla a la autorización; sin conexión solo
+el reporte de falla; una orden cerrada solo la corrige el administrador, con nota y evento; y el
+reinicio del horómetro se resuelve en esta fase.
+
+### Máquina de estados
+
+```
+Reportada ──► En taller ──► Reparada ──► Cerrada
+   │             ▲  │          │  │
+   │             └──┼──────────┘  │     rechazo de cierre (nota obligatoria)
+   └─────────────┴──┴─────────────┴──► Cancelada (con motivo)
+```
+
+| Transición | Ruta | Roles |
+|---|---|---|
+| Nueva → Reportada | `POST /activos/{id}/fallas` | supervisor, administrador |
+| Reportada → En taller | `POST /ordenes/{id}/en-taller` | técnico, supervisor, administrador |
+| En taller → Reparada | `POST /ordenes/{id}/reparada` | **solo** técnico de taller |
+| Reparada → Cerrada | `POST /ordenes/{id}/cerrar` | supervisor, administrador |
+| Reparada → En taller | `POST /ordenes/{id}/rechazar-cierre` | supervisor, administrador |
+| Abierta → Cancelada | `POST /ordenes/{id}/cancelar` | supervisor, administrador |
+
+Además: `GET /ordenes` (cursor, filtros por estado, equipo, componente y fechas, con **ETag**: 304 si
+nada cambió), `GET /ordenes/{id}` (detalle con responsables e historial), `GET /activos/{id}/ordenes`,
+`PATCH /ordenes/{id}` (solo abiertas), `POST /ordenes/{id}/notas`, `POST /ordenes/{id}/confirmar-horometro`,
+`POST /ordenes/{id}/correccion` (administrador, solo cerradas) y `POST /activos/{id}/reinicio-horometro`
+(administrador). El operario no ve las órdenes (403), pero la ficha del equipo (`GET /activos/{id}`)
+trae `ordenes_abiertas` y la lista `en_falla`, para todos.
+
+Cada transición tiene **su propia ruta**: el rol exigido y el estado de origen son parte de la
+definición del endpoint, no un parámetro manipulable. Y cada una es un **UPDATE condicionado al
+estado de origen** (`app.services.ordenes_estados`), sin leer antes ni bloquear: si dos personas
+actúan a la vez, la base decide, una gana y la otra recibe 409 con quién la movió. La transición y su
+evento van en la misma transacción. `tests/test_ordenes_estados.py` recorre **la tabla de roles
+entera** (11 acciones × 5 roles), y `tests/test_concurrencia_ordenes.py` lo prueba con conexiones
+simultáneas reales (`asyncio.gather`), no con peticiones en fila.
+
+Los 409 llevan `detail` con un código estable (`orden_abierta_existente`, `estado_cambiado`,
+`alerta_no_disponible`, `sin_revision`, `no_corregible`), el mensaje para la persona y, si aplica, la
+orden existente (`orden_id`, `numero`). El cliente lo lee en `ErrorApi.conflicto`.
+
+### Reporte de falla
+
+`ordenes.reportar_falla`, en una transacción: reenvío por `cliente_id` primero (200 con la misma
+orden); equipo, componente y alerta bajo RLS; la **lectura de horómetro** de la falla con las reglas
+de la fase 2 (su `cliente_id` se deriva del de la falla con uuid5, así un reenvío no crea dos); el
+número y el INSERT en un savepoint; la alerta a `convertida_en_orden` con UPDATE condicionado; el
+evento `creada`. Si la lectura queda marcada, la orden **hereda** la marca y la fase 4 la ignora hasta
+`confirmar-horometro`, que confirma también la lectura (una lectura enlazada a una orden responde 409
+en `PATCH /lecturas/{id}`: se confirma desde la orden).
+
+**Número correlativo sin huecos** (`ordenes_contador`): un `UPDATE … SET ultimo = ultimo + 1` del ORM
+en la misma transacción que la orden. Si la transacción se revierte, el número vuelve. El precio,
+asumido: dos fallas de la misma empresa se numeran en fila. Como en F2, nada de `ON CONFLICT`: el
+savepoint y la traducción del choque por **nombre** de restricción dan el mismo resultado sin atarse
+al motor. Ante cualquier choque se mira primero si la orden con ese `cliente_id` ya existe, porque
+dos reenvíos simultáneos violan a la vez la idempotencia y la única abierta por componente.
+
+### Lo que impone la base (revisión 0007)
+
+La guía la llama «migración 0003» y la escribe como `ALTER TABLE`; aquí la tabla nunca se había
+creado, así que la 0007 la **crea** con su forma final.
+
+- **CHECK de coherencia**: no existe una orden Reparada sin reparador, trabajo y tipo; ni Cerrada sin
+  quien autorizó y tiempo fuera de servicio; ni Cancelada sin motivo.
+- **Siete referencias compuestas** `(empresa_id, x) → (empresa_id, id)`.
+- **Índices únicos parciales**: una orden abierta por equipo y componente; una vigente por alerta.
+- **Trigger `ot_inmutable`**: rechaza cualquier UPDATE de una orden cerrada o cancelada salvo que la
+  transacción haya fijado `app.correccion` (`set_config(…, true)`: no se filtra a la siguiente).
+  Lo abre solo `EstrategiaTenant.permitir_correccion`, en `app.db.tenant`, porque es de PostgreSQL.
+- **UPDATE por columna** para `app_user`: número, empresa, fecha de la falla, quién reportó y horas
+  acumuladas no se pueden reescribir. Sin DELETE en ninguna de las tres tablas.
+- **`orden_eventos`** solo con políticas de SELECT e INSERT, y sin permiso de UPDATE ni DELETE.
+- **`v_intervalos_entre_fallas`** con `security_invoker = true`: sin la opción la vista saltaría RLS.
+  `tests/test_aislamiento_fase3.py` tiene la guardia que falla si una vista del esquema no la lleva.
+
+### Horas acumuladas y reinicio del horómetro
+
+`activos.horometro_offset` separa **el dial** (lo que se lee y se teclea) de **las horas del equipo**
+(lo que mide el modelo): `horas = offset + dial`. Cada orden guarda las dos (`horometro_en_falla` y
+`horas_acumuladas_en_falla`). Un reinicio —por `POST /activos/{id}/reinicio-horometro` o por la
+resolución `reinicio` de una lectura marcada de la fase 2— pasa por `activos.reiniciar_horometro`, que
+ajusta el offset para que las horas no se interrumpan. Un dial nuevo mayor que las horas acumuladas no
+puede ser un reinicio y lo rechaza el CHECK del offset.
+
+### Evento de dominio y datos de demostración
+
+Al cerrar, `orden_cerrada` se **anota** en la sesión (`app.core.eventos_dominio`) y se publica solo
+si la transacción se confirma; si se revierte, se descarta. Hoy no tiene suscriptores: la fase 4 se
+suscribirá para reajustar el modelo, sin que órdenes importe nada de predicción (RNF-08).
+
+```powershell
+python tools/seed_demo.py            # empresa «Demo»: 5 roles, 3 equipos, 12 órdenes cerradas
+python tools/seed_demo.py --borrar
+```
+
+Las vidas se sortean de una Weibull **conocida** por componente, y el script imprime sus parámetros:
+que la fase 4 los recupere prueba que el ajuste funciona. **Son datos simulados** y la tesis tiene
+que decirlo. Las contraseñas de Demo se generan y se muestran una sola vez.
+
 ## Grafo de dependencias
 
 `tools/graph/graph.py` fusiona el grafo de imports de Python (grimp) y de
@@ -557,7 +663,12 @@ de `src/app`; se avisan huérfanos (salvo convenciones de Next.js).
 22. **Una entrada mal formada es un 422, nunca un 500.** Un `null` en un campo que la base no admite,
    un número que no cabe en la columna o un cursor manipulado se rechazan al validar, antes de llegar
    a PostgreSQL.
-23. Antes de cada entrega: test automatizado de aislamiento entre tenants, OWASP Top 10 sobre lo nuevo,
+23. **Una orden cerrada no cambia, y el historial no se toca.** Lo impone la base (trigger,
+   permisos por columna, sin políticas de UPDATE/DELETE en `orden_eventos`), no solo el código. La
+   corrección administrativa es el único camino, y siempre deja su evento.
+24. **«Quién reparó» es siempre un técnico.** Ni el administrador puede marcar Reparada: en una
+   empresa sin técnico, se da de alta uno en vez de suplantar el campo.
+25. Antes de cada entrega: test automatizado de aislamiento entre tenants, OWASP Top 10 sobre lo nuevo,
    sin secretos en repo ni logs (`pip-audit` / `npm audit` en CI).
 
 > Si más adelante se añade PgBouncer, debe ir en **session pooling**. En transaction pooling la
@@ -618,6 +729,8 @@ los bordes de control 3:1.
 | `/alertas` | Bandeja de alertas y de lecturas por revisar |
 | `/componentes` | Catálogo de componentes |
 | `/panel/usuarios` | Personal de la empresa |
+| `/ordenes`, `/ordenes/{id}` | Bandeja y detalle de órdenes de trabajo (técnico, supervisor, gerente, administrador) |
+| `/activos/{id}/falla` | Reportar una falla; con `?alerta=id`, la convierte en orden |
 
 ### Menú lateral (`src/components/arbol-navegacion.tsx`)
 
@@ -713,6 +826,25 @@ conexión con la red cortada.
 Corren con **un solo trabajador**: comparten backend y cuentas, y en paralelo una prueba intentaba
 entrar con la clave de Ana justo mientras otra la tenía cambiada.
 
+`ordenes.spec.ts` cubre la fase 3: **el ciclo completo con tres personas** en tres navegadores
+(supervisora reporta desde el QR en el móvil, técnico la repara, administrador revisa lo que firma y
+la cierra) y **la falla sin conexión que llega una sola vez**, aunque la red vaya y venga.
+
+Para correrlas sin tocar el servidor que esté sirviendo el 3000, `next.config.ts` acepta otra carpeta
+de compilación (`NEXT_DIST_DIR`). Next añade esa carpeta a `tsconfig.json` al compilar: hay que
+devolverlo a su estado antes de hacer commit.
+
+```powershell
+# API aparte en el 8001 (otra terminal), con el origen del 3001 permitido
+$env:COOKIE_SECURE="false"; $env:CORS_ORIGINS='["http://localhost:3001"]'; $env:APP_BASE_URL="http://localhost:3001"
+..\.venv\Scripts\python.exe -m uvicorn app.main:app --port 8001          # desde backend/
+
+$env:NEXT_DIST_DIR=".next-e2e"; $env:API_ORIGEN="http://127.0.0.1:8001"
+npx next build --webpack; npx next start --port 3001                       # desde frontend/
+$env:E2E_BASE_URL="http://localhost:3001"; $env:E2E_API_URL="http://localhost:8001/api/v1"
+npx playwright test
+```
+
 `consola-operador.spec.ts` cubre además la consola, y deja fijada por escrito la frontera del plano
 de control: comprueba que las columnas de la tabla son exactamente empresa, administrador, equipos,
 estado y acciones. Si algún día aparece ahí una columna con datos de negocio, esa prueba falla.
@@ -802,20 +934,20 @@ npm run lint ; npm run graph:check
 <!-- graph:auto:start -->
 _Sección generada por `python tools/graph/graph.py docs`. No editar a mano; se sobrescribe en cada push a `main`._
 
-Última actualización: 2026-10-12 00:22 UTC
+Última actualización: 2026-10-15 02:06 UTC
 
 ### Estado del proyecto
 
 ```text
 === ESTADO DEL CÓDIGO ===
 
-[backend]  módulos: 48   LOC: 5035   TODO/FIXME: 0
-  con test: 39/48   stubs/vacíos: 0
-  por capa: api=11, cli=1, core=7, db=3, main=1, models=8, schemas=6, services=11
+[backend]  módulos: 54   LOC: 6948   TODO/FIXME: 0
+  con test: 45/54   stubs/vacíos: 0
+  por capa: api=12, cli=1, core=8, db=3, main=1, models=9, schemas=7, services=13
 
-[frontend]  módulos: 47   LOC: 6702   TODO/FIXME: 0
-  con test: 0/47   stubs/vacíos: 0
-  por capa: app=17, components=17, lib=12, src=1
+[frontend]  módulos: 56   LOC: 9116   TODO/FIXME: 0
+  con test: 0/56   stubs/vacíos: 0
+  por capa: app=20, components=20, lib=15, src=1
 
 ciclos de importación: 0
 
@@ -863,14 +995,20 @@ ciclos de importación: 0
     [ ] Verificar en producción que la sesión persiste entre frontend y backend (8.2)  <pending>
     [x] Confirmar una lectura marcada para revisión, y el evento «horómetro reiniciado»  <done>
 
-  F3 - Órdenes de trabajo (semanas 7-8)  (0/5, 0%)
+  F3 - Órdenes de trabajo (semanas 7-8)  (10/11, 90%)
     cubre: RF-11, RF-12, RF-13, RF-14, RF-15, RF-16, RNF-06
     hecho cuando: Una falla sigue su ciclo completo hasta cerrarse, con cada responsable visible en el historial.
-    [ ] Reporte de falla del supervisor → crea orden en 'reportada' y actualiza el activo  <pending>
-    [ ] Máquina de estados reportada→en_taller→reparada→cerrada con transiciones por rol  <pending>
-    [ ] Trazabilidad reportado_por / reparado_por / autorizado_por y tiempo fuera de servicio  <pending>
-    [ ] Vincular alerta previa a la orden (alerta_origen_id) y pre-llenar el formulario  <pending>
-    [ ] Frontend: formulario de falla, detalle de orden y cambio de estado  <pending>
+    [x] Migración 0007: órdenes, contador, eventos, trigger de inmutabilidad, vista security_invoker, offset del horómetro  <done>
+    [x] Reporte de falla del supervisor → crea orden en 'reportada' con número correlativo y lectura  <done (auto)>
+    [x] Máquina de estados con Cancelada y rechazo de cierre, transiciones por rol y UPDATE condicionado  <done (auto)>
+    [x] Trazabilidad reportado_por / reparado_por / autorizado_por y tiempo fuera de servicio  <done>
+    [x] Vincular alerta previa a la orden (alerta_origen_id) y pre-llenar el formulario  <done>
+    [x] Reinicio del horómetro (offset) y confirmación del horómetro desde la orden  <done>
+    [x] Evento de dominio orden_cerrada, publicado después del commit  <done (auto)>
+    [x] Frontend: formulario de falla, bandeja y detalle de orden con acciones por rol  <done (auto)>
+    [x] Falla sin conexión sobre la cola de la fase 2  <done>
+    [x] Datos de demostración (empresa Demo, Weibull conocida)  <done>
+    [ ] Prueba con un teléfono real: reportar una falla desde el QR  <pending>
 
   F4 - Predicción e inventario (semanas 9-12)  (0/8, 0%)
     cubre: RF-17, RF-18, RF-19, RF-20, RF-21, RF-22, RF-23, RF-24, RF-25, RF-26
@@ -893,59 +1031,65 @@ ciclos de importación: 0
     [ ] Checklist OWASP Top 10 y verificación de secretos  <pending>
     [ ] Documentación técnica y manual de usuario finales  <pending>
 
-AVANCE GLOBAL: 30/50 tareas (60%)
+AVANCE GLOBAL: 40/56 tareas (71%)
 ```
 
 ### Módulos del backend
 
 | Módulo | Capa | Importa | Importado por | LOC | Test |
 |---|---|---:|---:|---:|:---:|
-| `app.api.v1.comun` | api | 7 | 5 | 83 | — |
-| `app.api.v1.router` | api | 9 | 1 | 27 | — |
-| `app.api.v1.routes.activos` | api | 9 | 1 | 155 | ✅ |
+| `app.api.v1.comun` | api | 7 | 6 | 97 | — |
+| `app.api.v1.router` | api | 10 | 1 | 30 | — |
+| `app.api.v1.routes.activos` | api | 11 | 1 | 202 | ✅ |
 | `app.api.v1.routes.alertas` | api | 8 | 1 | 87 | ✅ |
 | `app.api.v1.routes.auth` | api | 7 | 1 | 210 | ✅ |
-| `app.api.v1.routes.campo` | api | 6 | 1 | 23 | ✅ |
+| `app.api.v1.routes.campo` | api | 6 | 1 | 27 | ✅ |
 | `app.api.v1.routes.componentes` | api | 6 | 1 | 53 | ✅ |
 | `app.api.v1.routes.health` | api | 2 | 1 | 9 | ✅ |
-| `app.api.v1.routes.lecturas` | api | 9 | 1 | 120 | ✅ |
+| `app.api.v1.routes.lecturas` | api | 9 | 1 | 128 | ✅ |
 | `app.api.v1.routes.operador` | api | 9 | 1 | 315 | ✅ |
+| `app.api.v1.routes.ordenes` | api | 11 | 1 | 357 | ✅ |
 | `app.api.v1.routes.usuarios` | api | 5 | 1 | 66 | ✅ |
 | `app.cli` | cli | 5 | 0 | 189 | ✅ |
 | `app.core.almacen` | core | 1 | 6 | 112 | ✅ |
 | `app.core.auth` | core | 2 | 5 | 123 | ✅ |
-| `app.core.config` | core | 0 | 16 | 102 | ✅ |
-| `app.core.cursor` | core | 0 | 5 | 57 | ✅ |
-| `app.core.rbac` | core | 2 | 6 | 36 | ✅ |
-| `app.core.registro` | core | 0 | 5 | 99 | ✅ |
-| `app.core.security` | core | 1 | 17 | 225 | ✅ |
-| `app.db.deps` | db | 3 | 9 | 82 | ✅ |
-| `app.db.session` | db | 2 | 1 | 78 | ✅ |
-| `app.db.tenant` | db | 0 | 1 | 108 | ✅ |
+| `app.core.config` | core | 0 | 17 | 107 | ✅ |
+| `app.core.cursor` | core | 0 | 6 | 57 | ✅ |
+| `app.core.eventos_dominio` | core | 1 | 1 | 45 | ✅ |
+| `app.core.rbac` | core | 2 | 7 | 36 | ✅ |
+| `app.core.registro` | core | 0 | 8 | 99 | ✅ |
+| `app.core.security` | core | 1 | 18 | 225 | ✅ |
+| `app.db.deps` | db | 3 | 10 | 82 | ✅ |
+| `app.db.session` | db | 2 | 2 | 78 | ✅ |
+| `app.db.tenant` | db | 0 | 1 | 127 | ✅ |
 | `app.main` | main | 4 | 0 | 111 | — |
-| `app.models.activo` | models | 1 | 7 | 66 | — |
-| `app.models.alerta` | models | 1 | 2 | 75 | — |
-| `app.models.base` | models | 0 | 8 | 32 | — |
-| `app.models.componente` | models | 1 | 2 | 41 | — |
+| `app.models.activo` | models | 1 | 8 | 72 | — |
+| `app.models.alerta` | models | 1 | 4 | 78 | — |
+| `app.models.base` | models | 0 | 9 | 32 | — |
+| `app.models.componente` | models | 1 | 4 | 46 | — |
 | `app.models.empresa` | models | 1 | 4 | 19 | ✅ |
-| `app.models.lectura_horometro` | models | 1 | 3 | 88 | — |
+| `app.models.lectura_horometro` | models | 1 | 4 | 93 | — |
 | `app.models.operador` | models | 1 | 3 | 68 | ✅ |
-| `app.models.usuario` | models | 2 | 4 | 61 | ✅ |
-| `app.schemas.activo` | schemas | 1 | 4 | 104 | — |
+| `app.models.orden_trabajo` | models | 1 | 6 | 197 | ✅ |
+| `app.models.usuario` | models | 2 | 5 | 61 | ✅ |
+| `app.schemas.activo` | schemas | 2 | 5 | 112 | — |
 | `app.schemas.auth` | schemas | 1 | 4 | 63 | ✅ |
-| `app.schemas.campo` | schemas | 0 | 4 | 106 | ✅ |
+| `app.schemas.campo` | schemas | 1 | 4 | 118 | ✅ |
 | `app.schemas.health` | schemas | 0 | 1 | 6 | ✅ |
 | `app.schemas.operador` | schemas | 1 | 1 | 66 | ✅ |
+| `app.schemas.orden_trabajo` | schemas | 0 | 4 | 150 | ✅ |
 | `app.schemas.usuario` | schemas | 1 | 1 | 40 | ✅ |
-| `app.services.activos` | services | 4 | 2 | 167 | ✅ |
+| `app.services.activos` | services | 6 | 4 | 267 | ✅ |
 | `app.services.alertas` | services | 6 | 2 | 160 | ✅ |
 | `app.services.auth` | services | 8 | 2 | 300 | ✅ |
-| `app.services.campo` | services | 5 | 1 | 111 | ✅ |
-| `app.services.capturas` | services | 2 | 6 | 53 | ✅ |
+| `app.services.campo` | services | 6 | 1 | 163 | ✅ |
+| `app.services.capturas` | services | 2 | 8 | 53 | ✅ |
 | `app.services.componentes` | services | 1 | 3 | 83 | ✅ |
-| `app.services.lecturas` | services | 6 | 2 | 257 | ✅ |
+| `app.services.lecturas` | services | 8 | 3 | 288 | ✅ |
 | `app.services.limites` | services | 2 | 5 | 50 | ✅ |
 | `app.services.operador` | services | 8 | 1 | 323 | ✅ |
+| `app.services.ordenes` | services | 11 | 3 | 621 | ✅ |
+| `app.services.ordenes_estados` | services | 5 | 1 | 217 | ✅ |
 | `app.services.qr` | services | 0 | 2 | 84 | ✅ |
 | `app.services.usuarios` | services | 2 | 1 | 114 | ✅ |
 
@@ -955,49 +1099,58 @@ AVANCE GLOBAL: 30/50 tareas (60%)
 |---|---|---:|---:|---:|:---:|
 | `src/app/activos/[id]/editar/page.tsx` | app | 5 | 0 | 55 | — |
 | `src/app/activos/[id]/etiqueta/page.tsx` | app | 5 | 0 | 83 | — |
+| `src/app/activos/[id]/falla/page.tsx` | app | 6 | 0 | 89 | — |
 | `src/app/activos/nuevo/page.tsx` | app | 4 | 0 | 32 | — |
-| `src/app/activos/page.tsx` | app | 8 | 0 | 215 | — |
-| `src/app/alertas/page.tsx` | app | 8 | 0 | 202 | — |
+| `src/app/activos/page.tsx` | app | 9 | 0 | 224 | — |
+| `src/app/alertas/page.tsx` | app | 8 | 0 | 210 | — |
 | `src/app/componentes/page.tsx` | app | 7 | 0 | 207 | — |
-| `src/app/equipo/page.tsx` | app | 14 | 0 | 417 | — |
+| `src/app/equipo/page.tsx` | app | 18 | 0 | 564 | — |
 | `src/app/escanear/page.tsx` | app | 6 | 0 | 72 | — |
 | `src/app/globals.css` | app | 0 | 1 | 186 | — |
 | `src/app/layout.tsx` | app | 2 | 0 | 66 | — |
 | `src/app/login/page.tsx` | app | 7 | 0 | 185 | — |
 | `src/app/operador/clave/page.tsx` | app | 3 | 0 | 60 | — |
 | `src/app/operador/page.tsx` | app | 5 | 0 | 566 | — |
+| `src/app/ordenes/[id]/page.tsx` | app | 11 | 0 | 221 | — |
+| `src/app/ordenes/page.tsx` | app | 8 | 0 | 201 | — |
 | `src/app/page.tsx` | app | 2 | 0 | 44 | — |
 | `src/app/panel/clave/page.tsx` | app | 4 | 0 | 55 | — |
 | `src/app/panel/page.tsx` | app | 3 | 0 | 87 | — |
 | `src/app/panel/usuarios/page.tsx` | app | 9 | 0 | 267 | — |
-| `src/components/arbol-navegacion.tsx` | components | 2 | 2 | 167 | — |
-| `src/components/avisos-cola.tsx` | components | 6 | 1 | 103 | — |
+| `src/components/acciones-orden.tsx` | components | 6 | 1 | 698 | — |
+| `src/components/arbol-navegacion.tsx` | components | 2 | 2 | 169 | — |
+| `src/components/avisos-cola.tsx` | components | 7 | 1 | 149 | — |
 | `src/components/barra-sesion.tsx` | components | 4 | 1 | 114 | — |
-| `src/components/boton.tsx` | components | 0 | 17 | 72 | — |
-| `src/components/campo.tsx` | components | 0 | 9 | 143 | — |
+| `src/components/boton.tsx` | components | 0 | 20 | 72 | — |
+| `src/components/campo.tsx` | components | 0 | 11 | 143 | — |
 | `src/components/escaner-qr.tsx` | components | 3 | 1 | 153 | — |
-| `src/components/estado.tsx` | components | 1 | 6 | 105 | — |
+| `src/components/estado.tsx` | components | 1 | 8 | 149 | — |
 | `src/components/formulario-activo.tsx` | components | 4 | 2 | 147 | — |
 | `src/components/formulario-alerta.tsx` | components | 9 | 1 | 147 | — |
 | `src/components/formulario-clave.tsx` | components | 3 | 2 | 165 | — |
-| `src/components/formulario-horometro.tsx` | components | 9 | 2 | 222 | — |
-| `src/components/iconos.tsx` | components | 0 | 9 | 130 | — |
+| `src/components/formulario-falla.tsx` | components | 11 | 2 | 452 | — |
+| `src/components/formulario-horometro.tsx` | components | 10 | 3 | 195 | — |
+| `src/components/historial-orden.tsx` | components | 3 | 1 | 120 | — |
+| `src/components/iconos.tsx` | components | 0 | 13 | 137 | — |
 | `src/components/indicador-cola.tsx` | components | 2 | 1 | 77 | — |
 | `src/components/lecturas-por-revisar.tsx` | components | 6 | 1 | 139 | — |
-| `src/components/marco.tsx` | components | 0 | 15 | 209 | — |
-| `src/components/pantalla.tsx` | components | 7 | 11 | 121 | — |
+| `src/components/marco.tsx` | components | 0 | 17 | 209 | — |
+| `src/components/pantalla.tsx` | components | 7 | 14 | 121 | — |
 | `src/components/registro-sw.tsx` | components | 0 | 1 | 28 | — |
 | `src/lib/acceso.ts` | lib | 3 | 1 | 53 | — |
-| `src/lib/activos.ts` | lib | 1 | 12 | 114 | — |
-| `src/lib/api.ts` | lib | 0 | 22 | 182 | — |
-| `src/lib/auth.ts` | lib | 1 | 19 | 306 | — |
-| `src/lib/campo.ts` | lib | 2 | 8 | 141 | — |
+| `src/lib/activos.ts` | lib | 1 | 17 | 135 | — |
+| `src/lib/api.ts` | lib | 0 | 28 | 206 | — |
+| `src/lib/auth.ts` | lib | 1 | 26 | 328 | — |
+| `src/lib/campo.ts` | lib | 2 | 9 | 141 | — |
 | `src/lib/captura.ts` | lib | 5 | 2 | 83 | — |
-| `src/lib/formato.ts` | lib | 0 | 8 | 31 | — |
-| `src/lib/offline-queue.ts` | lib | 4 | 5 | 336 | — |
+| `src/lib/formato.ts` | lib | 0 | 13 | 31 | — |
+| `src/lib/horometro.ts` | lib | 2 | 3 | 42 | — |
+| `src/lib/offline-queue.ts` | lib | 4 | 6 | 366 | — |
 | `src/lib/operador.ts` | lib | 1 | 3 | 121 | — |
+| `src/lib/ordenes.ts` | lib | 4 | 7 | 217 | — |
 | `src/lib/qr.ts` | lib | 0 | 4 | 60 | — |
 | `src/lib/sesion.ts` | lib | 3 | 2 | 98 | — |
+| `src/lib/sondeo.ts` | lib | 0 | 2 | 41 | — |
 | `src/lib/usuarios.ts` | lib | 2 | 1 | 41 | — |
 | `src/proxy.ts` | src | 0 | 0 | 95 | — |
 

@@ -145,3 +145,11 @@ export function IconoDesplegar({ className }: Props) {
     </Base>
   );
 }
+
+export function IconoMantenimiento({ className }: Props) {
+  return (
+    <Base className={className}>
+      <path d="M14.7 6.3a4 4 0 0 0 5 5L21 12.6a6 6 0 0 1-7.6 1.5L6.6 21a2 2 0 0 1-2.8-2.8l6.9-6.8A6 6 0 0 1 12.2 3.8l1.3 1.3z" />
+    </Base>
+  );
+}

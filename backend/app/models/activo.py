@@ -46,6 +46,8 @@ class Activo(IdUUID, Base):
             "estado IN (" + ", ".join(f"'{e}'" for e in ESTADOS) + ")", name="estado_valido"
         ),
         CheckConstraint("horometro_actual >= 0", name="horometro_no_negativo"),
+        # Rechaza un reinicio absurdo: un dial nuevo mayor que las horas ya acumuladas (F3, 5.1).
+        CheckConstraint("horometro_offset >= 0", name="offset_no_negativo"),
         # Clave candidata de las referencias compuestas (sección 4.2): las lecturas y alertas
         # apuntan a (empresa_id, id) y no solo a id, para que la base impida que una fila de la
         # empresa A cuelgue de un equipo de la empresa B.
@@ -63,6 +65,10 @@ class Activo(IdUUID, Base):
     horometro_actualizado_en: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    #: Horas que el equipo acumuló antes del último cambio o reinicio del horómetro (F3, 5.1). Las
+    #: horas acumuladas, que son las que mide el modelo, son `horometro_offset + horometro_actual`:
+    #: el dial puede volver a cero, las horas de vida del equipo no.
+    horometro_offset: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     fecha_ultima_falla: Mapped[date | None] = mapped_column(Date, nullable=True)
     marca: Mapped[str | None] = mapped_column(Text, nullable=True)
     modelo: Mapped[str | None] = mapped_column(Text, nullable=True)

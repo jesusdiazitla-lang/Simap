@@ -302,6 +302,7 @@ Dos variantes y ninguna más; sólidos, sin animación de entrada ni de pulsaci�
 ### Chips (insignias)
 - **Style:** 24 px de alto, radio de control, borde y texto del color de estado, fondo `superficie`, Caption en 600. Un relleno saturado convertiría cada fila en un semáforo.
 - **State:** tonos `ok`, `aviso`, `falla` y `neutro`; los de atención llevan icono de 14 px. Nunca pulsables. La etiqueta «Consola del operador» y las marcas «Llega en F…» son variantes neutras sobre `superficie-alterna`.
+- **Orden de trabajo:** es el estado de la máquina visto desde el taller. Reportada en `falla` con icono de aviso (la máquina está en falla); En taller y «Reparada · por autorizar» en `aviso` con icono de reloj; Cerrada en `ok`; Cancelada en `neutro`, porque no dice nada de la máquina. «Horómetro por confirmar» en `aviso`. «En falla» en la lista de equipos y el aviso de la pantalla del equipo usan `falla`: borde de 1 px en el aviso, nunca relleno.
 
 ### Cards / Containers (Panel)
 - **Corner Style:** radio de control (3 px).
@@ -316,7 +317,7 @@ Dos variantes y ninguna más; sólidos, sin animación de entrada ni de pulsaci�
 - **Error / Disabled:** borde `error`, mensaje en la ranura de error que está siempre reservada (24 px mínimo) para que la geometría no se mueva; `aria-invalid` y `aria-live`. Deshabilitado: fondo `superficie-alterna`, texto tenue. Las contraseñas llevan un conmutador «Ver/Ocultar» en texto azul con `aria-pressed`, y siempre se puede pegar.
 
 ### Navigation
-Menú en árbol (`ArbolNavegacion`), agrupado por área de trabajo y no por pantalla: **Inicio** suelto arriba, y las ramas **Campo**, **Equipos**, **Supervisión**, **Administración** y **Mi cuenta**. Cada rol ve solo las hojas que puede abrir; una rama sin hojas no se pinta.
+Menú en árbol (`ArbolNavegacion`), agrupado por área de trabajo y no por pantalla: **Inicio** suelto arriba, y las ramas **Campo**, **Mantenimiento** (órdenes de trabajo, desde F3), **Equipos**, **Supervisión**, **Administración** y **Mi cuenta**. Cada rol ve solo las hojas que puede abrir; una rama sin hojas no se pinta.
 - **Rama:** botón de fila completa con icono de área a la izquierda, nombre en Body small 600 `texto` y chevron a la derecha (girado −90° si está plegada, sin animación); `aria-expanded` y `aria-controls`. Las ramas plegadas se recuerdan en el navegador.
 - **Hoja:** Body small 500 en `texto-suave`, colgada de una guía vertical de 1 px `borde` alineada con el centro del icono de la rama. Hover y página actual sobre `superficie-alterna` con `texto`; la actual además en 600 y con su tramo de guía oscurecido a `texto` (1 px, neutro: es posición, no acción). `aria-current="page"` en la hoja de ruta más larga que contiene la página abierta.
 - **Escritorio (`lg`):** columna de 240 px, `superficie` con borde derecho de 1 px, filas de 36 px, fija bajo la barra superior (que queda fija). La marca «SIMAP» se alinea encima de la columna. Nombre y rol de la sesión a la derecha de la barra desde `lg`; «Cerrar sesión» como control con caja de 36 px.

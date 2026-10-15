@@ -99,6 +99,12 @@ class Settings(BaseSettings):
     codigo_max_peticiones_por_minuto: int = 30
     pagina_max: int = 100
 
+    # --- Órdenes de trabajo (06-fase3, sección 11.4) -------------------------
+    # Por usuario y minuto: un bucle en el cliente no debe poder llenar la tabla de eventos, que no
+    # se puede borrar.
+    falla_max_por_minuto: int = 20
+    transicion_max_por_minuto: int = 60
+
     # --- Motor de predicción (se usa a partir de F4) -------------------------
     risk_threshold: float = Field(default=0.25, ge=0.0, le=1.0)
 

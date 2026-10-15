@@ -16,7 +16,9 @@ from app.core.rbac import requiere_roles
 from app.core.security import Claims, Rol
 from app.db.deps import SesionDB
 from app.models.activo import Activo
+from app.models.orden_trabajo import OrdenTrabajo
 from app.schemas.activo import ActivoCrear, ActivoEditar, ActivoOut, Pagina
+from app.schemas.orden_trabajo import OrdenAbierta, ReinicioHorometro
 from app.services import activos as servicio
 from app.services import qr
 
@@ -29,15 +31,36 @@ ImprimeEtiquetas = Annotated[Claims, Depends(requiere_roles(Rol.ADMINISTRADOR, R
 NO_ENCONTRADO = "Equipo no encontrado."
 
 
-def salida(activo: Activo) -> ActivoOut:
+def salida(
+    activo: Activo,
+    *,
+    en_falla: bool = False,
+    abiertas: list[tuple[OrdenTrabajo, str]] | None = None,
+) -> ActivoOut:
     return ActivoOut.model_validate(
         {
             **{c: getattr(activo, c) for c in ActivoOut.model_fields if hasattr(activo, c)},
             "codigo": activo.qr_code,
             "codigo_corto": qr.presentar(activo.qr_code),
             "url_qr": qr.url_de(activo.qr_code, get_settings().app_base_url),
+            "en_falla": en_falla or bool(abiertas),
+            "ordenes_abiertas": [
+                OrdenAbierta(
+                    id=o.id,
+                    numero=o.numero,
+                    estado=o.estado,
+                    componente_id=o.componente_id,
+                    componente_nombre=nombre,
+                )
+                for o, nombre in abiertas or []
+            ],
         }
     )
+
+
+async def ficha(session: SesionDB, activo: Activo) -> ActivoOut:
+    """La ficha completa de un equipo, con sus órdenes abiertas."""
+    return salida(activo, abiertas=await servicio.ordenes_abiertas(session, activo.id))
 
 
 def _no_encontrado(exc: Exception) -> HTTPException:
@@ -64,8 +87,9 @@ async def listar(
         cursor=cursor,
         limite=limite,
     )
+    con_falla = await servicio.en_falla(session, [a.id for a in filas])
     return Pagina[ActivoOut](
-        items=[salida(a) for a in filas],
+        items=[salida(a, en_falla=a.id in con_falla) for a in filas],
         next_cursor=siguiente.codificar() if siguiente else None,
     )
 
@@ -105,7 +129,7 @@ async def por_codigo(
     if len(codigo) > 20:
         raise HTTPException(status.HTTP_404_NOT_FOUND, NO_ENCONTRADO)
     try:
-        return salida(await servicio.por_codigo(session, codigo))
+        return await ficha(session, await servicio.por_codigo(session, codigo))
     except servicio.ActivoNoEncontrado as exc:
         raise _no_encontrado(exc) from exc
 
@@ -113,7 +137,7 @@ async def por_codigo(
 @router.get("/{activo_id}", response_model=ActivoOut)
 async def obtener(activo_id: UUID, _: Cualquiera, session: SesionDB) -> ActivoOut:
     try:
-        return salida(await servicio.obtener(session, activo_id))
+        return await ficha(session, await servicio.obtener(session, activo_id))
     except servicio.ActivoNoEncontrado as exc:
         raise _no_encontrado(exc) from exc
 
@@ -151,6 +175,34 @@ async def regenerar_codigo(activo_id: UUID, _: Administrador, session: SesionDB)
             status.HTTP_503_SERVICE_UNAVAILABLE,
             "No se pudo generar el código. Vuelve a intentarlo.",
         ) from exc
+
+
+@router.post("/{activo_id}/reinicio-horometro", response_model=ActivoOut)
+async def reiniciar_horometro(
+    activo_id: UUID, datos: ReinicioHorometro, claims: Administrador, session: SesionDB
+) -> ActivoOut:
+    """Cambio o reinicio del horómetro (F3, 5.1). Solo el administrador.
+
+    Las horas acumuladas del equipo no se interrumpen: el offset absorbe la diferencia. Un valor
+    nuevo mayor que las horas ya acumuladas no puede ser un reinicio y se rechaza.
+    """
+    if datos.nuevo > get_settings().horometro_max:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY, "Ese valor de horómetro está fuera de rango."
+        )
+    try:
+        activo = await servicio.reiniciar_horometro(
+            session,
+            empresa_id=claims.empresa_id,
+            autor_id=claims.usuario_id,
+            activo_id=activo_id,
+            nuevo=datos.nuevo,
+        )
+    except servicio.ActivoNoEncontrado as exc:
+        raise _no_encontrado(exc) from exc
+    except servicio.ReinicioInvalido as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
+    return await ficha(session, activo)
 
 
 @router.get("/{activo_id}/etiqueta.svg")

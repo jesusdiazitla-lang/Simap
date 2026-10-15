@@ -121,6 +121,10 @@ def test_rf10_item_sin_cliente_id_se_identifica_por_su_indice(
         "cliente_id": None,
         "estado": "rechazado",
         "motivo": resultado["motivo"],
+        # Solo las fallas (F3) los rellenan: el código estable y la orden afectada.
+        "codigo": None,
+        "orden_id": None,
+        "numero": None,
     }
 
 

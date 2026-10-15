@@ -17,7 +17,7 @@ def test_rf03_el_administrador_da_de_alta_personal_con_su_rol(
     planta = montar_planta(client, monkeypatch, "Planta")
     lista = planta.pedir(planta.admin, "GET", "/usuarios").json()
     roles = sorted(u["rol"] for u in lista)
-    assert roles == ["administrador", "gerente", "operario", "supervisor"]
+    assert roles == ["administrador", "gerente", "operario", "supervisor", "tecnico_taller"]
     assert all("password" not in str(u) and "hash" not in str(u) for u in lista)
 
 

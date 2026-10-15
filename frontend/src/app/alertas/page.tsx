@@ -17,7 +17,7 @@ import { useEffect, useState } from "react";
 import { Boton } from "@/components/boton";
 import { EstadoAlertaInsignia } from "@/components/estado";
 import { LecturasPorRevisar } from "@/components/lecturas-por-revisar";
-import { Esqueleto, Pantalla } from "@/components/pantalla";
+import { EnlaceBoton, Esqueleto, Pantalla } from "@/components/pantalla";
 import { ErrorApi } from "@/lib/api";
 import type { Rol, Usuario } from "@/lib/auth";
 import {
@@ -204,14 +204,22 @@ function FilaAlerta({
         </p>
         {error !== null ? <p role="alert" className="pt-1 text-[0.875rem] text-error">{error}</p> : null}
       </div>
-      {revisa && alerta.estado === "pendiente" ? (
-        <div className="grid shrink-0 grid-cols-2 gap-2 sm:w-64">
-          <Boton tipo="button" variante="secundario" onClick={() => void marcar("descartada")} enCurso={enCurso === "descartada"} textoEnCurso="…" deshabilitado={enCurso === "revisada"}>
-            Descartar
-          </Boton>
-          <Boton tipo="button" variante="secundario" onClick={() => void marcar("revisada")} enCurso={enCurso === "revisada"} textoEnCurso="…" deshabilitado={enCurso === "descartada"}>
-            Revisada
-          </Boton>
+      {revisa && (alerta.estado === "pendiente" || alerta.estado === "revisada") ? (
+        <div className="flex shrink-0 flex-col gap-2 sm:w-64">
+          {alerta.estado === "pendiente" ? (
+            <div className="grid grid-cols-2 gap-2">
+              <Boton tipo="button" variante="secundario" onClick={() => void marcar("descartada")} enCurso={enCurso === "descartada"} textoEnCurso="…" deshabilitado={enCurso === "revisada"}>
+                Descartar
+              </Boton>
+              <Boton tipo="button" variante="secundario" onClick={() => void marcar("revisada")} enCurso={enCurso === "revisada"} textoEnCurso="…" deshabilitado={enCurso === "descartada"}>
+                Revisada
+              </Boton>
+            </div>
+          ) : null}
+          {/* RF-16: la alerta origina la orden y queda vinculada a ella (06-fase3, 6.2). */}
+          <EnlaceBoton href={`/activos/${alerta.activo_id}/falla?alerta=${alerta.id}`}>
+            Convertir en orden
+          </EnlaceBoton>
         </div>
       ) : null}
     </li>

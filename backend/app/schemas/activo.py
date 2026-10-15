@@ -15,6 +15,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.core.config import get_settings
+from app.schemas.orden_trabajo import OrdenAbierta
 
 T = TypeVar("T")
 
@@ -134,9 +135,16 @@ class ActivoOut(_Salida):
     dado_de_baja_en: datetime | None
     horometro_actual: int
     horometro_actualizado_en: datetime | None
+    #: Horas acumuladas antes del último cambio o reinicio del horómetro (F3, 5.1).
+    horometro_offset: int = 0
     fecha_ultima_falla: date | None
     #: El código tal cual, y presentado en dos grupos para imprimir y dictar (`XK7P-2QH9`).
     codigo: str
     codigo_corto: str
     #: Lo que codifica el QR: la URL de la pantalla del equipo, nada más.
     url_qr: str
+    #: Tiene alguna orden de trabajo abierta (F3, 6.2). Derivado, nunca guardado.
+    en_falla: bool = False
+    #: Solo en la ficha de un equipo: sus órdenes abiertas. Las ve cualquiera, operario incluido,
+    #: para no registrar lecturas de rutina sobre una máquina que está en el taller sin saberlo.
+    ordenes_abiertas: list[OrdenAbierta] = []

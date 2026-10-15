@@ -13,6 +13,8 @@ from uuid import UUID
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 
+from app.schemas.orden_trabajo import FallaCrear
+
 Sintoma = Literal["ruido", "vibracion", "calor", "olor", "fuga", "otro"]
 EstadoAlerta = Literal["pendiente", "revisada", "descartada", "convertida_en_orden"]
 MAX_NOTA = 500
@@ -131,7 +133,15 @@ class ItemAlerta(AlertaCrear):
     activo_id: UUID
 
 
-ItemLote = Annotated[ItemLectura | ItemAlerta, Field(discriminator="tipo")]
+class ItemFalla(FallaCrear):
+    """Reporte de falla hecho sin conexión (F3, 9.5). Solo supervisor o administrador: un operario
+    que lo envíe recibe `sin_permiso` en ese ítem, y los demás del lote siguen."""
+
+    tipo: Literal["falla"]
+    activo_id: UUID
+
+
+ItemLote = Annotated[ItemLectura | ItemAlerta | ItemFalla, Field(discriminator="tipo")]
 
 
 class LoteEntrada(_Estricto):
@@ -152,6 +162,12 @@ class ResultadoItem(BaseModel):
     cliente_id: UUID | None
     estado: Literal["creado", "duplicado", "rechazado"]
     motivo: str | None = None
+    #: Código estable de un rechazo que el teléfono trata aparte (`orden_abierta_existente`,
+    #: `sin_permiso`). El motivo es para la persona; esto, para el programa.
+    codigo: str | None = None
+    #: La orden creada, o la que ya existía cuando el rechazo es `orden_abierta_existente`.
+    orden_id: UUID | None = None
+    numero: int | None = None
 
 
 class LoteSalida(BaseModel):

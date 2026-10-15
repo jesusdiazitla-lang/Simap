@@ -12,13 +12,15 @@ from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID, uuid4
 
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.cursor import Cursor
 from app.models.activo import Activo
+from app.models.componente import Componente
 from app.models.lectura_horometro import LecturaHorometro
+from app.models.orden_trabajo import ABIERTOS, OrdenTrabajo
 from app.services import qr
 
 #: Reintentos ante un choque de código (sección 6.1). Con 32⁸ combinaciones, dos seguidos ya serían
@@ -198,3 +200,118 @@ async def regenerar_codigo(session: AsyncSession, activo_id: UUID) -> Activo:
     activo = await obtener(session, activo_id)
     await _guardar_con_codigo_nuevo(session, activo)
     return activo
+
+
+# --- Horómetro: cambio o reinicio (06-fase3, sección 5.1) --------------------------
+
+
+class ReinicioInvalido(Exception):
+    """El valor nuevo no puede ser el de un reinicio. El mensaje se muestra tal cual."""
+
+
+async def reiniciar_horometro(
+    session: AsyncSession,
+    *,
+    empresa_id: UUID,
+    autor_id: UUID,
+    activo_id: UUID,
+    nuevo: int,
+    capturado_en: datetime | None = None,
+    lectura: LecturaHorometro | None = None,
+) -> Activo:
+    """Cambio o reinicio del horómetro sin perder las horas acumuladas del equipo.
+
+    El dial vuelve a un número bajo, pero las horas de vida del equipo —lo que mide el modelo— no:
+    el offset absorbe la diferencia (`offset nuevo + valor nuevo = offset anterior + último valor`).
+
+    Dos entradas pasan por aquí, para que ninguna deje las horas sin corregir:
+
+    - `POST /activos/{id}/reinicio-horometro`: el administrador escribe el valor nuevo y se registra
+      una lectura con `es_reinicio`.
+    - La resolución `reinicio` de una lectura marcada (revisión 0006): `lectura` es esa lectura, ya
+      guardada, y no se crea otra.
+
+    El UPDATE va condicionado en el tiempo, como el de la fase 2: un reinicio no puede colocarse
+    antes de la última lectura vigente. Si el valor nuevo es mayor que las horas ya acumuladas, el
+    offset quedaría negativo y el CHECK de la base lo rechaza.
+    """
+    activo = await obtener(session, activo_id)
+    momento = capturado_en or _ahora()
+    try:
+        async with session.begin_nested():
+            resultado = await session.execute(
+                update(Activo)
+                .where(
+                    Activo.id == activo_id,
+                    or_(
+                        Activo.horometro_actualizado_en.is_(None),
+                        Activo.horometro_actualizado_en <= momento,
+                    ),
+                )
+                .values(
+                    horometro_offset=Activo.horometro_offset + Activo.horometro_actual - nuevo,
+                    horometro_actual=nuevo,
+                    horometro_actualizado_en=momento,
+                )
+                .execution_options(synchronize_session=False)
+            )
+    except IntegrityError as exc:
+        if "offset_no_negativo" not in str(exc.orig):
+            raise
+        raise ReinicioInvalido(
+            f"El valor nuevo ({nuevo:,} h) es mayor que las horas que ya acumula el equipo "
+            f"({activo.horometro_offset + activo.horometro_actual:,} h): no puede ser un reinicio."
+        ) from exc
+    if resultado.rowcount == 0:
+        raise ReinicioInvalido(
+            "Hay una lectura más reciente que este reinicio. Revisa el historial del equipo."
+        )
+    if lectura is None:
+        session.add(
+            LecturaHorometro(
+                empresa_id=empresa_id,
+                activo_id=activo_id,
+                registrado_por=autor_id,
+                valor_horometro=nuevo,
+                cliente_id=uuid4(),
+                capturado_en=momento,
+                es_reinicio=True,
+            )
+        )
+        await session.flush()
+    await session.refresh(activo)
+    return activo
+
+
+# --- «En falla»: derivado de las órdenes abiertas, nunca guardado (06-fase3, 6.2) ---
+
+
+async def ordenes_abiertas(
+    session: AsyncSession, activo_id: UUID
+) -> list[tuple[OrdenTrabajo, str]]:
+    """Las órdenes abiertas del equipo con el nombre de su componente.
+
+    «El equipo está en falla» es tener alguna. No se guarda en una columna del equipo: una columna
+    duplicada es una que algún día se desincroniza. La consulta usa el índice único parcial de
+    órdenes abiertas, así que es barata.
+    """
+    filas = await session.execute(
+        select(OrdenTrabajo, Componente.nombre)
+        .join(Componente, Componente.id == OrdenTrabajo.componente_id)
+        .where(OrdenTrabajo.activo_id == activo_id, OrdenTrabajo.estado.in_(ABIERTOS))
+        .order_by(OrdenTrabajo.numero)
+    )
+    return [(orden, nombre) for orden, nombre in filas.all()]
+
+
+async def en_falla(session: AsyncSession, activo_ids: list[UUID]) -> set[UUID]:
+    """Cuáles de estos equipos tienen alguna orden abierta: una consulta para toda la página del
+    listado, no una por fila (sección 12.1)."""
+    if not activo_ids:
+        return set()
+    filas = await session.scalars(
+        select(OrdenTrabajo.activo_id)
+        .where(OrdenTrabajo.activo_id.in_(activo_ids), OrdenTrabajo.estado.in_(ABIERTOS))
+        .distinct()
+    )
+    return set(filas.all())

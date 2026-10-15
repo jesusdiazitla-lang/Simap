@@ -107,8 +107,8 @@ export const ACCIONES_POR_ROL: Readonly<Record<Rol, readonly Accion[]>> = {
     },
     {
       nombre: "Reportar falla",
-      descripcion: "Abre una orden de trabajo con horómetro, componente y descripción.",
-      fase: "F3",
+      descripcion: "Escanea el equipo y abre una orden de trabajo con horómetro, componente y descripción.",
+      ruta: "/escanear",
     },
     {
       nombre: "Revisar alertas",
@@ -116,16 +116,16 @@ export const ACCIONES_POR_ROL: Readonly<Record<Rol, readonly Accion[]>> = {
       ruta: "/alertas",
     },
     {
-      nombre: "Historial de la planta",
-      descripcion: "Fallas y órdenes de los activos a tu cargo.",
-      fase: "F3",
+      nombre: "Órdenes de trabajo",
+      descripcion: "Fallas abiertas, autorizar o rechazar el cierre del taller, y el historial.",
+      ruta: "/ordenes",
     },
   ],
   tecnico_taller: [
     {
-      nombre: "Órdenes en taller",
-      descripcion: "Actualiza el estado y registra el trabajo realizado.",
-      fase: "F3",
+      nombre: "Órdenes de trabajo",
+      descripcion: "Toma las órdenes reportadas y registra el trabajo realizado.",
+      ruta: "/ordenes",
     },
     {
       nombre: "Repuestos usados",
@@ -134,6 +134,11 @@ export const ACCIONES_POR_ROL: Readonly<Record<Rol, readonly Accion[]>> = {
     },
   ],
   gerente: [
+    {
+      nombre: "Órdenes de trabajo",
+      descripcion: "Fallas abiertas y cerradas, con quién hizo cada paso. Solo lectura.",
+      ruta: "/ordenes",
+    },
     {
       nombre: "Disponibilidad y MTBF",
       descripcion: "Indicadores de la empresa. Solo lectura.",
@@ -166,6 +171,11 @@ export const ACCIONES_POR_ROL: Readonly<Record<Rol, readonly Accion[]>> = {
       descripcion: "Los componentes sobre los que se calcula el riesgo.",
       ruta: "/componentes",
     },
+    {
+      nombre: "Órdenes de trabajo",
+      descripcion: "Todas las fallas de la empresa; corregir una orden cerrada si hace falta.",
+      ruta: "/ordenes",
+    },
   ],
 };
 
@@ -176,7 +186,7 @@ export interface Destino {
 }
 
 /** Áreas de trabajo del menú. La clave elige el icono; el nombre es lo que se lee. */
-export type Area = "campo" | "equipos" | "supervision" | "administracion" | "cuenta";
+export type Area = "campo" | "mantenimiento" | "equipos" | "supervision" | "administracion" | "cuenta";
 
 /** Una rama del árbol: un área de trabajo con las páginas que el rol puede abrir en ella. */
 export interface Rama {
@@ -206,6 +216,18 @@ const ARBOL: readonly {
     hojas: [
       { nombre: "Escanear equipo", ruta: "/escanear", roles: ["operario", "supervisor", "tecnico_taller"] },
       { nombre: "Mis alertas", ruta: "/alertas", roles: ["operario"] },
+    ],
+  },
+  {
+    area: "mantenimiento",
+    nombre: "Mantenimiento",
+    hojas: [
+      // F3. El operario no tiene acceso a las órdenes: ve si un equipo está en falla en su ficha.
+      {
+        nombre: "Órdenes de trabajo",
+        ruta: "/ordenes",
+        roles: ["supervisor", "tecnico_taller", "gerente", "administrador"],
+      },
     ],
   },
   {

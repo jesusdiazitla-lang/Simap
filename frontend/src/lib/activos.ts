@@ -28,6 +28,21 @@ export interface Activo {
   readonly codigo: string;
   readonly codigo_corto: string;
   readonly url_qr: string;
+  /** Horas acumuladas antes del último cambio o reinicio del horómetro (F3). */
+  readonly horometro_offset?: number;
+  /** Tiene alguna orden de trabajo abierta. Derivado en el servidor. */
+  readonly en_falla?: boolean;
+  /** Solo en la ficha de un equipo: sus órdenes abiertas. Las ve cualquier rol. */
+  readonly ordenes_abiertas?: readonly OrdenAbierta[];
+}
+
+/** Lo que cualquiera ve en la ficha de un equipo en falla, operario incluido. */
+export interface OrdenAbierta {
+  readonly id: string;
+  readonly numero: number;
+  readonly estado: "reportada" | "en_taller" | "reparada";
+  readonly componente_id: string;
+  readonly componente_nombre: string;
 }
 
 export interface Pagina<T> {
@@ -103,6 +118,14 @@ export async function darDeBaja(id: string): Promise<Activo> {
 
 export async function regenerarCodigo(id: string): Promise<Activo> {
   return llamar<Activo>(`/activos/${encodeURIComponent(id)}/regenerar-codigo`, { method: "POST" });
+}
+
+/** Cambio o reinicio del horómetro (F3, 5.1). Solo el administrador. */
+export async function reiniciarHorometro(id: string, nuevo: number): Promise<Activo> {
+  return llamar<Activo>(`/activos/${encodeURIComponent(id)}/reinicio-horometro`, {
+    method: "POST",
+    cuerpo: { nuevo },
+  });
 }
 
 /** Dirección de la etiqueta SVG. Mismo origen: el navegador adjunta la cookie de sesión. */

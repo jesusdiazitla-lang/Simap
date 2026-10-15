@@ -64,6 +64,8 @@ class LecturaHorometro(IdUUID, Base):
             postgresql_where=text("requiere_revision AND resolucion IS NULL"),
         ),
         UniqueConstraint("empresa_id", "cliente_id", name="uq_lecturas_horometro_idempotente"),
+        # Clave candidata de la referencia compuesta desde las órdenes de trabajo (F3, 7.1).
+        UniqueConstraint("empresa_id", "id", name="uq_lecturas_horometro_empresa_id_id"),
         # Referencias compuestas (sección 4.2): la base garantiza que equipo y autor son de la misma
         # empresa que la lectura. PostgreSQL comprueba las llaves foráneas ignorando RLS, así que
         # con una llave simple nada impediría colgar una lectura propia de un equipo ajeno.
@@ -94,6 +96,9 @@ class LecturaHorometro(IdUUID, Base):
     resolucion: Mapped[str | None] = mapped_column(Text, nullable=True)
     revisada_por: Mapped[UUID | None] = mapped_column(Uuid, nullable=True)
     revisada_en: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    #: La registró el administrador al cambiar o poner a cero el horómetro (F3, 5.1): empieza una
+    #: serie nueva y no se compara con las anteriores.
+    es_reinicio: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
     def __repr__(self) -> str:
         return f"<LecturaHorometro {self.valor_horometro} @ {self.capturado_en}>"

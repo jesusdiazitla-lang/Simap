@@ -11,6 +11,10 @@ import type { NextConfig } from "next";
 const API_ORIGEN = (process.env.API_ORIGEN ?? "http://localhost:8000").replace(/\/$/, "");
 
 const nextConfig: NextConfig = {
+  // Carpeta de la compilación. Por defecto `.next`; `NEXT_DIST_DIR` permite compilar y servir una
+  // segunda copia (para las pruebas e2e) sin pisar la que esté sirviendo `next start`: recompilar
+  // encima de un servidor vivo deja la página sin estilos (pasó el 2026-10-07).
+  distDir: process.env.NEXT_DIST_DIR ?? ".next",
   async rewrites() {
     return [
       { source: "/api/:ruta*", destination: `${API_ORIGEN}/api/:ruta*` },

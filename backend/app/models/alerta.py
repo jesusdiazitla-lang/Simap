@@ -20,7 +20,8 @@ from app.models.base import Base, IdUUID, _ahora
 
 #: Se guardan sin tildes y la interfaz los traduce (sección 4.1).
 SINTOMAS = ("ruido", "vibracion", "calor", "olor", "fuga", "otro")
-#: `convertida_en_orden` existe desde ya en la restricción, pero no se alcanza hasta la fase 3.
+#: `convertida_en_orden`: la alerta originó una orden de trabajo (RF-16). Si la orden se cancela,
+#: vuelve a `revisada`.
 ESTADOS = ("pendiente", "revisada", "descartada", "convertida_en_orden")
 MAX_NOTA = 500
 
@@ -43,6 +44,8 @@ class Alerta(IdUUID, Base):
         ),
         CheckConstraint(f"char_length(nota) <= {MAX_NOTA}", name="nota_acotada"),
         UniqueConstraint("empresa_id", "cliente_id", name="uq_alertas_idempotente"),
+        # Clave candidata de la referencia compuesta desde las órdenes de trabajo (F3, 7.1).
+        UniqueConstraint("empresa_id", "id", name="uq_alertas_empresa_id_id"),
         ForeignKeyConstraint(
             ["empresa_id", "activo_id"],
             ["activos.empresa_id", "activos.id"],
