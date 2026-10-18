@@ -685,12 +685,13 @@ con `empresa_id` y referencias compuestas, y el descuento de stock se suma a la 
 |---|---|---|
 | 7 Migración «0003» | Revisión `0007`, que **crea** `ordenes_trabajo`, `ordenes_contador` y `orden_eventos` | `0003`–`0006` ya existían, y la tabla nunca se había creado: no había nada que alterar. |
 | 7 Nombres | Convención del proyecto: `uq_ordenes_trabajo_…`, `fk_…_mismo_tenant`, `ck_ordenes_trabajo_…`, `ix_ordenes_trabajo_…` | El contenido de cada restricción es el del documento. |
-| 7.10 Permisos | Además de lo pedido, UPDATE **por columna** en `ordenes_trabajo` | Número, empresa, fecha de la falla, quién reportó y horas acumuladas no se pueden reescribir ni por error. |
+| 7.10 Permisos | Además de lo pedido, UPDATE **por columna** en `ordenes_trabajo` | Número, empresa, fecha de la falla y quién reportó no se pueden reescribir ni por error. Las horas acumuladas, solo al confirmar el horómetro (revisión `0008`, trigger `ot_horas_solo_al_confirmar`). |
 | 6.2 / 6.3 `ON CONFLICT` | ORM en savepoint; el choque se traduce por el nombre de la restricción | Portabilidad de motor, como en F2. Ante cualquier choque se comprueba primero el reenvío. |
 | 6.3 Contador | `UPDATE … ultimo = ultimo + 1` del ORM; la primera orden crea la fila | Sin `INSERT … ON CONFLICT DO UPDATE`, por la misma razón. |
 | 7.7 `app.correccion` | `EstrategiaTenant.permitir_correccion` en `app.db.tenant` | Lo propio de PostgreSQL vive en la capa `app.db`. |
 | 5.1 Reinicio | `activos.reiniciar_horometro`, usado por la ruta nueva **y** por la resolución `reinicio` de F2 | F2 ya tenía una entrada para el reinicio; las dos ajustan ahora el offset. |
-| 5.3 `POST /lecturas/{id}/confirmar` | Ya existía como `PATCH /lecturas/{id}` (F2); una lectura de una orden responde 409 allí | No se duplica la ruta. |
+| 5.1 Falla anterior a un reinicio (2026-10-15) | Revisión `0008`: cada reinicio guarda el offset que dejó (`lecturas_horometro.offset_resultante`); las horas de la falla usan el offset **vigente en su fecha** (`activos.offset_en`), y `confirmar-horometro` las recalcula | Con el offset de hoy, una falla capturada antes del reinicio y recibida después contaba dos veces lo acumulado antes del cambio, y confirmar no lo corregía. `test_horometro_falla_previa_al_reinicio_usa_el_offset_de_su_momento`. |
+| 5.3 `POST /lecturas/{id}/confirmar` | Ya existía como `PATCH /lecturas/{id}` (F2) con `resolucion` `confirmada`, `descartada` o `reinicio`; una lectura de una orden responde 409 allí | No se duplica la ruta, y la de F2 cubre más casos que confirmar. |
 | 6.4 Rechazo de cierre | Además de guardar el trabajo anterior en el evento, **vacía** las columnas de reparación | La orden no muestra como hecho un trabajo rechazado. |
 | 8 `PATCH /ordenes/{id}` | El evento de la edición es de tipo `nota`, con los cambios en `datos` | La CHECK de `orden_eventos.tipo` no tiene un tipo propio para la edición. |
 | 9.4 ETag | `con_etag` en `app.api.v1.comun`; el navegador revalida solo (respuesta `no-cache`) | — |
@@ -698,8 +699,8 @@ con `empresa_id` y referencias compuestas, y el descuento de stock se suma a la 
 | 10 `seed_demo.py` | `tools/seed_demo.py` (superusuario, solo `localhost`) | Doce órdenes: cuatro componentes × tres fallas, todas reemplazos. |
 | 12.3 Evento de dominio | `app.core.eventos_dominio`: anotado en la sesión, publicado en `after_commit` | — |
 
-**Lo que este documento cambia de los anteriores** (anotado aquí, sin editar los documentos viejos,
-como pide `docs/contexto/README.md`):
+**Lo que este documento cambia de los anteriores.** La sección 16 pide actualizarlos, así que los
+cuatro puntos están editados en `01` y `03` con la marca *[Actualizado en F3]* (2026-10-15):
 
 - **RF-13** (03) define cuatro estados: son **cinco**, con **Cancelada** (decisión 1).
 - **CU-03** (03) dice que autoriza el cierre «Supervisor o Gerente»: lo autorizan **supervisor o

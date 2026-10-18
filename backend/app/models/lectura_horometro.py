@@ -52,6 +52,15 @@ class LecturaHorometro(IdUUID, Base):
         CheckConstraint(
             "resolucion IS NULL OR requiere_revision", name="resolucion_solo_si_marcada"
         ),
+        # El offset que dejó un reinicio (revisión 0008): solo lo lleva una lectura de reinicio.
+        CheckConstraint(
+            "offset_resultante IS NULL OR offset_resultante >= 0",
+            name="offset_resultante_no_negativo",
+        ),
+        CheckConstraint(
+            "offset_resultante IS NULL OR es_reinicio OR resolucion = 'reinicio'",
+            name="offset_solo_en_reinicio",
+        ),
         ForeignKeyConstraint(
             ["empresa_id", "revisada_por"],
             ["usuarios.empresa_id", "usuarios.id"],
@@ -99,6 +108,10 @@ class LecturaHorometro(IdUUID, Base):
     #: La registró el administrador al cambiar o poner a cero el horómetro (F3, 5.1): empieza una
     #: serie nueva y no se compara con las anteriores.
     es_reinicio: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    #: En una lectura de reinicio (`es_reinicio` o resuelta como `reinicio`), el offset del equipo
+    #: que dejó. Las horas acumuladas en un instante usan el offset vigente **entonces**, no el de
+    #: hoy (F3, 5.1; revisión 0008). `None` en un reinicio anterior a la 0008 que no fue el último.
+    offset_resultante: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     def __repr__(self) -> str:
         return f"<LecturaHorometro {self.valor_horometro} @ {self.capturado_en}>"

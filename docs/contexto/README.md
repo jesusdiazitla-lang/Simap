@@ -18,3 +18,7 @@ El DDL y las políticas RLS están copiados tal cual en `backend/db/schema.sql` 
 
 Si un documento posterior contradice a uno anterior, manda el posterior: es más específico. Anotar la
 desviación en el documento nuevo en lugar de editar el viejo.
+
+La excepción es lo que un documento posterior **pide** cambiar en los anteriores, como la sección 16
+de `06-fase3-ordenes-de-trabajo.md`: se edita el texto viejo y cada cambio lleva la marca
+*[Actualizado en F…]* con la decisión que lo origina, para que se distinga de la transcripción.

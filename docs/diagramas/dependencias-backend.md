@@ -280,6 +280,7 @@ graph LR
   app_services_ordenes --> app_models_lectura_horometro
   app_services_ordenes --> app_models_orden_trabajo
   app_services_ordenes --> app_models_usuario
+  app_services_ordenes --> app_services_activos
   app_services_ordenes --> app_services_capturas
   app_services_ordenes --> app_services_lecturas
   app_services_ordenes_estados --> app_core_eventos_dominio

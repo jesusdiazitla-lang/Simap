@@ -234,6 +234,9 @@ async def reiniciar_horometro(
     El UPDATE va condicionado en el tiempo, como el de la fase 2: un reinicio no puede colocarse
     antes de la última lectura vigente. Si el valor nuevo es mayor que las horas ya acumuladas, el
     offset quedaría negativo y el CHECK de la base lo rechaza.
+
+    La lectura del reinicio guarda el offset que deja (`offset_resultante`, revisión 0008): una
+    falla capturada antes y recibida después se mide con el offset de su momento (`offset_en`).
     """
     activo = await obtener(session, activo_id)
     momento = capturado_en or _ahora()
@@ -266,6 +269,7 @@ async def reiniciar_horometro(
         raise ReinicioInvalido(
             "Hay una lectura más reciente que este reinicio. Revisa el historial del equipo."
         )
+    await session.refresh(activo)
     if lectura is None:
         session.add(
             LecturaHorometro(
@@ -276,11 +280,43 @@ async def reiniciar_horometro(
                 cliente_id=uuid4(),
                 capturado_en=momento,
                 es_reinicio=True,
+                offset_resultante=activo.horometro_offset,
             )
         )
-        await session.flush()
-    await session.refresh(activo)
+    else:
+        lectura.offset_resultante = activo.horometro_offset
+    await session.flush()
     return activo
+
+
+async def offset_en(session: AsyncSession, activo_id: UUID, instante: datetime) -> int | None:
+    """El offset del horómetro vigente en `instante` (06-fase3, 5.1; revisión 0008).
+
+    Es el que dejó el último reinicio capturado en o antes de ese instante, o 0 si no hubo ninguno:
+    el offset solo lo mueve `reiniciar_horometro`. Usar el de hoy mediría mal una falla capturada
+    antes de un reinicio y recibida después, y le sumaría a la vida del componente todo lo que el
+    equipo acumuló antes del cambio. `None` si ese reinicio es anterior a la 0008 y su offset no se
+    pudo reconstruir: quien llama no debe inventar una cifra.
+    """
+    reinicio = (
+        await session.execute(
+            select(LecturaHorometro.offset_resultante)
+            .where(
+                LecturaHorometro.activo_id == activo_id,
+                or_(
+                    LecturaHorometro.es_reinicio.is_(True),
+                    LecturaHorometro.resolucion == "reinicio",
+                ),
+                LecturaHorometro.capturado_en <= instante,
+            )
+            .order_by(LecturaHorometro.capturado_en.desc(), LecturaHorometro.id.desc())
+            .limit(1)
+        )
+    ).first()
+    if reinicio is None:
+        return 0
+    offset: int | None = reinicio[0]
+    return offset
 
 
 # --- «En falla»: derivado de las órdenes abiertas, nunca guardado (06-fase3, 6.2) ---

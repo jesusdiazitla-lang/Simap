@@ -493,6 +493,10 @@ evento `creada`. Si la lectura queda marcada, la orden **hereda** la marca y la 
 `confirmar-horometro`, que confirma también la lectura (una lectura enlazada a una orden responde 409
 en `PATCH /lecturas/{id}`: se confirma desde la orden).
 
+**Decisión: no hay `POST /lecturas/{id}/confirmar`.** La guía (5.3) la pide, pero la fase 2 ya tenía
+`PATCH /lecturas/{id}` con `resolucion` `confirmada`, `descartada` o `reinicio`: hace lo mismo y más,
+y una segunda ruta para lo mismo serían dos sitios que mantener iguales.
+
 **Número correlativo sin huecos** (`ordenes_contador`): un `UPDATE … SET ultimo = ultimo + 1` del ORM
 en la misma transacción que la orden. Si la transacción se revierte, el número vuelve. El precio,
 asumido: dos fallas de la misma empresa se numeran en fila. Como en F2, nada de `ON CONFLICT`: el
@@ -512,8 +516,10 @@ creado, así que la 0007 la **crea** con su forma final.
 - **Trigger `ot_inmutable`**: rechaza cualquier UPDATE de una orden cerrada o cancelada salvo que la
   transacción haya fijado `app.correccion` (`set_config(…, true)`: no se filtra a la siguiente).
   Lo abre solo `EstrategiaTenant.permitir_correccion`, en `app.db.tenant`, porque es de PostgreSQL.
-- **UPDATE por columna** para `app_user`: número, empresa, fecha de la falla, quién reportó y horas
-  acumuladas no se pueden reescribir. Sin DELETE en ninguna de las tres tablas.
+- **UPDATE por columna** para `app_user`: número, empresa, fecha de la falla y quién reportó no se
+  pueden reescribir. Sin DELETE en ninguna de las tres tablas.
+- **Horas acumuladas** (revisión 0008): solo cambian en la misma escritura que quita la marca de
+  revisión; lo impone el trigger `ot_horas_solo_al_confirmar`. Una cifra confirmada no se reescribe.
 - **`orden_eventos`** solo con políticas de SELECT e INSERT, y sin permiso de UPDATE ni DELETE.
 - **`v_intervalos_entre_fallas`** con `security_invoker = true`: sin la opción la vista saltaría RLS.
   `tests/test_aislamiento_fase3.py` tiene la guardia que falla si una vista del esquema no la lleva.
@@ -526,6 +532,16 @@ creado, así que la 0007 la **crea** con su forma final.
 resolución `reinicio` de una lectura marcada de la fase 2— pasa por `activos.reiniciar_horometro`, que
 ajusta el offset para que las horas no se interrumpan. Un dial nuevo mayor que las horas acumuladas no
 puede ser un reinicio y lo rechaza el CHECK del offset.
+
+**El offset de su momento, no el de hoy** (revisión 0008). Cada reinicio guarda el offset que deja
+(`lecturas_horometro.offset_resultante`), y las horas de una falla usan el **vigente en su fecha**
+(`activos.offset_en`: el del último reinicio capturado en o antes de ella, o 0). Sin esto, una falla
+capturada antes de un reinicio y recibida después por la cola contaba dos veces todo lo anterior al
+cambio: con 1000 h, reinicio a 0 y dial 1005, quedaba en 2005 h en vez de 1005, y esa vida inflada
+entraba en `v_intervalos_entre_fallas`. La falla sigue quedando marcada, y `confirmar-horometro`
+recalcula las horas por si un reinicio se resolvió después del reporte. Los reinicios anteriores a la
+0008 que no eran el último de su equipo no tienen offset reconstruible: una falla de esa época queda
+marcada en vez de medirse con una cifra inventada.
 
 ### Evento de dominio y datos de demostración
 
@@ -666,6 +682,9 @@ de `src/app`; se avisan huérfanos (salvo convenciones de Next.js).
 23. **Una orden cerrada no cambia, y el historial no se toca.** Lo impone la base (trigger,
    permisos por columna, sin políticas de UPDATE/DELETE en `orden_eventos`), no solo el código. La
    corrección administrativa es el único camino, y siempre deja su evento.
+   **Las horas de una falla se miden con el offset de su fecha**, nunca con el de hoy.
+   **Un relleno de datos en una migración** desactiva `FORCE ROW LEVEL SECURITY` mientras dura:
+   FORCE alcanza también al dueño, y sin empresa fijada el UPDATE no vería ninguna fila.
 24. **«Quién reparó» es siempre un técnico.** Ni el administrador puede marcar Reparada: en una
    empresa sin técnico, se da de alta uno en vez de suplantar el campo.
 25. Antes de cada entrega: test automatizado de aislamiento entre tenants, OWASP Top 10 sobre lo nuevo,

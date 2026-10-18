@@ -32,7 +32,7 @@ from app.models.componente import Componente
 from app.models.lectura_horometro import LecturaHorometro
 from app.models.orden_trabajo import ABIERTOS, OrdenContador, OrdenEvento, OrdenTrabajo
 from app.models.usuario import Usuario
-from app.services import lecturas
+from app.services import activos, lecturas
 from app.services.capturas import activo_en_servicio, validar_instante
 
 #: Espacio de nombres del `cliente_id` de la lectura que registra cada falla. Se deriva del de la
@@ -283,6 +283,29 @@ async def _por_cliente_id(session: AsyncSession, cliente_id: UUID) -> OrdenTraba
     return resultado
 
 
+#: Motivo de revisión cuando no se sabe qué offset tenía el horómetro en la fecha de la falla.
+OFFSET_DESCONOCIDO = (
+    "No se sabe qué offset tenía el horómetro en la fecha de la falla (reinicio anterior a la "
+    "revisión 0008): revisa las horas acumuladas antes de confirmar."
+)
+
+
+async def _horas_acumuladas(
+    session: AsyncSession, activo: Activo, instante: datetime, dial: int
+) -> int | None:
+    """Lo que mide la fase 4: el dial más el offset **vigente en `instante`** (06-fase3, 5.1).
+
+    Con el offset de hoy, una falla capturada antes de un reinicio y recibida después contaría dos
+    veces todo lo que el equipo acumuló antes del cambio. Sin reinicios posteriores es el offset
+    actual, que se usa sin consultar. `None` si ese offset no se conoce.
+    """
+    if activo.horometro_actualizado_en is None or activo.horometro_actualizado_en <= instante:
+        # Ningún reinicio puede ser posterior a la última actualización del horómetro.
+        return activo.horometro_offset + dial
+    offset = await activos.offset_en(session, activo.id, instante)
+    return None if offset is None else offset + dial
+
+
 async def reportar_falla(
     session: AsyncSession,
     actor: Actor,
@@ -307,7 +330,8 @@ async def reportar_falla(
     2. Equipo en servicio bajo RLS (404 si no es de la empresa), componente del catálogo y alerta
        del mismo equipo, pendiente o revisada (422 o 409).
     3. La lectura de horómetro de la falla, con las reglas de la fase 2. Si queda marcada, la orden
-       hereda la marca y la fase 4 la excluye hasta que alguien confirme el horómetro.
+       hereda la marca y la fase 4 la excluye hasta que alguien confirme el horómetro. Las horas
+       acumuladas usan el offset vigente en el momento de la falla, no el de hoy (5.1).
     4. Número del contador e INSERT, en un savepoint: si choca, el número vuelve al contador.
     5. La alerta pasa a `convertida_en_orden` con un UPDATE condicionado.
     6. El evento «creada».
@@ -344,6 +368,13 @@ async def reportar_falla(
         ahora=ahora,
     )
     marcada = lectura.requiere_revision and lectura.resolucion is None
+    motivo = lectura.motivo_revision if marcada else None
+    horas = await _horas_acumuladas(session, activo, capturado_en, horometro)
+    if horas is None:
+        # Un reinicio anterior a la revisión 0008 cuyo offset no se pudo reconstruir: mejor una
+        # orden marcada que una vida de componente con una cifra inventada.
+        horas, marcada = activo.horometro_offset + horometro, True
+        motivo = motivo or OFFSET_DESCONOCIDO
     orden = OrdenTrabajo(
         empresa_id=actor.empresa_id,
         cliente_id=cliente_id,
@@ -353,14 +384,13 @@ async def reportar_falla(
         lectura_id=lectura.id,
         reportado_por=actor.usuario_id,
         horometro_en_falla=horometro,
-        # Lo que mide la fase 4: el dial más lo que el equipo acumuló antes del último reinicio.
-        horas_acumuladas_en_falla=activo.horometro_offset + horometro,
+        horas_acumuladas_en_falla=horas,
         temperatura=temperatura,
         codigo_error=codigo_error,
         descripcion=descripcion,
         fecha_falla=capturado_en,
         requiere_revision=marcada,
-        motivo_revision=lectura.motivo_revision if marcada else None,
+        motivo_revision=motivo,
     )
     try:
         async with session.begin_nested():
@@ -601,6 +631,10 @@ async def confirmar_horometro(session: AsyncSession, actor: Actor, orden_id: UUI
     Con la orden abierta, supervisor o administrador. Cerrada, es una corrección administrativa:
     solo el administrador, y deja un evento `correccion`. La lectura enlazada se confirma en la
     misma transacción, porque es la misma decisión.
+
+    Recalcula las horas acumuladas con el offset vigente en la fecha de la falla (5.1): un reinicio
+    resuelto después del reporte puede haberlo cambiado. Es el único momento en que esa columna
+    cambia, y lo impone el trigger `ot_horas_solo_al_confirmar` (revisión 0008).
     """
     await exigir_activo(session, actor)
     orden = await obtener(session, orden_id)
@@ -616,13 +650,18 @@ async def confirmar_horometro(session: AsyncSession, actor: Actor, orden_id: UUI
         if actor.rol != "administrador":
             raise SinPermiso("Con la orden cerrada, solo el administrador puede confirmarlo.")
         await get_estrategia_tenant().permitir_correccion(session)
+    activo: Activo = await session.get_one(Activo, orden.activo_id, populate_existing=True)
+    horas_antes = orden.horas_acumuladas_en_falla
+    horas = await _horas_acumuladas(session, activo, orden.fecha_falla, orden.horometro_en_falla)
+    if horas is None:
+        horas = horas_antes
     condiciones = [OrdenTrabajo.id == orden_id, OrdenTrabajo.requiere_revision.is_(True)]
     if abierta:
         condiciones.append(OrdenTrabajo.estado.in_(ABIERTOS))
     resultado = await session.execute(
         update(OrdenTrabajo)
         .where(*condiciones)
-        .values(requiere_revision=False)
+        .values(requiere_revision=False, horas_acumuladas_en_falla=horas)
         .execution_options(synchronize_session=False)
     )
     if resultado.rowcount == 0:
@@ -650,7 +689,14 @@ async def confirmar_horometro(session: AsyncSession, actor: Actor, orden_id: UUI
         orden,
         tipo="nota" if abierta else "correccion",
         nota="Horómetro de la falla confirmado.",
-        datos={"requiere_revision": {"antes": True, "despues": False}},
+        datos={
+            "requiere_revision": {"antes": True, "despues": False},
+            **(
+                {"horas_acumuladas_en_falla": {"antes": horas_antes, "despues": horas}}
+                if horas != horas_antes
+                else {}
+            ),
+        },
     )
     return orden
 

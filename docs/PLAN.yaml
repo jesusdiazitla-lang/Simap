@@ -173,6 +173,10 @@ milestones:
         modules: ["src/app/activos/[id]/falla/page.tsx"]
       - name: "Reinicio del horómetro (offset) y confirmación del horómetro desde la orden"
         status: done
+      - name: "Offset histórico: la falla usa el offset vigente en su fecha (revisión 0008)"
+        status: done
+        # Hallado en la revisión de cumplimiento del 2026-10-15. tests/test_ordenes.py:
+        # test_horometro_falla_previa_al_reinicio_usa_el_offset_de_su_momento.
       - name: "Evento de dominio orden_cerrada, publicado después del commit"
         modules: [app.core.eventos_dominio]
       - name: "Frontend: formulario de falla, bandeja y detalle de orden con acciones por rol"

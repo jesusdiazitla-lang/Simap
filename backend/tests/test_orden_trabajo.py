@@ -118,8 +118,9 @@ def test_rnf06_orden_cerrada_y_eventos_no_se_modifican_ni_se_borran() -> None:
 
 
 def test_rnf06_columnas_que_no_se_reescriben_nunca() -> None:
-    """Número, empresa, fecha de la falla, quién reportó y horas acumuladas no tienen permiso de
-    UPDATE para `app_user`, ni con la orden abierta (revisión 0007)."""
+    """Número, empresa, fecha de la falla y quién reportó no tienen permiso de UPDATE para
+    `app_user`, ni con la orden abierta (revisión 0007). Las horas acumuladas tienen su propio
+    cerrojo: `test_horas_acumuladas_solo_cambian_al_confirmar_el_horometro`."""
 
     async def escenario() -> None:
         (a,) = await sembrar("Empresa A")
@@ -129,7 +130,6 @@ def test_rnf06_columnas_que_no_se_reescriben_nunca() -> None:
         try:
             for columna, valor in (
                 ("numero", 99),
-                ("horas_acumuladas_en_falla", 1),
                 ("fecha_falla", datetime(2020, 1, 1, tzinfo=UTC)),
                 ("reportado_por", a.usuario_id),
             ):
@@ -142,6 +142,66 @@ def test_rnf06_columnas_que_no_se_reescriben_nunca() -> None:
                             {"v": valor, "i": fila["id"]},
                         )
                     await trans.rollback()
+        finally:
+            await motor.dispose()
+
+    correr(escenario())
+
+
+def test_horas_acumuladas_solo_cambian_al_confirmar_el_horometro() -> None:
+    """Revisión 0008: el trigger `ot_horas_solo_al_confirmar` deja cambiar las horas solo en la
+    misma escritura que quita la marca de revisión. Una cifra confirmada no se reescribe."""
+
+    async def escenario() -> None:
+        (a,) = await sembrar("Empresa A")
+        normal = fila_orden(a, numero=1, horas=500, estado="reportada")
+        await insertar_ordenes(a, [normal])
+        motor = motor_app()
+        try:
+            async with motor.connect() as conn:
+                trans = await conn.begin()
+                await fijar(conn, a.empresa_id)
+                with pytest.raises(DBAPIError, match="solo cambian al confirmar"):
+                    await conn.execute(
+                        text(
+                            "UPDATE ordenes_trabajo SET horas_acumuladas_en_falla = 1"
+                            " WHERE id = :i"
+                        ),
+                        {"i": normal["id"]},
+                    )
+                await trans.rollback()
+        finally:
+            await motor.dispose()
+        # La marcada, en otra empresa de prueba para no chocar con la única abierta por componente.
+        (b,) = await sembrar("Empresa B")
+        fila = fila_orden(b, numero=1, horas=500, estado="reportada", requiere_revision=True)
+        await insertar_ordenes(b, [fila])
+        motor = motor_app()
+        try:
+            async with motor.connect() as conn:
+                trans = await conn.begin()
+                await fijar(conn, b.empresa_id)
+                # Sin quitar la marca, tampoco.
+                with pytest.raises(DBAPIError, match="solo cambian al confirmar"):
+                    await conn.execute(
+                        text(
+                            "UPDATE ordenes_trabajo SET horas_acumuladas_en_falla = 1"
+                            " WHERE id = :i"
+                        ),
+                        {"i": fila["id"]},
+                    )
+                await trans.rollback()
+            async with motor.connect() as conn:
+                trans = await conn.begin()
+                await fijar(conn, b.empresa_id)
+                await conn.execute(
+                    text(
+                        "UPDATE ordenes_trabajo SET horas_acumuladas_en_falla = 1,"
+                        " requiere_revision = false WHERE id = :i"
+                    ),
+                    {"i": fila["id"]},
+                )
+                await trans.rollback()
         finally:
             await motor.dispose()
 

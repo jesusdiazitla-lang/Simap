@@ -121,7 +121,9 @@ hizo; el supervisor revisa lo que va a firmar y **autoriza la salida** del equip
 cuánto tiempo estuvo fuera de servicio. Cada paso queda con el nombre y el rol de quien lo dio, y una
 orden cerrada ya no se puede cambiar (salvo una corrección del administrador, que también queda
 anotada). Mientras haya una orden abierta, el equipo aparece **En falla** para todo el personal.
-Queda probarla en un teléfono real.
+Si a un equipo se le reinicia el horómetro, una falla anotada antes del cambio que llega después
+(desde un teléfono sin cobertura) se cuenta con las horas de su momento. Queda probarla en un
+teléfono real.
 
 **La fase 2 está construida.** Los equipos llevan su etiqueta QR, el personal registra el
 horómetro y las alertas desde el teléfono —también sin cobertura—, y el supervisor revisa lo que no

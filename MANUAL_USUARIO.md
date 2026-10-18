@@ -325,6 +325,9 @@ cualquier momento, también con la orden cerrada. El **gerente** consulta las ó
   escribe lo que marca ahora y **Reiniciar**.
 - Las lecturas que alguien tomó antes del cambio y llegan después (desde un teléfono sin red) quedan
   marcadas para revisar.
+- Lo mismo con una **falla** reportada antes del cambio que llega después: la orden queda **Horómetro
+  por confirmar**, y SIMAP ya cuenta sus horas como eran **antes** del reinicio. Al confirmarla no
+  cambian, y no se suman dos veces las horas que el equipo llevaba.
 
 ### 5.6 ⏳ Gestionar el inventario de repuestos
 - **Objetivo:** saber qué repuestos hay y avisar antes de quedarse sin ellos.
@@ -540,6 +543,7 @@ En `http://<servidor>:8000/api/v1/health` aparece `"version"`.
 | 2026-10-02 | 0.6.0 | **Cambiar tu contraseña**, en el panel y en la consola del operador (nueva sección 5.0.1). Al cambiarla, o cuando te la restablecen, se cierran tus sesiones en otros aparatos. El acceso a la consola del operador pasa a tener límite de intentos. |
 | 2026-10-02 | 0.6.0 | Sin conexión, SIMAP muestra su propio aviso en lugar del error del navegador. Quien entra sin sesión va directo a la pantalla de acceso, sin pantallas intermedias. Corregida la sección 3.4, que describía un registro de intentos que ya no aparece en pantalla. |
 | 2026-10-07 | 0.7.0 | **Fase 2: equipos y registro de campo.** Equipos con etiqueta QR imprimible (5.1); horómetro (5.2) y alertas (5.3) desde el teléfono en tres pasos; **funciona sin cobertura** y lo pendiente se envía solo (5.3.1); bandeja de alertas y de lecturas que no cuadran, con reinicio del horómetro (5.3.2); el administrador gestiona su personal y el catálogo de componentes (5.9). |
+| 2026-10-15 | 0.8.1 | Corrección: una falla reportada sin cobertura **antes** de un reinicio del horómetro, que llega después, ya no cuenta dos veces las horas que el equipo llevaba antes del cambio (5.5.2). Afecta a la vida de los componentes que usará el cálculo de riesgo. |
 | 2026-10-14 | 0.8.0 | **Fase 3: órdenes de trabajo.** Reportar una falla desde el equipo o desde una alerta abre una orden numerada (5.4); el taller la lleva de «Reportada» a «Reparada» y un supervisor autoriza su salida, con el tiempo fuera de servicio calculado; rechazo de cierre, cancelación con motivo, notas e historial completo con cada responsable (5.5). Corrección administrativa de una orden cerrada (5.5.1) y reinicio del horómetro sin perder las horas del equipo (5.5.2). Los equipos con una orden abierta aparecen **En falla**. Nueva rama **Mantenimiento** en el menú. |
 | 2026-10-11 | 0.7.2 | **Menú lateral en árbol**, agrupado por área de trabajo; en el teléfono se abre con el botón **Menú** (3.5). Las lecturas por revisar tienen su propia entrada en el menú. |
 | 2026-10-11 | 0.7.1 | El horómetro solo admite horas enteras: un decimal se rechaza con un aviso en vez de convertirse en un dígito de más (5.2). Si dos supervisores revisan lo mismo a la vez, cuenta la primera decisión (5.3.2). |

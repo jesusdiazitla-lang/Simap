@@ -32,7 +32,7 @@
 |---|---|---|
 | RF-11 | Reportar una falla con horómetro, temperatura, código de error y componente. | Esencial |
 | RF-12 | Generar una orden de trabajo automáticamente al reportar una falla. | Esencial |
-| RF-13 | Cambiar el estado de una orden: Reportada, En taller, Reparada, Cerrada. | Esencial |
+| RF-13 | Cambiar el estado de una orden: Reportada, En taller, Reparada, Cerrada, y **Cancelada** con motivo. *[Actualizado en F3, decisión 1 de `06-fase3-ordenes-de-trabajo.md` §4, confirmada el 2026-10-14.]* | Esencial |
 | RF-14 | Registrar el responsable de cada estado (reportó, reparó, autorizó). | Esencial |
 | RF-15 | Calcular el tiempo fuera de servicio al cerrar una orden. | Importante |
 | RF-16 | Vincular una alerta previa a la orden de trabajo que origina. | Deseable |
@@ -84,7 +84,7 @@ Operario · Supervisor · Técnico de Taller · Gerente/Stakeholder · Administr
 |---|---|
 | CU-01 Reportar Alerta | Operario |
 | CU-02 Reportar Falla y Generar Orden de Trabajo | Supervisor |
-| CU-03 Actualizar y Cerrar Orden de Trabajo | Técnico de Taller; Supervisor o Gerente |
+| CU-03 Actualizar y Cerrar Orden de Trabajo | Técnico de Taller; Supervisor o Administrador *[Actualizado en F3, decisión 2 de `06-fase3-ordenes-de-trabajo.md` §4, confirmada el 2026-10-14.]* |
 | CU-04 Calcular Riesgo de Falla de un Activo | Sistema (automático) |
 | CU-05 Registrar Nuevo Activo con Código QR | Administrador |
 | CU-06 Gestionar Stock de Repuestos | Administrador o Supervisor |
@@ -99,6 +99,9 @@ Operario · Supervisor · Técnico de Taller · Gerente/Stakeholder · Administr
 ### CU-02 Reportar Falla y Generar Orden de Trabajo
 - **Pre:** sesión activa; activo y catálogo de componentes existen. **Post:** orden en `reportada`; el activo queda
   marcado en falla hasta que la orden se cierre.
+- **Nota (F3):** «marcado en falla» no es un dato guardado en el activo sino **derivado**: el activo está en falla
+  mientras tenga alguna orden abierta. Una columna duplicada acabaría desincronizándose
+  (`06-fase3-ordenes-de-trabajo.md`, §6.2). *[Actualizado en F3, sección 16 de la guía.]*
 - **Flujo:** escanear QR o buscar → "Reportar falla" → ingresar horómetro, temperatura, código de error, componente,
   descripción → confirmar → crear orden vinculada a activo, componente y supervisor → actualizar `horometro_actual` y
   `fecha_ultima_falla` del activo.
@@ -107,8 +110,11 @@ Operario · Supervisor · Técnico de Taller · Gerente/Stakeholder · Administr
 ### CU-03 Actualizar y Cerrar Orden de Trabajo
 - **Pre:** orden en `reportada` o `en_taller`. **Post:** orden `cerrada` con trazabilidad; stock actualizado.
 - **Flujo:** técnico marca `en_taller` → repara y registra trabajo + repuestos → marca `reparada` → sistema descuenta
-  inventario → supervisor/gerente autoriza cierre → `cerrada`, registra `autorizado_por` y calcula tiempo fuera de servicio.
+  inventario → supervisor o administrador autoriza cierre → `cerrada`, registra `autorizado_por` y calcula tiempo fuera
+  de servicio. El gerente consulta las órdenes pero no las mueve. *[Actualizado en F3, decisión 2 de `06-fase3-ordenes-de-trabajo.md` §4, confirmada el 2026-10-14.]*
 - **Alternativo:** cierre rechazado por reparación incompleta → vuelve a `en_taller` con nota.
+- **Alternativo:** orden reportada por error o duplicada → supervisor o administrador la **cancela** con motivo; no se
+  borra, libera el componente y, si venía de una alerta, la devuelve a `revisada`. *[Actualizado en F3, decisión 1 de `06-fase3-ordenes-de-trabajo.md` §4, confirmada el 2026-10-14.]*
 
 ### CU-04 Calcular Riesgo de Falla de un Activo (automático)
 - **Pre:** el componente tiene historial o modelo pre-cargado con dataset público. **Post:** riesgo actualizado; alerta

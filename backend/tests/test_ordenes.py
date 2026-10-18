@@ -419,3 +419,42 @@ def test_horometro_reinicio_conserva_las_horas_acumuladas(
     assert orden["horometro_en_falla"] == 1
     assert orden["horas_acumuladas_en_falla"] == 1001
     assert orden["requiere_revision"] is False
+
+
+def test_horometro_falla_previa_al_reinicio_usa_el_offset_de_su_momento(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Sección 5.1: una falla capturada antes del reinicio que llega después por la cola se mide
+    con el offset que había entonces, queda marcada, y confirmar el horómetro no la estropea.
+
+    Con el offset de hoy, esta falla valdría 2005 h: la vida del componente entraría inflada en
+    1000 h en `v_intervalos_entre_fallas` y deformaría el ajuste Weibull sin que nada avisara.
+    """
+    planta = montar_planta(client, monkeypatch, "Planta")
+    activo = planta.nuevo_activo(horometro_inicial=1000)
+    ruta = f"/activos/{activo['id']}/reinicio-horometro"
+    resp = planta.pedir(planta.admin, "POST", ruta, json={"nuevo": 0})
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["horometro_offset"] == 1000
+
+    orden = planta.orden(activo["id"], horometro=1005, capturado_en=hace(minutes=10))
+    assert orden["horas_acumuladas_en_falla"] == 1005
+    assert orden["requiere_revision"] is True
+
+    confirmada = planta.pedir(
+        planta.supervisor, "POST", f"/ordenes/{orden['id']}/confirmar-horometro"
+    )
+    assert confirmada.status_code == 200, confirmada.text
+    assert confirmada.json()["requiere_revision"] is False
+    assert confirmada.json()["horas_acumuladas_en_falla"] == 1005
+
+    planta.llevar_a_reparada(orden["id"])
+    assert planta.mover(planta.supervisor, orden["id"], "cerrar").status_code == 200
+    cerrada = planta.pedir(planta.gerente, "GET", f"/ordenes/{orden['id']}").json()
+    assert cerrada["estado"] == "cerrada"
+    assert cerrada["horas_acumuladas_en_falla"] == 1005
+
+    # Una falla posterior al reinicio sigue usando el offset nuevo.
+    bomba = planta.componente("Bomba de aceite")
+    otra = planta.orden(activo["id"], horometro=3, componente_id=bomba)
+    assert otra["horas_acumuladas_en_falla"] == 1003
