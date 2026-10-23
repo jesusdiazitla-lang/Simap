@@ -213,6 +213,8 @@ milestones:
         modules: [app.services.prediccion.riesgo, app.services.prediccion.tareas]
       - name: "Alertas del sistema con deduplicación, histéresis y silencio; orden predictiva y conversión en falla (RF-21)"
         modules: [app.services.prediccion.alertas, app.api.v1.routes.prediccion]
+        # Revisión 0010 (2026-10-23): la conversión registra su lectura con las reglas de F2 y hereda
+        # la marca. test_rf21_convertir_en_falla_con_horometro_incoherente_queda_en_revision.
       - name: "Job nocturno como job_user, con candado por empresa (RF-22)"
         modules: [app.jobs.recalculo_riesgo, app.jobs.diario, app.jobs.programador]
         # Local: APScheduler dentro del backend (JOB_DIARIO_EN_PROCESO). Producción: cron de Railway.

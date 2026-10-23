@@ -450,6 +450,39 @@ def test_rf21_convertir_en_falla_cambia_el_dato_del_modelo(
     assert modelo(planta, comp)["n_eventos"] == 1
 
 
+@pytest.mark.parametrize("horometro", [1, 999_999], ids=["digitos_de_menos", "digitos_de_mas"])
+def test_rf21_convertir_en_falla_con_horometro_incoherente_queda_en_revision(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, horometro: int
+) -> None:
+    """La conversión en falla registra la lectura con las reglas de la fase 2, como un reporte de
+    falla (F3, 6.2). Un horómetro que no cuadra deja la orden marcada y fuera del modelo hasta que
+    alguien lo confirme (07-fase4, 12.2): un error al teclear no puede estropear la curva del
+    componente para toda la empresa."""
+    planta = montar_planta(client, monkeypatch, "Planta")
+    activo, comp = riesgo_alto(planta)
+    planta.riesgo(activo)
+    alerta = bandeja(planta, activo)[0]
+    orden = planta.pedir(planta.supervisor, "POST", f"/alertas-sistema/{alerta['id']}/orden").json()
+    # La falla es de ahora: después de la lectura inicial de 3000 h con la que se creó el equipo.
+    cuerpo = {"horometro": horometro, "fecha_falla": ahora().isoformat()}
+    resp = planta.pedir(
+        planta.supervisor, "POST", f"/ordenes/{orden['id']}/convertir-en-falla", json=cuerpo
+    )
+    assert resp.status_code == 200, resp.text
+    convertida = resp.json()
+    assert convertida["es_predictiva"] is False
+    assert convertida["requiere_revision"] is True
+    assert convertida["motivo_revision"]
+    assert convertida["lectura_id"] is not None
+    # La lectura quedó marcada y no movió el horómetro del equipo.
+    ficha = planta.pedir(planta.supervisor, "GET", f"/activos/{activo}").json()
+    assert ficha["horometro_actual"] == 3000
+    # Cerrada sin confirmar, la falla no entra al modelo.
+    planta.llevar_a_reparada(orden["id"], "reemplazo")
+    assert planta.mover(planta.supervisor, orden["id"], "cerrar").status_code == 200
+    assert modelo(planta, comp)["n_eventos"] == 0
+
+
 def test_configuracion_solo_la_cambia_el_administrador_y_respeta_los_limites(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:

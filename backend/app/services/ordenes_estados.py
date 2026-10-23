@@ -31,7 +31,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from typing import Any
-from uuid import UUID
+from uuid import UUID, uuid5
 
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -40,12 +40,13 @@ from app.core import eventos_dominio, registro
 from app.models.activo import Activo
 from app.models.alerta import Alerta
 from app.models.orden_trabajo import ABIERTOS, OrdenTrabajo
-from app.services import inventario
+from app.services import inventario, lecturas
 from app.services.capturas import validar_instante
 from app.services.ordenes import (
+    ESPACIO_LECTURA_DE_FALLA,
+    OFFSET_DESCONOCIDO,
     Actor,
     Conflicto,
-    ReferenciaInvalida,
     ahora,
     exigir_activo,
     explicar_cambio,
@@ -261,6 +262,15 @@ async def cancelar(
     return orden
 
 
+def _no_convertible(orden: OrdenTrabajo) -> Conflicto:
+    return Conflicto(
+        "estado_cambiado",
+        "La orden ya no es predictiva o ya no está abierta: no se puede convertir en falla.",
+        orden_id=orden.id,
+        numero=orden.numero,
+    )
+
+
 async def convertir_en_falla(
     session: AsyncSession,
     actor: Actor,
@@ -274,19 +284,39 @@ async def convertir_en_falla(
     Si el equipo falla mientras se esperaba el repuesto, ese dato es una falla y no puede quedar
     como censura. Solo con la orden abierta y predictiva; una que ya es falla no se convierte otra
     vez (409 `estado_cambiado`). Las horas acumuladas usan el offset vigente en la fecha de la falla
-    (F3, 5.1). El trigger `ot_datos_de_falla` solo deja reescribir dial, horas y fecha en esta
-    misma escritura que apaga `es_predictiva`.
+    (F3, 5.1). El trigger `ot_datos_de_falla` solo deja reescribir dial, horas, fecha y lectura en
+    esta misma escritura que apaga `es_predictiva`.
+
+    El horómetro pasa por las reglas de lectura de la fase 2, **igual que un reporte de falla**
+    (F3, 6.2): se registra la lectura con el identificador derivado del de la orden y, si queda
+    marcada, la orden la hereda y queda fuera del modelo hasta `confirmar-horometro` (07-fase4,
+    12.2). Sin esto, un dígito de más o de menos al teclear deformaba la curva del componente.
     """
     await exigir_activo(session, actor)
     validar_instante(fecha_falla, None)
     previa = await obtener(session, orden_id)
+    if not previa.es_predictiva or previa.estado not in ABIERTOS:
+        # El caso común se responde antes de registrar la lectura; el UPDATE condicionado de abajo
+        # sigue siendo quien decide si dos personas convierten a la vez.
+        raise _no_convertible(previa)
     activo = await session.scalar(select(Activo).where(Activo.id == previa.activo_id))
     assert activo is not None
+    _, lectura = await lecturas.registrar(
+        session,
+        empresa_id=actor.empresa_id,
+        autor_id=actor.usuario_id,
+        activo_id=previa.activo_id,
+        valor=horometro,
+        capturado_en=fecha_falla,
+        cliente_id=uuid5(ESPACIO_LECTURA_DE_FALLA, str(previa.cliente_id)),
+    )
+    marcada = lectura.requiere_revision and lectura.resolucion is None
+    motivo = lectura.motivo_revision if marcada else None
     horas = await horas_acumuladas(session, activo, fecha_falla, horometro)
     if horas is None:
-        raise ReferenciaInvalida(
-            "No se sabe qué offset tenía el horómetro en esa fecha: revisa el reinicio del equipo."
-        )
+        # Como en el reporte: mejor una orden marcada que una vida con una cifra inventada.
+        horas, marcada = activo.horometro_offset + horometro, True
+        motivo = motivo or OFFSET_DESCONOCIDO
     resultado = await session.execute(
         update(OrdenTrabajo)
         .where(
@@ -299,16 +329,14 @@ async def convertir_en_falla(
             horometro_en_falla=horometro,
             horas_acumuladas_en_falla=horas,
             fecha_falla=fecha_falla,
+            lectura_id=lectura.id,
+            requiere_revision=marcada,
+            motivo_revision=motivo,
         )
         .execution_options(synchronize_session=False)
     )
     if resultado.rowcount == 0:
-        raise Conflicto(
-            "estado_cambiado",
-            "La orden ya no es predictiva o ya no está abierta: no se puede convertir en falla.",
-            orden_id=previa.id,
-            numero=previa.numero,
-        )
+        raise _no_convertible(previa)
     orden = await obtener(session, orden_id, refrescar=True)
     await registrar_evento(
         session,
@@ -321,9 +349,10 @@ async def convertir_en_falla(
             "horometro": horometro,
             "horas_acumuladas": horas,
             "fecha_falla": fecha_falla,
+            "requiere_revision": marcada,
         },
     )
-    registro.evento("ordenes.convertida_en_falla")
+    registro.evento("ordenes.convertida_en_falla", requiere_revision=marcada)
     return orden
 
 

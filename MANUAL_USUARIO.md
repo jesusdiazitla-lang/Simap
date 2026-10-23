@@ -380,7 +380,9 @@ cualquier momento, también con la orden cerrada. El **gerente** consulta las ó
   resuelve sola**. Así un riesgo que ronda el umbral no crea y borra alertas cada noche.
 - **Si el equipo falla antes del cambio planificado**, en la orden predictiva usa **Convertir en
   falla** con el horómetro y la fecha reales: deja de ser un cambio planificado y cuenta como falla
-  para el cálculo.
+  para el cálculo. Ese horómetro se revisa como cualquier lectura: si no cuadra con las del equipo
+  (por ejemplo, un dígito de más o de menos), la orden queda **Horómetro por confirmar** y no cuenta
+  para el cálculo hasta que alguien lo confirme.
 - **Si otra persona ya la gestionó**, la bandeja te avisa y se recarga.
 
 ### 5.6.2 ✅ Componentes del equipo, vida nominal y configuración (administrador)
@@ -667,6 +669,7 @@ En `http://<servidor>:8000/api/v1/health` aparece `"version"`.
 | 2026-10-02 | 0.6.0 | **Cambiar tu contraseña**, en el panel y en la consola del operador (nueva sección 5.0.1). Al cambiarla, o cuando te la restablecen, se cierran tus sesiones en otros aparatos. El acceso a la consola del operador pasa a tener límite de intentos. |
 | 2026-10-02 | 0.6.0 | Sin conexión, SIMAP muestra su propio aviso en lugar del error del navegador. Quien entra sin sesión va directo a la pantalla de acceso, sin pantallas intermedias. Corregida la sección 3.4, que describía un registro de intentos que ya no aparece en pantalla. |
 | 2026-10-07 | 0.7.0 | **Fase 2: equipos y registro de campo.** Equipos con etiqueta QR imprimible (5.1); horómetro (5.2) y alertas (5.3) desde el teléfono en tres pasos; **funciona sin cobertura** y lo pendiente se envía solo (5.3.1); bandeja de alertas y de lecturas que no cuadran, con reinicio del horómetro (5.3.2); el administrador gestiona su personal y el catálogo de componentes (5.9). |
+| 2026-10-23 | 0.9.1 | Corrección: el horómetro que se escribe al **convertir en falla** una orden predictiva se revisa como cualquier lectura. Si no cuadra con las del equipo, la orden queda «Horómetro por confirmar» y no entra al cálculo de riesgo hasta que se confirme (5.6.1). Antes, un error al teclear podía deformar el modelo del componente para toda la empresa. |
 | 2026-10-22 | 0.9.0 | **Fase 4: predicción e inventario.** Riesgo de falla de cada componente con su respaldo y su confianza, también sin cobertura como último valor conocido (5.6); lista de equipos por riesgo y modelo de cada componente con su curva de aprendizaje; **alertas del sistema** y **orden predictiva** para cambiar una pieza antes de que falle (5.6.1); edad de las piezas, vida nominal y configuración de la predicción (5.6.2); **inventario** con libro de movimientos, ingresos, conteos y alerta de reorden (5.7); repuestos usados en la orden, descontados al autorizar el cierre (5.7.1). Reescrita la sección 6. |
 | 2026-10-15 | 0.8.1 | Corrección: una falla reportada sin cobertura **antes** de un reinicio del horómetro, que llega después, ya no cuenta dos veces las horas que el equipo llevaba antes del cambio (5.5.2). Afecta a la vida de los componentes que usará el cálculo de riesgo. |
 | 2026-10-14 | 0.8.0 | **Fase 3: órdenes de trabajo.** Reportar una falla desde el equipo o desde una alerta abre una orden numerada (5.4); el taller la lleva de «Reportada» a «Reparada» y un supervisor autoriza su salida, con el tiempo fuera de servicio calculado; rechazo de cierre, cancelación con motivo, notas e historial completo con cada responsable (5.5). Corrección administrativa de una orden cerrada (5.5.1) y reinicio del horómetro sin perder las horas del equipo (5.5.2). Los equipos con una orden abierta aparecen **En falla**. Nueva rama **Mantenimiento** en el menú. |

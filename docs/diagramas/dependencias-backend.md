@@ -370,6 +370,7 @@ graph LR
   app_services_ordenes_estados --> app_models_orden_trabajo
   app_services_ordenes_estados --> app_services_capturas
   app_services_ordenes_estados --> app_services_inventario
+  app_services_ordenes_estados --> app_services_lecturas
   app_services_ordenes_estados --> app_services_ordenes
   app_services_ordenes_estados --> app_services_prediccion_ajuste
   app_services_ordenes_estados --> app_services_prediccion_alertas

@@ -649,7 +649,7 @@ PostgreSQL (candado consultivo, `statement_timeout`, `empresas_activas()`) está
 | `GET` · `PUT /configuracion/prediccion` | lectura: supervisor, gerente, administrador · PUT: administrador |
 | `GET /alertas-sistema` | supervisor, gerente, administrador |
 | `POST /alertas-sistema/{id}/reconocer` · `/descartar` · `/orden` | supervisor, administrador |
-| `POST /ordenes/{id}/convertir-en-falla` | supervisor, administrador |
+| `POST /ordenes/{id}/convertir-en-falla` | supervisor, administrador (registra la lectura con las reglas de F2, como un reporte de falla; revisión 0010) |
 | `GET /repuestos` · `GET /repuestos/{id}` | supervisor, técnico, gerente, administrador |
 | `POST /repuestos` · `PATCH /repuestos/{id}` · `POST /repuestos/{id}/ajuste` | administrador |
 | `POST /repuestos/{id}/ingresos` | supervisor, administrador |
@@ -1086,14 +1086,14 @@ npm run lint ; npm run graph:check
 <!-- graph:auto:start -->
 _Sección generada por `python tools/graph/graph.py docs`. No editar a mano; se sobrescribe en cada push a `main`._
 
-Última actualización: 2026-10-23 03:03 UTC
+Última actualización: 2026-10-23 09:17 UTC
 
 ### Estado del proyecto
 
 ```text
 === ESTADO DEL CÓDIGO ===
 
-[backend]  módulos: 71   LOC: 10587   TODO/FIXME: 0
+[backend]  módulos: 71   LOC: 10613   TODO/FIXME: 0
   con test: 52/71   stubs/vacíos: 0
   por capa: api=14, cli=1, core=8, db=3, jobs=3, main=1, models=11, schemas=9, services=21
 
@@ -1255,11 +1255,11 @@ AVANCE GLOBAL: 55/64 tareas (85%)
 | `app.services.capturas` | services | 2 | 9 | 53 | ✅ |
 | `app.services.componentes` | services | 2 | 3 | 97 | ✅ |
 | `app.services.inventario` | services | 6 | 2 | 452 | ✅ |
-| `app.services.lecturas` | services | 8 | 3 | 288 | ✅ |
+| `app.services.lecturas` | services | 8 | 4 | 288 | ✅ |
 | `app.services.limites` | services | 2 | 5 | 50 | ✅ |
 | `app.services.operador` | services | 8 | 1 | 323 | ✅ |
 | `app.services.ordenes` | services | 14 | 7 | 677 | ✅ |
-| `app.services.ordenes_estados` | services | 10 | 1 | 304 | ✅ |
+| `app.services.ordenes_estados` | services | 11 | 1 | 330 | ✅ |
 | `app.services.prediccion.ajuste` | services | 4 | 6 | 214 | — |
 | `app.services.prediccion.alertas` | services | 8 | 2 | 267 | ✅ |
 | `app.services.prediccion.componentes_equipo` | services | 4 | 2 | 147 | — |

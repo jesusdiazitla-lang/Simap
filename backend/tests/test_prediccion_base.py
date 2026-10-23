@@ -381,10 +381,10 @@ def test_rf25_doble_descuento_imposible_y_stock_nunca_negativo() -> None:
 
 
 def test_datos_de_la_falla_solo_cambian_al_convertir_en_falla() -> None:
-    """Dial, horas y fecha de una orden solo se reescriben en la escritura que apaga
-    `es_predictiva` (trigger `ot_datos_de_falla`, revisión 0009)."""
+    """Dial, horas, fecha y lectura de una orden solo se reescriben en la escritura que apaga
+    `es_predictiva` (trigger `ot_datos_de_falla`, revisiones 0009 y 0010)."""
 
-    async def escenario() -> tuple[str, str]:
+    async def escenario() -> tuple[str, str, str]:
         (a,) = await sembrar("Empresa A")
         fila = fila_orden(a, numero=1, horas=500, estado="reportada")
         await insertar_ordenes(a, [fila])
@@ -409,6 +409,18 @@ def test_datos_de_la_falla_solo_cambian_al_convertir_en_falla() -> None:
             async with motor.connect() as conn:
                 trans = await conn.begin()
                 await fijar(conn, a.empresa_id)
+                try:
+                    await conn.execute(
+                        text("UPDATE ordenes_trabajo SET lectura_id = :l WHERE id = :i"),
+                        {"i": fila["id"], "l": uuid4()},
+                    )
+                    reenlazar = "aceptada"
+                except DBAPIError as exc:
+                    reenlazar = str(exc)
+                await trans.rollback()
+            async with motor.connect() as conn:
+                trans = await conn.begin()
+                await fijar(conn, a.empresa_id)
                 await conn.execute(
                     text(
                         "UPDATE ordenes_trabajo SET fecha_falla = now(), horometro_en_falla = 510,"
@@ -420,10 +432,11 @@ def test_datos_de_la_falla_solo_cambian_al_convertir_en_falla() -> None:
                 convirtiendo = "aceptada"
         finally:
             await motor.dispose()
-        return sin_convertir, convirtiendo
+        return sin_convertir, reenlazar, convirtiendo
 
-    sin_convertir, convirtiendo = correr(escenario())
+    sin_convertir, reenlazar, convirtiendo = correr(escenario())
     assert "solo cambian al convertirla" in sin_convertir
+    assert "solo se fija al convertirla" in reenlazar
     assert convirtiendo == "aceptada"
 
 

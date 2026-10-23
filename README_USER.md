@@ -124,6 +124,8 @@ pieza antes de que falle. El modelo aprende solo: cada orden cerrada lo reajusta
 **libro** de cada entrada y salida; los repuestos que anota el técnico se descuentan al autorizar el
 cierre, y si no alcanzan, el cierre no se hace y SIMAP dice qué falta. Cuando un repuesto baja de su
 mínimo, avisa. Sin cobertura, la pantalla del equipo enseña el último riesgo conocido con su hora.
+Un horómetro que no cuadra —también el de una orden predictiva que se convierte en falla— no
+entra al cálculo hasta que alguien lo confirma: un error al teclear no estropea el modelo.
 
 Las cuentas de demostración (empresa «Demo») traen una flota simulada con dos casos para verlo: una
 bomba con la pieza vieja, reparada tres veces sin cambiarla (riesgo alto), y otra con la pieza recién

@@ -655,12 +655,14 @@ aislamiento y cierra el checklist OWASP. Antes conviene correr la validación re
 | `empresas_activas()` | SECURITY DEFINER sobre `empresas` | Igual, más la política `empresas_lista_para_el_job` para `simap_owner` | `empresas` tiene `FORCE RLS`: el dueño veía cero filas (el PDF lo advierte en 7.10) |
 | `job_user` | Lo crea la migración | Lo crea `backend/db/roles.sql` (superusuario); la migración solo concede `EXECUTE` si existe | `simap_owner` no puede crear roles |
 | Job nocturno | Cron de Railway | `python -m app.jobs.diario` (el comando del cron) y, en local, APScheduler dentro del backend (`app.jobs.programador`, `JOB_DIARIO_EN_PROCESO=true`) | Decisión de implementación; el despliegue no se hace todavía |
-| Trigger de datos de falla | El de la Fase 3 (`ot_horas_solo_al_confirmar`) | Se reemplaza por `ot_datos_de_falla`: las horas solo cambian al confirmar el horómetro o al convertir en falla; horómetro y fecha, solo al convertir | La conversión en falla (6.4) necesita cambiar esos datos y nada más debe poder |
+| Trigger de datos de falla | El de la Fase 3 (`ot_horas_solo_al_confirmar`) | Se reemplaza por `ot_datos_de_falla`: las horas solo cambian al confirmar el horómetro o al convertir en falla; horómetro, fecha y lectura enlazada, solo al convertir | La conversión en falla (6.4) necesita cambiar esos datos y nada más debe poder |
+| Horómetro al convertir en falla (6.4) | La sentencia escribe el horómetro y las horas directamente en la orden | Revisión `0010`: la conversión registra la lectura con las reglas de la fase 2, con el identificador derivado del de la orden, igual que un reporte de falla (F3, 6.2). Si la lectura queda marcada, la orden hereda `requiere_revision` y su motivo, queda fuera de `v_vidas` y se confirma con `confirmar-horometro`. `app_user` puede fijar `lectura_id` solo en esa escritura (trigger) | Hallado en la revisión del 2026-10-23: con el SQL del PDF, un horómetro de 1 o de 999.999 h entraba al modelo sin marca y dejaba β en 0,64 o en el mínimo (0,3). La guía (12.2) pide que los horómetros dudosos queden fuera hasta confirmarse. Test: `test_rf21_convertir_en_falla_con_horometro_incoherente_queda_en_revision` |
 | Edad en `/activos/[id]/componentes` | «Unidad actual» | El campo es la **pieza inicial**; la edad mostrada es la del último cálculo (cuenta los reemplazos de las órdenes) | Encontrado en la revisión visual: mostrar «horas − instalación» ignoraba los reemplazos |
 
 ### Dónde está cada cosa
 
-- Migración: `backend/alembic/versions/20261018_0009_prediccion_e_inventario.py`. Rol del job:
+- Migraciones: `backend/alembic/versions/20261018_0009_prediccion_e_inventario.py` y
+  `20261023_0010_lectura_al_convertir_en_falla.py`. Rol del job:
   `backend/db/roles.sql`.
 - Modelos: `app/models/prediccion.py` y `app/models/repuesto.py`.
 - Servicios: `app/services/prediccion/` (`weibull`, `configuracion`, `componentes_equipo`, `ajuste`,
