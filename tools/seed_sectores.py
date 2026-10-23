@@ -276,6 +276,9 @@ class Falla:
 
 
 async def vaciar(conn: AsyncConnection) -> int:
+    # Las líneas de órdenes cerradas no se pueden borrar (trigger `orden_repuesto_inmutable`) salvo
+    # en una transacción que fije `app.correccion`, el mismo escape de la corrección administrativa.
+    await conn.execute(text("SELECT set_config('app.correccion', 'on', true)"))
     empresas = (await conn.execute(text("SELECT count(*) FROM empresas"))).scalar_one()
     for tabla in TABLAS:
         await conn.execute(text(f"DELETE FROM {tabla}"))

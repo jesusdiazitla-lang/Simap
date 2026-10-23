@@ -199,6 +199,9 @@ async def insertar(conn: AsyncConnection, tabla: str, **valores: object) -> None
 
 
 async def borrar(conn: AsyncConnection) -> int:
+    # Las líneas de órdenes cerradas no se pueden borrar (trigger `orden_repuesto_inmutable`) salvo
+    # en una transacción que fije `app.correccion`, el mismo escape de la corrección administrativa.
+    await conn.execute(text("SELECT set_config('app.correccion', 'on', true)"))
     ids = [r[0] for r in (await conn.execute(text("SELECT id FROM empresas WHERE nombre = :n"), {"n": NOMBRE})).all()]
     for empresa_id in ids:
         for tabla in TABLAS:

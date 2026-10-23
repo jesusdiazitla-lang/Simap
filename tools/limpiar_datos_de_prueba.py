@@ -144,6 +144,9 @@ async def limpiar(ejecutar: bool) -> int:
                 print("\nNada borrado. Repite con --ejecutar para hacerlo de verdad.")
                 return 0
 
+            # Las líneas de órdenes cerradas no se pueden borrar (trigger `orden_repuesto_inmutable`)
+            # salvo en una transacción que fije `app.correccion`, el escape de la corrección administrativa.
+            await conn.execute(text("SELECT set_config('app.correccion', 'on', true)"))
             # El orden importa: la bitácora tiene una clave foránea RESTRICT hacia `operadores`,
             # así que hay que vaciar sus asientos antes de poder borrar a quien los escribió.
             await conn.execute(
