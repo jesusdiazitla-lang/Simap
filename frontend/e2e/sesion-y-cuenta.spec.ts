@@ -121,7 +121,8 @@ test("un usuario de planta cambia su contraseña desde el panel", async ({ page,
     await page.getByRole("button", { name: "Entrar" }).click();
     await expect(page).toHaveURL(/\/panel$/);
 
-    await page.getByRole("link", { name: "Cambiar contraseña" }).click();
+    // El enlace está también en el menú lateral: se usa el del panel.
+    await page.getByRole("main").getByRole("link", { name: "Cambiar contraseña" }).click();
     await expect(page).toHaveURL(/\/panel\/clave$/);
 
     // Lo que se comprueba en el navegador antes de molestar al servidor.

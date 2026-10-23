@@ -12,6 +12,8 @@ comportamiento del código ya escrito.
 | `04-fase1-fundamentos.md` | El **alcance de F1**: auth, multi-tenant, RLS y su definición de "hecho" |
 | `05-fase2-activos-y-campo.md` | El **alcance de F2**: activos, QR, horómetro, alertas, sin conexión; anexo con la implementación |
 | `06-fase3-ordenes-de-trabajo.md` | El **alcance de F3**: órdenes de trabajo, máquina de estados, historial, reinicio del horómetro; las ocho decisiones confirmadas y anexo con la implementación |
+| `07-fase4-prediccion-e-inventario.md` | El **alcance de F4**: modelo Weibull con censura, riesgo, alertas del sistema, orden predictiva, inventario con libro; las trece decisiones confirmadas y anexo con la implementación y sus desviaciones |
+| `anexos/experimentos-fase4.md` | Resultados reproducidos de la validación con simulaciones (F4, sección 14), generados por `tools/experimentos_fase4.py` |
 
 El DDL y las políticas RLS están copiados tal cual en `backend/db/schema.sql` y
 `backend/db/rls_policies.sql`. Las fases de ejecución viven en `docs/PLAN.yaml` (F0..F5).

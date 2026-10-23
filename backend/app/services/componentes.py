@@ -14,6 +14,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.componente import PLANTILLA_INICIAL, Componente
+from app.services.prediccion import ajuste
 
 
 class ComponenteNoEncontrado(Exception):
@@ -62,7 +63,14 @@ async def editar(
     nombre: str | None = None,
     descripcion: str | None = None,
     activo: bool | None = None,
+    **vida: int | None,
 ) -> Componente:
+    """Renombra, describe, desactiva o cambia la vida nominal.
+
+    La vida nominal llega por `**vida` para distinguir «no viene» de «viene vacía» (borrarla).
+    Cambiarla mueve el conocimiento previo del modelo: marca el componente para reajustar (F4,
+    6.2).
+    """
     componente: Componente | None = await session.scalar(
         select(Componente).where(Componente.id == componente_id)
     )
@@ -74,7 +82,14 @@ async def editar(
         componente.descripcion = descripcion
     if activo is not None:
         componente.activo = activo
+    cambia_vida = "vida_nominal_horas" in vida and vida["vida_nominal_horas"] != (
+        componente.vida_nominal_horas
+    )
+    if cambia_vida:
+        componente.vida_nominal_horas = vida["vida_nominal_horas"]
     await _guardar(session, componente)
+    if cambia_vida:
+        await ajuste.marcar(session, componente.empresa_id, componente.id)
     return componente
 
 

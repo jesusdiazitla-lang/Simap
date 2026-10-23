@@ -8,7 +8,16 @@ import hashlib
 from typing import Annotated, Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    HTTPException,
+    Query,
+    Request,
+    Response,
+    status,
+)
 
 from app.api.v1.comun import TODOS, CursorDePagina, LimiteCodigo, LimiteDePagina
 from app.core.config import get_settings
@@ -21,6 +30,7 @@ from app.schemas.activo import ActivoCrear, ActivoEditar, ActivoOut, Pagina
 from app.schemas.orden_trabajo import OrdenAbierta, ReinicioHorometro
 from app.services import activos as servicio
 from app.services import qr
+from app.services.prediccion import tareas
 
 router = APIRouter(prefix="/activos", tags=["activos"])
 
@@ -179,7 +189,11 @@ async def regenerar_codigo(activo_id: UUID, _: Administrador, session: SesionDB)
 
 @router.post("/{activo_id}/reinicio-horometro", response_model=ActivoOut)
 async def reiniciar_horometro(
-    activo_id: UUID, datos: ReinicioHorometro, claims: Administrador, session: SesionDB
+    activo_id: UUID,
+    datos: ReinicioHorometro,
+    claims: Administrador,
+    session: SesionDB,
+    tareas_fondo: BackgroundTasks,
 ) -> ActivoOut:
     """Cambio o reinicio del horómetro (F3, 5.1). Solo el administrador.
 
@@ -202,6 +216,7 @@ async def reiniciar_horometro(
         raise _no_encontrado(exc) from exc
     except servicio.ReinicioInvalido as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
+    tareas_fondo.add_task(tareas.tras_lectura, claims.empresa_id, activo_id)
     return await ficha(session, activo)
 
 

@@ -22,7 +22,8 @@ from tests.conftest import URL_DUENO, requiere_base
 
 pytestmark = requiere_base
 
-TABLAS = ("ordenes_trabajo", "orden_eventos", "ordenes_contador", "v_intervalos_entre_fallas")
+# La vista de intervalos de la fase 3 la reemplazó v_vidas (F4, decisión 10).
+TABLAS = ("ordenes_trabajo", "orden_eventos", "ordenes_contador", "v_vidas")
 
 
 async def _contar(empresa_id: UUID, tabla: str) -> int:

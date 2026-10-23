@@ -193,25 +193,51 @@ milestones:
         # Física, como la de F2. Necesita HTTPS para la cámara.
 
   - name: "F4 - Predicción e inventario (semanas 9-12)"
-    rf: [RF-17, RF-18, RF-19, RF-20, RF-21, RF-22, RF-23, RF-24, RF-25, RF-26]
+    rf: [RF-17, RF-18, RF-19, RF-20, RF-21, RF-22, RF-23, RF-24, RF-25, RF-26, RNF-02, RNF-04]
     done_when: "Al cerrar una orden real el modelo se reajusta; un activo con fallas frecuentes muestra riesgo visiblemente mayor."
+    # Alcance y criterios: docs/contexto/07-fase4-prediccion-e-inventario.md. Las trece decisiones de
+    # su sección 4 las confirmó el usuario el 2026-10-18; las desviaciones están en su anexo.
     tasks:
-      - name: "Ajuste de Weibull por componente (scipy.stats.weibull_min.fit) sobre órdenes cerradas"
+      - name: "Migración 0009: inventario, componentes por equipo, alertas del sistema, modelos, riesgos, v_vidas, RLS y empresas_activas()"
+        status: done
+        # tests/test_prediccion_base.py (defensas de la base, v_vidas contra el caso de la guía, RNF-04).
+      - name: "Modelo Weibull con censura y prior (MAP), riesgo y nivel de confianza"
         modules: [app.services.prediccion.weibull]
-      - name: "Riesgo condicional por activo 1 − R(T+Δt)/R(T), disparado por cada lectura de horómetro"
-        modules: [app.services.prediccion.riesgo]
-      - name: "Multiplicador por alertas recientes (≥2 en 15 días → ×1.30)"
+        # La guía (decisión 11) sustituye weibull_min.fit sobre intervalos; scipy solo verifica.
+        # tests/test_weibull.py.
+      - name: "Componentes de cada equipo y edad de la pieza; configuración por empresa"
+        modules: [app.services.prediccion.componentes_equipo, app.services.prediccion.configuracion]
+      - name: "Reajuste con marca durable y generación; historial (curva de aprendizaje)"
+        modules: [app.services.prediccion.ajuste]
+      - name: "Riesgo por lectura, cierre y job; multiplicador por alertas de campo (RF-18..20)"
+        modules: [app.services.prediccion.riesgo, app.services.prediccion.tareas]
+      - name: "Alertas del sistema con deduplicación, histéresis y silencio; orden predictiva y conversión en falla (RF-21)"
+        modules: [app.services.prediccion.alertas, app.api.v1.routes.prediccion]
+      - name: "Job nocturno como job_user, con candado por empresa (RF-22)"
+        modules: [app.jobs.recalculo_riesgo, app.jobs.diario, app.jobs.programador]
+        # Local: APScheduler dentro del backend (JOB_DIARIO_EN_PROCESO). Producción: cron de Railway.
+      - name: "Inventario: repuestos, libro, líneas, descuento al cerrar con 409, reorden y conciliación (RF-23..26)"
+        modules: [app.models.repuesto, app.models.prediccion, app.services.inventario, app.api.v1.routes.repuestos]
+        # tests/test_inventario.py y test_concurrencia_fase4.py (carreras reales).
+      - name: "Frontend: riesgo, bandeja de alertas, modelo del componente, edades, configuración"
+        modules: [src/app/riesgo/page.tsx, src/app/alertas-sistema/page.tsx, "src/app/componentes/[id]/modelo/page.tsx", "src/app/activos/[id]/componentes/page.tsx", src/app/configuracion/prediccion/page.tsx, src/components/riesgo.tsx, src/lib/prediccion.ts]
+      - name: "Frontend: inventario, libro y repuestos en la orden"
+        modules: [src/app/inventario/page.tsx, "src/app/inventario/[id]/page.tsx", src/components/repuestos-orden.tsx, src/lib/inventario.ts]
+      - name: "e2e: alerta → orden predictiva → cierre con repuesto, y cierre sin stock"
+        status: done
+        # frontend/e2e/fase4.spec.ts.
+      - name: "Datos de demostración (flota Weibull β=2,5 η=1000, casos A y B) y datos de fase 4 de las empresas sectoriales"
+        status: done
+        # tools/seed_demo.py y tools/seed_sectores.py --solo-fase4. Datos SIMULADOS.
+      - name: "Experimentos de validación de la sección 14"
+        status: done
+        # tools/experimentos_fase4.py; resultados en docs/contexto/anexos/experimentos-fase4.md.
+      - name: "Riesgo sin conexión como último valor conocido (10.2)"
+        status: done
+        # IndexedDB junto a la ficha del equipo. e2e: test_10_2_riesgo_sin_conexion_como_ultimo_valor_conocido.
+      - name: "Despliegue del job como cron de Railway"
         status: pending
-      - name: "Alerta automática del sistema al superar RISK_THRESHOLD"
-        status: pending
-      - name: "Tarea diaria APScheduler: recalcular riesgo y reajustar β, η"
-        modules: [app.jobs.recalculo_riesgo]
-      - name: "Carga inicial con dataset público/simulado marcado como 'estimado'"
-        status: pending
-      - name: "CRUD de repuestos y detalle orden_repuesto; descuento de stock al cerrar; alerta de reorden"
-        modules: [app.models.repuesto, app.services.inventario, app.api.v1.routes.repuestos]
-      - name: "Frontend: inventario y riesgo visible en la ficha del activo"
-        modules: [src/app/inventario/page.tsx]
+        # El usuario no quiere desplegar todavía.
 
   - name: "F5 - Dashboard y cierre (semanas 13-16)"
     rf: [RF-27, RF-28, RNF-01, RNF-02, RNF-04]

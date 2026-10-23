@@ -1,7 +1,8 @@
 """Punto de entrada de la aplicación FastAPI."""
 
 import time
-from collections.abc import Awaitable, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
@@ -36,10 +37,30 @@ def origenes_permitidos() -> frozenset[str]:
     return frozenset({*s.cors_origins, s.app_base_url.rstrip("/")})
 
 
+@asynccontextmanager
+async def ciclo_de_vida(_app: FastAPI) -> AsyncIterator[None]:
+    """Programa el job nocturno dentro del proceso si así se configuró (F4, 9.3)."""
+    programador = None
+    if get_settings().job_diario_en_proceso:
+        from app.jobs import programador as job
+
+        programador = job.iniciar()
+    try:
+        yield
+    finally:
+        if programador is not None:
+            programador.shutdown(wait=False)
+
+
 def create_app() -> FastAPI:
     settings = get_settings()
     registro.configurar()
-    app = FastAPI(title=settings.app_name, version=settings.app_version, debug=settings.debug)
+    app = FastAPI(
+        title=settings.app_name,
+        version=settings.app_version,
+        debug=settings.debug,
+        lifespan=ciclo_de_vida,
+    )
 
     app.add_middleware(
         CORSMiddleware,

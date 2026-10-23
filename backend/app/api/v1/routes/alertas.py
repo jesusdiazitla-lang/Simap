@@ -3,7 +3,7 @@
 from typing import Annotated, Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Response, status
 
 from app.api.v1.comun import CursorDePagina, LimiteCampo, LimiteDePagina, http_de_captura
 from app.core.rbac import requiere_roles
@@ -13,6 +13,7 @@ from app.schemas.activo import Pagina
 from app.schemas.campo import AlertaCrear, AlertaOut, AlertaRegistrada, AlertaRevisar
 from app.services import alertas
 from app.services.capturas import CapturaInvalida
+from app.services.prediccion import tareas
 
 router = APIRouter(tags=["campo"])
 
@@ -33,6 +34,7 @@ async def reportar(
     __: LimiteCampo,
     session: SesionDB,
     response: Response,
+    tareas_fondo: BackgroundTasks,
 ) -> AlertaRegistrada:
     """201 si se creó; 200 si ya existía (un reintento, o la misma persona insistiendo)."""
     try:
@@ -49,6 +51,8 @@ async def reportar(
     except CapturaInvalida as exc:
         raise http_de_captura(exc) from exc
     response.status_code = status.HTTP_201_CREATED if estado == "creado" else status.HTTP_200_OK
+    # RF-20: las alertas de campo mueven el multiplicador del riesgo del equipo.
+    tareas_fondo.add_task(tareas.tras_lectura, claims.empresa_id, activo_id)
     return AlertaRegistrada(estado=estado, alerta=AlertaOut.model_validate(alerta))
 
 
@@ -83,7 +87,11 @@ async def listar(
 
 @router.patch("/alertas/{alerta_id}", response_model=AlertaOut)
 async def revisar(
-    alerta_id: UUID, datos: AlertaRevisar, claims: Revisa, session: SesionDB
+    alerta_id: UUID,
+    datos: AlertaRevisar,
+    claims: Revisa,
+    session: SesionDB,
+    tareas_fondo: BackgroundTasks,
 ) -> AlertaOut:
     try:
         alerta = await alertas.revisar(
@@ -95,4 +103,5 @@ async def revisar(
         raise HTTPException(
             status.HTTP_409_CONFLICT, "Esa alerta ya no está pendiente: otra persona la atendió."
         ) from exc
+    tareas_fondo.add_task(tareas.tras_lectura, claims.empresa_id, alerta.activo_id)
     return AlertaOut.model_validate(alerta)

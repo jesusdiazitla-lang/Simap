@@ -16,7 +16,12 @@ QUÉ HACE
      sorteadas. Todas las intervenciones son reemplazos, para que cada intervalo sea una vida
      completa;
    - actividad abierta para probar los flujos: dos alertas (una pendiente, una revisada) y tres
-     órdenes abiertas, una en cada estado: Reportada, En taller y Reparada (por autorizar).
+     órdenes abiertas, una en cada estado: Reportada, En taller y Reparada (por autorizar);
+   - fase 4: vida nominal de cada componente, la edad de cada pieza instalada, la configuración de
+     la predicción y un inventario del sector con algunos repuestos bajo el mínimo.
+
+`--solo-fase4` añade solo lo de la fase 4 a las empresas ya sembradas, sin tocar personal ni
+claves. Después, `python -m app.jobs.diario` (desde backend/) ajusta los modelos y calcula el riesgo.
 
 **Los datos son simulados**, y la tesis tiene que decirlo así.
 
@@ -64,8 +69,18 @@ ROLES = ("administrador", "supervisor", "tecnico_taller", "gerente", "operario")
 #: para que la consola no muestre acciones sobre empresas que ya no existen.
 TABLAS = (
     "orden_eventos",
+    "stock_movimientos",
+    "orden_repuesto",
+    "riesgos",
     "ordenes_trabajo",
     "ordenes_contador",
+    "alertas_sistema",
+    "modelos_historial",
+    "modelos_componente",
+    "reajustes_pendientes",
+    "activo_componentes",
+    "repuestos",
+    "configuracion_empresa",
     "alertas",
     "lecturas_horometro",
     "activos",
@@ -440,6 +455,148 @@ async def crear(conn: AsyncConnection, e: Empresa, azar: random.Random, ahora: d
     return cuentas
 
 
+#: Repuestos de cada empresa (fase 4): nombre, código, stock, mínimo y costo unitario en RD$. Unos
+#: pocos quedan bajo el mínimo para que la bandeja de reorden tenga qué mostrar.
+REPUESTOS: dict[str, list[tuple[str, str, int, int, str]]] = {
+    "Transportes Cordillera": [
+        ("Filtro de aceite Volvo 21707132", "VO-21707132", 14, 6, "1450.00"),
+        ("Pastillas de freno de disco eje delantero", "FR-PD-22", 8, 4, "6200.00"),
+        ("Kit de embrague 430 mm", "EM-430", 1, 2, "48500.00"),
+        ("Turbo Holset HE451VE remanufacturado", "TU-HE451", 1, 1, "96000.00"),
+        ("Aceite de motor 15W-40 (galón)", "AC-1540", 40, 20, "1850.00"),
+        ("Correa poly-V 8PK1940", "CO-8PK", 3, 4, "2300.00"),
+    ],
+    "Metalmecánica del Caribe": [
+        ("Rodamiento 6205-2RS", "RD-6205", 24, 10, "385.00"),
+        ("Rodamiento de husillo 7014 CD/P4A", "RD-7014", 2, 2, "38500.00"),
+        ("Sello de cilindro hidráulico 80 mm", "HI-S80", 5, 6, "2750.00"),
+        ("Aceite hidráulico ISO 46 (cubeta 5 gal)", "HI-46", 12, 4, "7900.00"),
+        ("Correa dentada HTD 8M-1200", "CO-HTD8M", 4, 2, "3100.00"),
+        ("Encoder de servomotor Fanuc A860", "SE-A860", 1, 1, "72000.00"),
+    ],
+    "BioEnergía del Cibao": [
+        ("Juego de cuchillas de astilladora", "CU-BAND", 6, 4, "18500.00"),
+        ("Matriz de peletizadora 6 mm", "MA-CPM6", 1, 1, "245000.00"),
+        ("Rodillo de presión CPM", "RO-CPM", 2, 3, "68000.00"),
+        ("Rodamiento 22220 E (tambor)", "RD-22220", 4, 2, "21500.00"),
+        ("Grasa de alta temperatura (cubeta)", "GR-HT", 9, 4, "5600.00"),
+    ],
+    "Generadora Termoeste": [
+        ("Inyector Wärtsilä 34SF", "IN-34SF", 10, 8, "152000.00"),
+        ("Cojinete de biela 34SF", "CJ-34SF", 6, 4, "88000.00"),
+        ("Filtro de combustible primario", "FI-COMB", 30, 24, "2950.00"),
+        ("Termostato agua de camisas", "TE-AC", 2, 2, "14500.00"),
+        ("Regulador de tensión AVR", "AVR-01", 0, 1, "135000.00"),
+    ],
+    "Agroindustrial Valle Verde": [
+        ("Filtro hidráulico John Deere AL221070", "JD-AL221", 7, 4, "3650.00"),
+        ("Sello mecánico bomba Grundfos", "GR-SEL", 2, 2, "11800.00"),
+        ("Cruceta de TDF", "TDF-CR", 1, 2, "4900.00"),
+        ("Aceite de transmisión Hy-Gard (galón)", "HY-GARD", 25, 10, "2100.00"),
+        ("Kit de juntas de culata 6.8 L", "MO-JUN68", 1, 1, "17800.00"),
+    ],
+}
+
+
+async def completar_fase4(conn: AsyncConnection, e: Empresa, ahora: datetime) -> str:
+    """Datos de la fase 4 de una empresa ya sembrada, sin tocar a su personal:
+
+    - la vida nominal de cada componente (la η con que se simularon sus vidas);
+    - qué componentes tiene cada máquina y a qué horas se instaló la pieza actual: las máquinas
+      empezaron en 0 h, así que la primera pieza se instaló a las 0 h (la última renovación la
+      deduce la vista de las órdenes);
+    - la configuración de la predicción con sus valores por defecto;
+    - el inventario, con su stock inicial en el libro y la alerta de los que quedan bajo el mínimo;
+    - una marca de reajuste por componente, para que el job ajuste todos los modelos.
+    """
+    empresa_id = await conn.scalar(text("SELECT id FROM empresas WHERE nombre = :n"), {"n": e.nombre})
+    if empresa_id is None:
+        return f"  {e.nombre}: no existe, se salta."
+    for tabla in ("stock_movimientos", "alertas_sistema", "repuestos", "reajustes_pendientes",
+                  "riesgos", "modelos_historial", "modelos_componente"):
+        await conn.execute(text(f"DELETE FROM {tabla} WHERE empresa_id = :e"), {"e": empresa_id})
+    admin = await conn.scalar(
+        text("SELECT id FROM usuarios WHERE empresa_id = :e AND rol = 'administrador' LIMIT 1"),
+        {"e": empresa_id},
+    )
+    componentes = {
+        nombre: cid
+        for cid, nombre in (
+            await conn.execute(text("SELECT id, nombre FROM componentes WHERE empresa_id = :e"), {"e": empresa_id})
+        ).all()
+    }
+    for nombre, (_, _, eta) in e.componentes.items():
+        await conn.execute(
+            text("UPDATE componentes SET vida_nominal_horas = :v WHERE id = :c"),
+            {"v": int(eta), "c": componentes[nombre]},
+        )
+    await conn.execute(
+        text("INSERT INTO configuracion_empresa (empresa_id) VALUES (:e) ON CONFLICT DO NOTHING"),
+        {"e": empresa_id},
+    )
+    maquinas = {
+        nombre: aid
+        for aid, nombre in (
+            await conn.execute(text("SELECT id, nombre FROM activos WHERE empresa_id = :e"), {"e": empresa_id})
+        ).all()
+    }
+    nombres = list(e.componentes)
+    pares = 0
+    for i, m in enumerate(e.maquinas):
+        for k in range(COMPONENTES_POR_MAQUINA):
+            comp = componentes[nombres[(i + k) % len(nombres)]]
+            await conn.execute(
+                text(
+                    "INSERT INTO activo_componentes (empresa_id, activo_id, componente_id,"
+                    " horas_instalacion_inicial) VALUES (:e, :a, :c, 0)"
+                    " ON CONFLICT (empresa_id, activo_id, componente_id)"
+                    " DO UPDATE SET horas_instalacion_inicial = 0"
+                ),
+                {"e": empresa_id, "a": maquinas[m.nombre], "c": comp},
+            )
+            pares += 1
+    for comp in componentes.values():
+        await conn.execute(
+            text("INSERT INTO reajustes_pendientes (empresa_id, componente_id) VALUES (:e, :c)"
+                 " ON CONFLICT DO NOTHING"),
+            {"e": empresa_id, "c": comp},
+        )
+    bajos = 0
+    for nombre, codigo, stock, minimo, costo in REPUESTOS.get(e.nombre, []):
+        rid = uuid4()
+        await insertar(conn, "repuestos", id=rid, empresa_id=empresa_id, nombre=nombre, codigo=codigo,
+                       stock_actual=stock, stock_minimo=minimo, costo_unitario=costo,
+                       creado_en=ahora - timedelta(days=30))
+        if stock > 0:
+            await insertar(conn, "stock_movimientos", id=uuid4(), empresa_id=empresa_id, repuesto_id=rid,
+                           tipo="inicial", delta=stock, stock_resultante=stock, costo_unitario=costo,
+                           usuario_id=admin, creado_en=ahora - timedelta(days=30))
+        if stock < minimo:
+            bajos += 1
+            await insertar(conn, "alertas_sistema", id=uuid4(), empresa_id=empresa_id, tipo="reorden",
+                           repuesto_id=rid, stock_al_alertar=stock, stock_minimo_al_alertar=minimo,
+                           creada_en=ahora - timedelta(days=2))
+    return (f"  {e.nombre:<28} {pares} componentes con edad, {len(REPUESTOS.get(e.nombre, []))} repuestos"
+            f" ({bajos} bajo el mínimo)")
+
+
+async def solo_fase4() -> int:
+    """Completa las empresas ya sembradas con los datos de la fase 4. No toca usuarios ni claves."""
+    if "localhost" not in URL and "127.0.0.1" not in URL:
+        print("La URL no apunta a localhost. Abortando por seguridad.", file=sys.stderr)
+        return 1
+    ahora = datetime.now(UTC)
+    motor = create_async_engine(URL)
+    try:
+        async with motor.begin() as conn:
+            for e in EMPRESAS:
+                print(await completar_fase4(conn, e, ahora))
+    finally:
+        await motor.dispose()
+    print("\nListo. Para ajustar los modelos y calcular el riesgo: python -m app.jobs.diario (desde backend/).")
+    return 0
+
+
 async def principal(semilla: int) -> int:
     if "localhost" not in URL and "127.0.0.1" not in URL:
         print("La URL no apunta a localhost. Abortando por seguridad.", file=sys.stderr)
@@ -454,6 +611,9 @@ async def principal(semilla: int) -> int:
             print(f"Borradas {borradas} empresas con todos sus datos.\n")
             for e in EMPRESAS:
                 todas.append((e, await crear(conn, e, azar, ahora)))
+            print()
+            for e in EMPRESAS:
+                print(await completar_fase4(conn, e, ahora))
     finally:
         await motor.dispose()
 
@@ -468,7 +628,14 @@ async def principal(semilla: int) -> int:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--semilla", type=int, default=2026, help="Semilla del sorteo (reproducible).")
+    parser.add_argument(
+        "--solo-fase4",
+        action="store_true",
+        help="Solo añade los datos de la fase 4 a las empresas ya sembradas (no cambia las claves).",
+    )
     args = parser.parse_args()
+    if args.solo_fase4:
+        return asyncio.run(solo_fase4())
     return asyncio.run(principal(args.semilla))
 
 

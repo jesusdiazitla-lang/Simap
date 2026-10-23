@@ -65,6 +65,9 @@ export interface OrdenResumen {
   readonly requiere_revision: boolean;
   readonly tipo_intervencion: TipoIntervencion | null;
   readonly tiempo_fuera_servicio_min: number | null;
+  /** Cambio planificado desde una alerta de riesgo (F4, 6.4), no una falla. */
+  readonly es_predictiva: boolean;
+  readonly alerta_sistema_id: string | null;
 }
 
 export type TipoEvento = "creada" | "transicion" | "nota" | "correccion";
@@ -249,4 +252,12 @@ export function duracion(minutos: number): string {
   const d = Math.floor(h / 24);
   const resto = h % 24;
   return resto === 0 ? `${d} días` : `${d} días ${resto} h`;
+}
+
+/** El equipo falló antes de la intervención: la orden predictiva pasa a ser una falla (F4, 6.4). */
+export function convertirEnFalla(
+  id: string,
+  datos: { readonly horometro: number; readonly fecha_falla: string },
+): Promise<OrdenDetalle> {
+  return llamar<OrdenDetalle>(`/ordenes/${id}/convertir-en-falla`, { method: "POST", cuerpo: datos });
 }

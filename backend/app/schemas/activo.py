@@ -57,6 +57,8 @@ class ComponenteEditar(_Estricto):
     nombre: str | None = Field(default=None, min_length=2, max_length=CORTO)
     descripcion: str | None = Field(default=None, max_length=LARGO)
     activo: bool | None = None
+    #: Vida nominal en horas (F4, decisión 6). `null` la borra; omitirla la deja como está.
+    vida_nominal_horas: int | None = Field(default=None, ge=10, le=1_000_000)
 
     @field_validator("nombre", "activo")
     @classmethod
@@ -73,6 +75,7 @@ class ComponenteOut(_Salida):
     nombre: str
     descripcion: str | None
     activo: bool
+    vida_nominal_horas: int | None = None
 
 
 # --- Activos ----------------------------------------------------------------

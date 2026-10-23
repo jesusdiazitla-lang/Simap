@@ -3,7 +3,7 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Response, status
 
 from app.api.v1.comun import CursorDePagina, LimiteCampo, LimiteDePagina, http_de_captura
 from app.core.rbac import requiere_roles
@@ -19,6 +19,7 @@ from app.schemas.campo import (
 )
 from app.services import activos, lecturas
 from app.services.capturas import CapturaInvalida
+from app.services.prediccion import tareas
 
 router = APIRouter(prefix="/activos/{activo_id}/lecturas", tags=["campo"])
 
@@ -36,6 +37,7 @@ async def registrar(
     __: LimiteCampo,
     session: SesionDB,
     response: Response,
+    tareas_fondo: BackgroundTasks,
 ) -> LecturaRegistrada:
     """Registra una lectura. Idempotente por `cliente_id`.
 
@@ -56,6 +58,8 @@ async def registrar(
     except CapturaInvalida as exc:
         raise http_de_captura(exc) from exc
     response.status_code = status.HTTP_201_CREATED if estado == "creado" else status.HTTP_200_OK
+    # RF-19: cada lectura recalcula el riesgo de su equipo, después del commit (F4, 9.2).
+    tareas_fondo.add_task(tareas.tras_lectura, claims.empresa_id, activo_id)
     return LecturaRegistrada(estado=estado, lectura=LecturaOut.model_validate(lectura))
 
 
@@ -112,7 +116,11 @@ async def por_revisar(
 
 @revision.patch("/{lectura_id}", response_model=LecturaOut)
 async def resolver(
-    lectura_id: UUID, datos: LecturaResolver, claims: Revisa, session: SesionDB
+    lectura_id: UUID,
+    datos: LecturaResolver,
+    claims: Revisa,
+    session: SesionDB,
+    tareas_fondo: BackgroundTasks,
 ) -> LecturaOut:
     """Confirmar o descartar: supervisor o administrador. Reinicio de horómetro: solo administrador,
     porque cambia la serie de horas sobre la que la fase 4 calcula el riesgo (sección 5.1)."""
@@ -143,4 +151,5 @@ async def resolver(
         ) from exc
     except activos.ReinicioInvalido as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
+    tareas_fondo.add_task(tareas.tras_lectura, claims.empresa_id, lectura.activo_id)
     return LecturaOut.model_validate(lectura)

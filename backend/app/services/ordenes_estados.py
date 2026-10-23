@@ -18,6 +18,13 @@ orden no existe para esta empresa. La transición y su evento van en la misma tr
 
 Cerrada y Cancelada son terminales: ninguna sentencia de aquí las tiene como origen, y además el
 trigger `ot_inmutable` de la base rechaza cualquier cambio sobre ellas.
+
+FASE 4 (07-fase4, 6.4 y 6.7)
+----------------------------
+El cierre descuenta los repuestos de la orden y marca su componente para reajustar el modelo, en la
+misma transacción; si la orden nació de una alerta del sistema, la resuelve. Cancelar una orden
+predictiva devuelve su alerta a `reconocida`. Una orden predictiva cuyo equipo falla antes de la
+intervención se convierte en falla real (`convertir_en_falla`): deja de contar como censura.
 """
 
 from __future__ import annotations
@@ -26,21 +33,27 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import update
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import eventos_dominio, registro
+from app.models.activo import Activo
 from app.models.alerta import Alerta
 from app.models.orden_trabajo import ABIERTOS, OrdenTrabajo
+from app.services import inventario
+from app.services.capturas import validar_instante
 from app.services.ordenes import (
     Actor,
     Conflicto,
+    ReferenciaInvalida,
     ahora,
     exigir_activo,
     explicar_cambio,
+    horas_acumuladas,
     obtener,
     registrar_evento,
 )
+from app.services.prediccion import ajuste, alertas
 
 
 async def _mover(
@@ -136,8 +149,12 @@ async def cerrar(
     """Reparada a Cerrada: autoriza la salida del taller (supervisor o administrador).
 
     El tiempo fuera de servicio se calcula con la hora del servidor, no la del teléfono. Se lee
-    `fecha_falla` antes del UPDATE sin riesgo: la aplicación no tiene permiso para modificarla.
-    Tras el commit se publica `orden_cerrada`, que la fase 4 usará para reajustar el modelo.
+    `fecha_falla` antes del UPDATE sin riesgo: solo la cambia la conversión en falla, y esa exige
+    una orden abierta.
+
+    Fase 4 (6.7), en la misma transacción corta: descuento de los repuestos (409
+    `stock_insuficiente` revierte el cierre entero), alerta del sistema resuelta y marca durable de
+    reajuste. El reajuste en sí ocurre después del commit, en segundo plano.
     """
     previa = await obtener(session, orden_id)
     salida = ahora()
@@ -156,6 +173,12 @@ async def cerrar(
         nota=nota or None,
         datos={"tiempo_fuera_servicio_min": minutos},
     )
+    descontados = await inventario.consumir(session, actor, orden)
+    if orden.alerta_sistema_id is not None:
+        await alertas.resolver_por_cierre(session, orden.alerta_sistema_id)
+    await ajuste.marcar(session, actor.empresa_id, orden.componente_id)
+    if descontados:
+        registro.evento("ordenes.cierre_con_repuestos", repuestos=len(descontados))
     eventos_dominio.emitir_al_confirmar(
         session,
         "orden_cerrada",
@@ -233,6 +256,74 @@ async def cancelar(
             .values(estado="revisada")
             .execution_options(synchronize_session=False)
         )
+    if orden.alerta_sistema_id is not None:
+        await alertas.reabrir_por_cancelacion(session, orden.alerta_sistema_id)
+    return orden
+
+
+async def convertir_en_falla(
+    session: AsyncSession,
+    actor: Actor,
+    orden_id: UUID,
+    *,
+    horometro: int,
+    fecha_falla: datetime,
+) -> OrdenTrabajo:
+    """La orden predictiva pasa a ser una falla real (07-fase4, 6.4; decisión 9).
+
+    Si el equipo falla mientras se esperaba el repuesto, ese dato es una falla y no puede quedar
+    como censura. Solo con la orden abierta y predictiva; una que ya es falla no se convierte otra
+    vez (409 `estado_cambiado`). Las horas acumuladas usan el offset vigente en la fecha de la falla
+    (F3, 5.1). El trigger `ot_datos_de_falla` solo deja reescribir dial, horas y fecha en esta
+    misma escritura que apaga `es_predictiva`.
+    """
+    await exigir_activo(session, actor)
+    validar_instante(fecha_falla, None)
+    previa = await obtener(session, orden_id)
+    activo = await session.scalar(select(Activo).where(Activo.id == previa.activo_id))
+    assert activo is not None
+    horas = await horas_acumuladas(session, activo, fecha_falla, horometro)
+    if horas is None:
+        raise ReferenciaInvalida(
+            "No se sabe qué offset tenía el horómetro en esa fecha: revisa el reinicio del equipo."
+        )
+    resultado = await session.execute(
+        update(OrdenTrabajo)
+        .where(
+            OrdenTrabajo.id == orden_id,
+            OrdenTrabajo.es_predictiva.is_(True),
+            OrdenTrabajo.estado.in_(ABIERTOS),
+        )
+        .values(
+            es_predictiva=False,
+            horometro_en_falla=horometro,
+            horas_acumuladas_en_falla=horas,
+            fecha_falla=fecha_falla,
+        )
+        .execution_options(synchronize_session=False)
+    )
+    if resultado.rowcount == 0:
+        raise Conflicto(
+            "estado_cambiado",
+            "La orden ya no es predictiva o ya no está abierta: no se puede convertir en falla.",
+            orden_id=previa.id,
+            numero=previa.numero,
+        )
+    orden = await obtener(session, orden_id, refrescar=True)
+    await registrar_evento(
+        session,
+        actor,
+        orden,
+        tipo="nota",
+        nota="El equipo falló antes de la intervención: la orden pasa a ser una falla.",
+        datos={
+            "convertida_en_falla": True,
+            "horometro": horometro,
+            "horas_acumuladas": horas,
+            "fecha_falla": fecha_falla,
+        },
+    )
+    registro.evento("ordenes.convertida_en_falla")
     return orden
 
 
@@ -241,6 +332,7 @@ __all__ = [
     "a_taller",
     "cancelar",
     "cerrar",
+    "convertir_en_falla",
     "marcar_reparada",
     "minutos_fuera_de_servicio",
     "rechazar_cierre",

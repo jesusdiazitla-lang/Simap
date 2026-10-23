@@ -22,8 +22,8 @@ que el equipo vuelva a producción, incluyendo los repuestos usados.
 | Si tú eres… | SIMAP te sirve para… |
 |---|---|
 | **Operario** | Escanear el QR del equipo, anotar el horómetro y reportar una alerta en tres toques. |
-| **Supervisor** | Reportar fallas, revisar las alertas de tu planta y seguir las órdenes de trabajo. |
-| **Técnico de taller** | Tomar las órdenes del taller, registrar qué reparaste y marcarlas como reparadas. |
+| **Supervisor** | Reportar fallas, revisar las alertas de tu planta, seguir las órdenes de trabajo y adelantarte a las fallas con las alertas del sistema. |
+| **Técnico de taller** | Tomar las órdenes del taller, anotar los repuestos usados, registrar qué reparaste y marcarlas como reparadas. |
 | **Gerente** | Ver indicadores: disponibilidad, tiempo medio entre fallas, costo de repuestos, equipos en riesgo. |
 | **Administrador** | Dar de alta usuarios, equipos (con su QR imprimible), el catálogo de componentes y el inventario. |
 
@@ -111,9 +111,23 @@ al nombre de quien tenga la sesión abierta.
 | Revisión de alertas y de lecturas que no cuadran | 2 | ✅ Disponible |
 | Personal de la empresa y catálogo de componentes | 2 | ✅ Disponible |
 | Órdenes de trabajo: reportar una falla, taller, autorizar el cierre | 3 | ✅ Disponible |
-| Predicción de riesgo e inventario de repuestos | 4 | ⏳ Pendiente |
+| Riesgo de falla por equipo, alertas del sistema y orden predictiva | 4 | ✅ Disponible |
+| Inventario de repuestos con libro, ingresos, conteos y reorden | 4 | ✅ Disponible |
 | Paneles por rol | 5 | ⏳ Pendiente |
 | API en funcionamiento (`/api/v1/health`) | — | ✅ Disponible |
+
+**La fase 4 está construida.** SIMAP calcula, para cada pieza de cada equipo, la probabilidad de
+que falle en las próximas horas de operación, y la enseña siempre con cuántas fallas la respaldan y
+con qué confianza («estimado» si son pocas). Cuando el riesgo supera el umbral de tu empresa aparece
+una **alerta del sistema**, y desde ella el supervisor abre una **orden predictiva** para cambiar la
+pieza antes de que falle. El modelo aprende solo: cada orden cerrada lo reajusta. El almacén lleva un
+**libro** de cada entrada y salida; los repuestos que anota el técnico se descuentan al autorizar el
+cierre, y si no alcanzan, el cierre no se hace y SIMAP dice qué falta. Cuando un repuesto baja de su
+mínimo, avisa. Sin cobertura, la pantalla del equipo enseña el último riesgo conocido con su hora.
+
+Las cuentas de demostración (empresa «Demo») traen una flota simulada con dos casos para verlo: una
+bomba con la pieza vieja, reparada tres veces sin cambiarla (riesgo alto), y otra con la pieza recién
+cambiada (riesgo bajo). **Son datos simulados.**
 
 **La fase 3 está construida.** Una falla se reporta desde la etiqueta del equipo (o desde una
 alerta) y abre una **orden de trabajo** numerada. El técnico la lleva al taller y registra lo que

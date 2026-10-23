@@ -14,21 +14,26 @@
  * - **Si otra persona se adelantó** (409), la pantalla recarga la orden y dice qué pasó, en lugar de
  *   un error genérico.
  * - Un solo botón azul relleno a la vez: el de la acción que toca ahora.
+ * - **Sin stock para cerrar** (409 `stock_insuficiente`, F4): no es que otra persona se adelantara.
+ *   La orden sigue Reparada y se dice qué falta, quién corrige la línea y quién registra el ingreso.
  */
 
+import Link from "next/link";
 import { useEffect, useId, useState, useSyncExternalStore, type ReactNode } from "react";
 
 import { Boton } from "@/components/boton";
 import { IconoAviso, IconoSinRed } from "@/components/iconos";
-import { ErrorApi } from "@/lib/api";
+import { ErrorApi, type Faltante } from "@/lib/api";
 import { listarComponentes, type Componente } from "@/lib/activos";
 import type { Usuario } from "@/lib/auth";
+import { dinero, type Linea } from "@/lib/inventario";
 import {
   agregarNota,
   autorizarCierre,
   AYUDA_INTERVENCION,
   cancelarOrden,
   confirmarHorometro,
+  convertirEnFalla,
   corregirOrden,
   duracion,
   editarOrden,
@@ -65,11 +70,14 @@ function minutosHastaAhora(fechaFalla: string): number {
 export function AccionesOrden({
   orden,
   usuario,
+  lineas = null,
   alCambiar,
   alConflicto,
 }: {
   readonly orden: OrdenDetalle;
   readonly usuario: Usuario;
+  /** Repuestos anotados en la orden: el resumen de lo que se firma los incluye (F4, 10.3). */
+  readonly lineas?: readonly Linea[] | null;
   /** La acción salió bien: la pantalla pinta la orden devuelta. */
   readonly alCambiar: (orden: OrdenDetalle) => void;
   /** Otra persona se adelantó: la pantalla recarga y muestra este mensaje. */
@@ -79,6 +87,7 @@ export function AccionesOrden({
   const [enCurso, setEnCurso] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [abierto, setAbierto] = useState<string | null>(null);
+  const [faltantes, setFaltantes] = useState<readonly Faltante[] | null>(null);
 
   const rol = usuario.rol;
   const supervisa = rol === "supervisor" || rol === "administrador";
@@ -87,11 +96,15 @@ export function AccionesOrden({
   async function ejecutar(nombre: string, accion: Accion): Promise<void> {
     setEnCurso(nombre);
     setError(null);
+    setFaltantes(null);
     try {
       alCambiar(await accion(orden));
       setAbierto(null);
     } catch (e) {
-      if (e instanceof ErrorApi && e.estado === 409) {
+      if (e instanceof ErrorApi && e.conflicto?.codigo === "stock_insuficiente") {
+        setFaltantes(e.conflicto.faltantes);
+        setAbierto(null);
+      } else if (e instanceof ErrorApi && e.estado === 409) {
         alConflicto(e.message);
         setAbierto(null);
       } else {
@@ -163,8 +176,25 @@ export function AccionesOrden({
         enCurso={enCurso}
         abierto={abierto}
         setAbierto={setAbierto}
+        lineas={lineas}
         alAutorizar={(nota) => void ejecutar("cerrar", (o) => autorizarCierre(o.id, nota))}
         alRechazar={(nota) => void ejecutar("rechazar", (o) => rechazarCierre(o.id, nota))}
+      />,
+    );
+  }
+
+  if (abierta && supervisa && orden.es_predictiva) {
+    bloques.push(
+      <ConvertirEnFalla
+        key="convertir"
+        orden={orden}
+        enLinea={enLinea}
+        enCurso={enCurso === "convertir"}
+        abierto={abierto === "convertir"}
+        alAbrir={() => setAbierto(abierto === "convertir" ? null : "convertir")}
+        alEnviar={(horometro, fecha) =>
+          void ejecutar("convertir", (o) => convertirEnFalla(o.id, { horometro, fecha_falla: fecha }))
+        }
       />,
     );
   }
@@ -252,6 +282,7 @@ export function AccionesOrden({
           </span>
         </p>
       ) : null}
+      {faltantes !== null ? <SinStock faltantes={faltantes} rol={rol} /> : null}
       <div className="flex flex-col divide-y divide-borde">{bloques}</div>
       {error !== null ? (
         <p role="alert" className="text-[0.9375rem] text-error">
@@ -386,6 +417,7 @@ function Reparar({
 
 function Autorizar({
   orden,
+  lineas,
   enLinea,
   enCurso,
   abierto,
@@ -394,6 +426,7 @@ function Autorizar({
   alRechazar,
 }: {
   readonly orden: OrdenDetalle;
+  readonly lineas: readonly Linea[] | null;
   readonly enLinea: boolean;
   readonly enCurso: string | null;
   readonly abierto: string | null;
@@ -430,6 +463,22 @@ function Autorizar({
             </dd>
             <dt className="text-texto-suave">Fuera de servicio</dt>
             <dd className="text-texto">{duracion(minutos)}, desde la falla hasta ahora</dd>
+            <dt className="text-texto-suave">Repuestos</dt>
+            <dd className="text-texto">
+              {lineas === null || lineas.length === 0 ? (
+                "Ninguno anotado"
+              ) : (
+                <>
+                  {lineas.map((l) => `${l.cantidad} × ${l.nombre}`).join(", ")}
+                  <span className="block text-[0.8125rem] text-texto-suave">
+                    Se descuentan del almacén al autorizar
+                    {lineas.every((l) => l.costo_unitario !== null)
+                      ? ` · ${dinero(lineas.reduce((t, l) => t + Number(l.costo_unitario) * l.cantidad, 0))}`
+                      : ""}
+                  </span>
+                </>
+              )}
+            </dd>
           </dl>
           <AreaTexto id={`${id}-nota`} etiqueta="Nota (opcional)" valor={nota} onCambio={setNota} maximo={1000} filas={2} />
           <div className="grid gap-2 sm:grid-cols-2">
@@ -729,6 +778,119 @@ function Corregir({
           Guardar corrección
         </Boton>
       </div>
+    </Bloque>
+  );
+}
+
+
+/** El 409 del cierre sin stock (F4, decisión 3): qué falta, quién corrige y quién repone. */
+function SinStock({ faltantes, rol }: { readonly faltantes: readonly Faltante[]; readonly rol: string }) {
+  return (
+    <div role="alert" className="flex gap-2 rounded-[var(--radius-control)] border border-estado-aviso bg-superficie px-3 py-3 text-[0.9375rem] leading-6 text-texto">
+      <IconoAviso className="mt-1 shrink-0 text-estado-aviso" />
+      <div className="min-w-0">
+        <p className="font-semibold">No hay stock para cerrar la orden. Sigue en «Reparada».</p>
+        <ul className="py-1.5">
+          {faltantes.map((f) => (
+            <li key={f.codigo} className="[overflow-wrap:anywhere]">
+              {f.nombre} (<span className="font-mono text-[0.875rem] tracking-[0.04em]">{f.codigo}</span>):
+              hay {f.disponible}, la orden pide {f.requerido}.
+            </li>
+          ))}
+        </ul>
+        <p className="text-texto-suave">
+          Si se anotó de más, el técnico corrige la cantidad en «Repuestos». Si de verdad falta,
+          {rol === "supervisor" || rol === "administrador" ? " registra el ingreso en " : " un supervisor registra el ingreso en "}
+          <Link href="/inventario" className="text-accion underline underline-offset-2">Inventario</Link>
+          {" "}y vuelve a autorizar.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+/** Aquí y no en la orden nueva: la fecha local del navegador, sin segundos, para el input. */
+function ahoraLocal(): string {
+  const d = new Date();
+  d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+  return d.toISOString().slice(0, 16);
+}
+
+/** La orden predictiva pasa a ser una falla: el equipo falló antes del cambio (F4, decisión 9). */
+function ConvertirEnFalla({
+  orden,
+  enLinea,
+  enCurso,
+  abierto,
+  alAbrir,
+  alEnviar,
+}: {
+  readonly orden: OrdenDetalle;
+  readonly enLinea: boolean;
+  readonly enCurso: boolean;
+  readonly abierto: boolean;
+  readonly alAbrir: () => void;
+  readonly alEnviar: (horometro: number, fechaIso: string) => void;
+}) {
+  const id = useId();
+  const [horometro, setHorometro] = useState(String(orden.horometro_en_falla));
+  const [fecha, setFecha] = useState(ahoraLocal);
+  const valido = /^\d+$/.test(horometro) && fecha !== "";
+  return (
+    <Bloque titulo="El equipo falló antes del cambio">
+      <p className="text-[0.9375rem] leading-6 text-texto-suave">
+        Si el componente falló mientras se esperaba la intervención, ese dato es una falla real y el
+        modelo tiene que contarla como tal. Anota el horómetro y cuándo falló.
+      </p>
+      {abierto ? (
+        <div className="flex flex-col gap-3">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <label htmlFor={`${id}-h`} className="block pb-1.5 text-[0.8125rem] font-medium text-texto">
+                Horómetro en la falla
+              </label>
+              <input
+                id={`${id}-h`}
+                inputMode="numeric"
+                value={horometro}
+                onChange={(e) => setHorometro(e.target.value.replace(/\D/g, ""))}
+                className="h-12 w-full rounded-[var(--radius-control)] border border-borde-fuerte bg-superficie px-3 text-[1rem] text-texto focus:border-accion focus:outline-none focus:ring-2 focus:ring-[var(--accion-halo)]"
+              />
+            </div>
+            <div>
+              <label htmlFor={`${id}-f`} className="block pb-1.5 text-[0.8125rem] font-medium text-texto">
+                Fecha y hora de la falla
+              </label>
+              <input
+                id={`${id}-f`}
+                type="datetime-local"
+                value={fecha}
+                max={ahoraLocal()}
+                onChange={(e) => setFecha(e.target.value)}
+                className="h-12 w-full rounded-[var(--radius-control)] border border-borde-fuerte bg-superficie px-3 text-[1rem] text-texto focus:border-accion focus:outline-none focus:ring-2 focus:ring-[var(--accion-halo)]"
+              />
+            </div>
+          </div>
+          <div className="grid gap-2 sm:grid-cols-2">
+            <Boton tipo="button" variante="secundario" onClick={alAbrir}>
+              Volver
+            </Boton>
+            <Boton
+              tipo="button"
+              deshabilitado={!enLinea || !valido}
+              enCurso={enCurso}
+              textoEnCurso="Convirtiendo…"
+              onClick={() => alEnviar(Number(horometro), new Date(fecha).toISOString())}
+            >
+              Convertir en falla
+            </Boton>
+          </div>
+        </div>
+      ) : (
+        <Boton tipo="button" variante="secundario" deshabilitado={!enLinea} onClick={alAbrir}>
+          Convertir en falla…
+        </Boton>
+      )}
     </Bloque>
   );
 }

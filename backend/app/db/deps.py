@@ -9,6 +9,7 @@ cabecera o cuerpo enviado por el cliente (04-fase1-fundamentos.md, sección 6.3)
 """
 
 from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from typing import Annotated
 from uuid import UUID
 
@@ -20,6 +21,7 @@ from app.core.security import Claims
 from app.db.session import (
     get_estrategia_tenant,
     get_sessionmaker,
+    get_sessionmaker_job,
     get_sessionmaker_operador,
 )
 
@@ -70,6 +72,32 @@ async def get_db_operador() -> AsyncIterator[AsyncSession]:
             yield session
 
 
+@asynccontextmanager
+async def sesion_de_empresa(empresa_id: UUID) -> AsyncIterator[AsyncSession]:
+    """Sesión con el tenant fijado, fuera de un request (07-fase4, 9.2).
+
+    La usan las tareas en segundo plano que recalculan el riesgo después del commit: abren su propia
+    transacción con el `empresa_id` que ya traía la petición, nunca uno que venga de otro sitio.
+    """
+    sessionmaker = get_sessionmaker()
+    async with sessionmaker() as session:
+        async with session.begin():
+            await get_estrategia_tenant().fijar_empresa(session, empresa_id)
+            yield session
+
+
+@asynccontextmanager
+async def sesion_del_job() -> AsyncIterator[AsyncSession]:
+    """Sesión del job nocturno, con `job_user` y **sin** tenant: no ve ninguna fila de empresa.
+
+    Solo sirve para pedir la lista de empresas; cada empresa se trabaja después en su propia
+    transacción con su tenant fijado (`fijar_tenant`).
+    """
+    async with get_sessionmaker_job()() as session:
+        async with session.begin():
+            yield session
+
+
 async def fijar_tenant(session: AsyncSession, empresa_id: UUID) -> None:
     """Fija el tenant en una sesión ya abierta.
 
@@ -98,6 +126,8 @@ __all__ = [
     "SesionOperador",
     "SesionSinTenant",
     "fijar_tenant",
+    "sesion_de_empresa",
+    "sesion_del_job",
     "permitir_busqueda_por_correo",
     "get_db",
     "get_db_operador",

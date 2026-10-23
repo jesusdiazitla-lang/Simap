@@ -66,6 +66,12 @@ interface EquipoGuardado {
   readonly usuario_id: string;
   readonly activo: Activo;
   readonly guardado_en: number;
+  /**
+   * Último riesgo conocido del equipo (07-fase4, 10.2): sin red se muestra como tal, con la hora de
+   * su cálculo. Opcional: los equipos guardados antes de la fase 4 no lo tienen. Es opaco aquí
+   * (`RiesgoEquipo` de `@/lib/prediccion`): importarlo crearía un ciclo a través de `@/lib/ordenes`.
+   */
+  readonly riesgo?: unknown;
 }
 
 interface Esquema extends DBSchema {
@@ -364,22 +370,29 @@ export function vigilarCola(usuarioId: string): () => void {
 export async function guardarEquipo(usuarioId: string, activo: Activo): Promise<void> {
   if (!disponible()) return;
   const db = await base();
-  await db.put("equipos", {
-    clave: `${usuarioId}:${activo.codigo}`,
-    usuario_id: usuarioId,
-    activo,
-    guardado_en: Date.now(),
-  });
+  const clave = `${usuarioId}:${activo.codigo}`;
+  // Se conserva el riesgo ya guardado: la ficha y el riesgo llegan por separado.
+  const previo = await db.get("equipos", clave);
+  await db.put("equipos", { clave, usuario_id: usuarioId, activo, guardado_en: Date.now(), riesgo: previo?.riesgo });
+}
+
+/** Guarda el último riesgo calculado de un equipo ya guardado, para mostrarlo sin red. */
+export async function guardarRiesgo(usuarioId: string, codigo: string, riesgo: unknown): Promise<void> {
+  if (!disponible()) return;
+  const db = await base();
+  const fila = await db.get("equipos", `${usuarioId}:${codigo}`);
+  if (fila === undefined) return;
+  await db.put("equipos", { ...fila, riesgo });
 }
 
 export async function equipoGuardado(
   usuarioId: string,
   codigo: string,
-): Promise<{ activo: Activo; guardado_en: number } | null> {
+): Promise<{ activo: Activo; guardado_en: number; riesgo: unknown } | null> {
   if (!disponible()) return null;
   const db = await base();
   const fila = await db.get("equipos", `${usuarioId}:${codigo}`);
-  return fila === undefined ? null : { activo: fila.activo, guardado_en: fila.guardado_en };
+  return fila === undefined ? null : { activo: fila.activo, guardado_en: fila.guardado_en, riesgo: fila.riesgo ?? null };
 }
 
 /** Quién tiene la sesión, guardado para poder capturar sin red y saber a quién pertenece lo capturado. */

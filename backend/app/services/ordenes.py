@@ -34,6 +34,7 @@ from app.models.orden_trabajo import ABIERTOS, OrdenContador, OrdenEvento, Orden
 from app.models.usuario import Usuario
 from app.services import activos, lecturas
 from app.services.capturas import activo_en_servicio, validar_instante
+from app.services.prediccion import ajuste, componentes_equipo
 
 #: Espacio de nombres del `cliente_id` de la lectura que registra cada falla. Se deriva del de la
 #: falla con uuid5 (sección 6.2): un reenvío de la falla reenvía la misma lectura, y no crea dos.
@@ -79,11 +80,14 @@ class Conflicto(Exception):
         *,
         orden_id: UUID | None = None,
         numero: int | None = None,
+        extra: dict[str, Any] | None = None,
     ) -> None:
         super().__init__(mensaje)
         self.codigo = codigo
         self.orden_id = orden_id
         self.numero = numero
+        #: Datos adicionales del 409, como los repuestos que faltan (07-fase4, 8.1).
+        self.extra = extra or {}
 
 
 class UsuarioInactivo(Exception):
@@ -428,6 +432,9 @@ async def reportar_falla(
                 "alerta_no_disponible", "Esa alerta cambió de estado mientras se reportaba."
             )
 
+    # Fase 4 (6.1): el equipo queda con el componente registrado, con edad desconocida si es nuevo.
+    await componentes_equipo.registrar_si_falta(session, actor.empresa_id, activo_id, componente_id)
+
     await registrar_evento(
         session,
         actor,
@@ -698,6 +705,9 @@ async def confirmar_horometro(session: AsyncSession, actor: Actor, orden_id: UUI
             ),
         },
     )
+    if not abierta:
+        # Una falla cerrada vuelve a contar para el modelo (F4, 6.2): v_vidas excluía las marcadas.
+        await ajuste.marcar(session, actor.empresa_id, orden.componente_id)
     return orden
 
 
@@ -755,9 +765,18 @@ async def corregir(
     await registrar_evento(
         session, actor, orden, tipo="correccion", nota=nota, datos={"cambios": diferencias}
     )
+    # Los datos de una falla cerrada cambiaron: el modelo de su componente se reajusta (F4, 6.2).
+    await ajuste.marcar(session, actor.empresa_id, orden.componente_id)
     registro.evento("ordenes.correccion", campos=",".join(sorted(diferencias)))
     return orden
 
 
 def ahora() -> datetime:
     return datetime.now(UTC)
+
+
+# Lo que reutiliza la orden predictiva de la fase 4 (app.services.prediccion.alertas).
+siguiente_numero = _siguiente_numero
+abierta_de = _abierta_de
+conflicto_abierta = _conflicto_abierta
+horas_acumuladas = _horas_acumuladas

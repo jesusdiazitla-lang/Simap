@@ -15,7 +15,16 @@ from datetime import datetime
 from typing import Annotated, Any, TypeVar
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    HTTPException,
+    Query,
+    Request,
+    Response,
+    status,
+)
 
 from app.api.v1.comun import (
     CursorDePagina,
@@ -45,8 +54,10 @@ from app.schemas.orden_trabajo import (
     Persona,
     Reparada,
 )
+from app.schemas.prediccion import ConvertirEnFalla
 from app.services import activos, ordenes, ordenes_estados
 from app.services.capturas import CapturaInvalida
+from app.services.prediccion import tareas
 
 router = APIRouter(tags=["ordenes"])
 
@@ -92,6 +103,8 @@ def http_de_orden(exc: Exception) -> HTTPException:
                 "mensaje": str(exc),
                 "orden_id": str(exc.orden_id) if exc.orden_id else None,
                 "numero": exc.numero,
+                # Lo propio de cada conflicto: los repuestos que faltan (F4, 8.1).
+                **exc.extra,
             },
         )
     if isinstance(exc, ordenes.ReferenciaInvalida):
@@ -201,8 +214,13 @@ async def reportar_falla(
     __: LimiteFalla,
     session: SesionDB,
     response: Response,
+    tareas_fondo: BackgroundTasks,
 ) -> OrdenCreada:
-    """201 si nació la orden; 200 si es un reenvío del mismo `cliente_id` (sección 6.2)."""
+    """201 si nació la orden; 200 si es un reenvío del mismo `cliente_id` (sección 6.2).
+
+    La falla registra una lectura de horómetro: el riesgo del equipo se recalcula después del
+    commit (F4, 9.2).
+    """
     estado, orden = await _o_http(
         ordenes.reportar_falla(
             session,
@@ -219,6 +237,7 @@ async def reportar_falla(
         )
     )
     response.status_code = status.HTTP_201_CREATED if estado == "creado" else status.HTTP_200_OK
+    tareas_fondo.add_task(tareas.tras_lectura, claims.empresa_id, activo_id)
     return OrdenCreada(estado=estado, orden=await _detalle(session, orden.id))
 
 
@@ -333,10 +352,17 @@ async def agregar_nota(
 
 @router.post("/ordenes/{orden_id}/confirmar-horometro", response_model=OrdenDetalle)
 async def confirmar_horometro(
-    orden_id: UUID, claims: Edita, __: LimiteTransicion, session: SesionDB
+    orden_id: UUID,
+    claims: Edita,
+    __: LimiteTransicion,
+    session: SesionDB,
+    tareas_fondo: BackgroundTasks,
 ) -> OrdenDetalle:
     """Con la orden abierta, supervisor o administrador; cerrada, solo el administrador."""
-    await _o_http(ordenes.confirmar_horometro(session, actor(claims), orden_id))
+    orden = await _o_http(ordenes.confirmar_horometro(session, actor(claims), orden_id))
+    tareas_fondo.add_task(
+        tareas.tras_cierre, claims.empresa_id, orden.componente_id, orden.activo_id
+    )
     return await _detalle(session, orden_id)
 
 
@@ -391,12 +417,22 @@ async def cerrar(
     claims: Autoriza,
     __: LimiteTransicion,
     session: SesionDB,
+    tareas_fondo: BackgroundTasks,
     datos: NotaOpcional | None = None,
 ) -> OrdenDetalle:
-    """Autoriza la salida del taller y calcula el tiempo fuera de servicio (RF-15)."""
-    return await _transicion(ordenes_estados.cerrar)(
-        session, claims, orden_id, nota=datos.nota if datos else None
+    """Autoriza la salida del taller y calcula el tiempo fuera de servicio (RF-15).
+
+    Fase 4: descuenta los repuestos (409 `stock_insuficiente` con los faltantes si no alcanzan; la
+    orden sigue Reparada) y, después del commit, reajusta el modelo del componente y recalcula el
+    riesgo del equipo, sin que la respuesta espere por ello.
+    """
+    orden = await _o_http(
+        ordenes_estados.cerrar(session, actor(claims), orden_id, nota=datos.nota if datos else None)
     )
+    tareas_fondo.add_task(
+        tareas.tras_cierre, claims.empresa_id, orden.componente_id, orden.activo_id
+    )
+    return await _detalle(session, orden_id)
 
 
 @router.post("/ordenes/{orden_id}/rechazar-cierre", response_model=OrdenDetalle)
@@ -409,6 +445,21 @@ async def rechazar_cierre(
 ) -> OrdenDetalle:
     return await _transicion(ordenes_estados.rechazar_cierre)(
         session, claims, orden_id, nota=datos.nota
+    )
+
+
+@router.post("/ordenes/{orden_id}/convertir-en-falla", response_model=OrdenDetalle)
+async def convertir_en_falla(
+    orden_id: UUID,
+    datos: ConvertirEnFalla,
+    claims: Autoriza,
+    __: LimiteTransicion,
+    session: SesionDB,
+) -> OrdenDetalle:
+    """La orden predictiva pasa a ser una falla real, con el horómetro y la fecha de la falla
+    (F4, 6.4). Supervisor o administrador; solo con la orden abierta."""
+    return await _transicion(ordenes_estados.convertir_en_falla)(
+        session, claims, orden_id, horometro=datos.horometro, fecha_falla=datos.fecha_falla
     )
 
 

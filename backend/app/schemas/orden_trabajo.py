@@ -156,6 +156,9 @@ class OrdenResumen(_Salida):
     requiere_revision: bool
     tipo_intervencion: TipoIntervencion | None = None
     tiempo_fuera_servicio_min: int | None = None
+    #: Intervención planificada desde una alerta de riesgo (F4, 6.4).
+    es_predictiva: bool = False
+    alerta_sistema_id: UUID | None = None
 
 
 class Evento(BaseModel):

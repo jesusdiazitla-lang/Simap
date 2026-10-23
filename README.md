@@ -17,6 +17,9 @@ inventario de repuestos, en una arquitectura **multi-tenant** con aislamiento po
 | [docs/contexto/03-requerimientos-casos-de-uso.md](docs/contexto/03-requerimientos-casos-de-uso.md) | RF-01..28, RNF-01..08, CU-01..06 y plan por fases |
 | [docs/contexto/04-fase1-fundamentos.md](docs/contexto/04-fase1-fundamentos.md) | Alcance de F1: auth, multi-tenant, RLS y su definición de «hecho» |
 | [docs/contexto/05-fase2-activos-y-campo.md](docs/contexto/05-fase2-activos-y-campo.md) | Alcance de F2: activos, QR, horómetro, alertas, sin conexión. Anexo con cómo quedó implementada |
+| [docs/contexto/06-fase3-ordenes-de-trabajo.md](docs/contexto/06-fase3-ordenes-de-trabajo.md) | Alcance de F3: órdenes de trabajo, máquina de estados, reinicio del horómetro. Anexo con la implementación |
+| [docs/contexto/07-fase4-prediccion-e-inventario.md](docs/contexto/07-fase4-prediccion-e-inventario.md) | Alcance de F4: Weibull con censura, riesgo, alertas del sistema, orden predictiva, inventario. Anexo con las desviaciones |
+| [docs/contexto/anexos/experimentos-fase4.md](docs/contexto/anexos/experimentos-fase4.md) | Resultados reproducidos de la validación del método con simulaciones (F4, sección 14) |
 | [backend/db/schema.sql](backend/db/schema.sql) · [rls_policies.sql](backend/db/rls_policies.sql) | DDL de PostgreSQL y políticas de aislamiento por empresa |
 | [docs/PLAN.yaml](docs/PLAN.yaml) | Las 5 fases como tareas rastreables por `graph.py status` |
 
@@ -519,9 +522,13 @@ creado, así que la 0007 la **crea** con su forma final.
 - **UPDATE por columna** para `app_user`: número, empresa, fecha de la falla y quién reportó no se
   pueden reescribir. Sin DELETE en ninguna de las tres tablas.
 - **Horas acumuladas** (revisión 0008): solo cambian en la misma escritura que quita la marca de
-  revisión; lo impone el trigger `ot_horas_solo_al_confirmar`. Una cifra confirmada no se reescribe.
+  revisión; lo impone el trigger `ot_horas_solo_al_confirmar` (en F4 lo sustituye `ot_datos_de_falla`,
+  que además deja cambiarlas al convertir una orden predictiva en falla). Una cifra confirmada no se
+  reescribe.
 - **`orden_eventos`** solo con políticas de SELECT e INSERT, y sin permiso de UPDATE ni DELETE.
 - **`v_intervalos_entre_fallas`** con `security_invoker = true`: sin la opción la vista saltaría RLS.
+  *(La revisión 0009 de F4 la elimina y la sustituye `v_vidas`, que también ve las piezas que siguen
+  funcionando.)*
   `tests/test_aislamiento_fase3.py` tiene la guardia que falla si una vista del esquema no la lleva.
 
 ### Horas acumuladas y reinicio del horómetro
@@ -546,17 +553,129 @@ marcada en vez de medirse con una cifra inventada.
 ### Evento de dominio y datos de demostración
 
 Al cerrar, `orden_cerrada` se **anota** en la sesión (`app.core.eventos_dominio`) y se publica solo
-si la transacción se confirma; si se revierte, se descarta. Hoy no tiene suscriptores: la fase 4 se
-suscribirá para reajustar el modelo, sin que órdenes importe nada de predicción (RNF-08).
+si la transacción se confirma; si se revierte, se descarta. F4 no lo usa para reajustar el modelo: la
+guía (decisión 13) prefiere una **marca durable** escrita en la misma transacción del cierre, que no se
+pierde si el proceso cae (ver [Fase 4](#fase-4-predicción-e-inventario)).
 
 ```powershell
-python tools/seed_demo.py            # empresa «Demo»: 5 roles, 3 equipos, 12 órdenes cerradas
+python tools/seed_demo.py            # empresa «Demo»: 5 roles y la flota simulada de F4 (ver abajo)
 python tools/seed_demo.py --borrar
 ```
 
 Las vidas se sortean de una Weibull **conocida** por componente, y el script imprime sus parámetros:
 que la fase 4 los recupere prueba que el ajuste funciona. **Son datos simulados** y la tesis tiene
 que decirlo. Las contraseñas de Demo se generan y se muestran una sola vez.
+
+## Fase 4: predicción e inventario
+
+Alcance y criterios en [`docs/contexto/07-fase4-prediccion-e-inventario.md`](docs/contexto/07-fase4-prediccion-e-inventario.md).
+Las **trece decisiones** de su sección 4 las confirmó el usuario el 2026-10-18 tal como se proponían.
+Las que cambian el comportamiento: el stock se descuenta **al cerrar** y un cierre sin stock es 409;
+el horizonte se mide en **horas de operación** (50); umbral 25 %, multiplicador 1,30 y silencio de 7
+días configurables por empresa; el modelo de partida es la **vida nominal** de cada componente (no un
+dataset público); el administrador declara la **edad** de cada pieza y sin ella no hay riesgo; el
+reemplazo predictivo es **censura**; el ajuste es un **máximo a posteriori con censura** y no
+`weibull_min.fit` sobre intervalos; la reorden salta con el stock **estrictamente** bajo el mínimo; y
+el aprendizaje al cerrar usa una **marca durable**.
+
+### El modelo (`app.services.prediccion`)
+
+| Módulo | Qué hace |
+|---|---|
+| `weibull` | Ajuste MAP de Weibull con reparación mínima sobre los estadísticos de `v_vidas` (L-BFGS-B, gradiente analítico, ≈ 1 ms), riesgo `1 − exp(−m·[((a+h)/η)^β − (a/η)^β])` y etiquetas fuente/confianza por número de fallas |
+| `componentes_equipo` | Qué componentes tiene cada equipo y a qué horas del equipo se instaló la pieza inicial (`PUT /activos/{id}/componentes/{cid}`) |
+| `configuracion` | Parámetros de la empresa (umbral, horizonte, alertas mínimas, ventana, multiplicador, silencio) |
+| `ajuste` | Marca de reajuste con **generación** (un cierre concurrente nunca se pierde), lectura de vidas, guardado con versión e historial (curva de aprendizaje) |
+| `riesgo` | Recalcula el riesgo de la empresa o de un equipo, crea alertas (dedup por índice único parcial + savepoint) y las resuelve por histéresis (0,8 × umbral) |
+| `alertas` | Bandeja, reconocer, descartar (con nota y silencio), orden predictiva, resolver al cerrar, reabrir al cancelar |
+| `tareas` | Lo que corre **después del commit** (lectura, cierre, ajuste) con su propia sesión: si falla, se registra y la petición ya respondió (RNF-02) |
+
+`v_vidas` (revisión 0009) es el corazón: una fila por vida de pieza con fallas, Σ ln(edad) y horas
+observadas, **incluida la vida abierta** (censura por la derecha). Una reparación no renueva la pieza;
+un reemplazo sí; un reemplazo **predictivo** cierra la vida sin falla. Es `security_invoker` y usa
+`NOT MATERIALIZED` para que el filtro por equipo baje al índice `ix_ot_cerradas_vida`: RNF-04 medido
+en PostgreSQL real, **123 ms** con 60.000 órdenes (`test_rnf04_…`).
+
+### Tres disparadores
+
+1. **Lectura de horómetro** (y alertas de campo, reinicios, cambios de vida nominal o de edad):
+   `BackgroundTasks` recalcula ese equipo después del commit.
+2. **Cierre de orden**: en la misma transacción se descuenta el stock y se escribe la marca de
+   reajuste; después, en segundo plano, se ajusta el modelo y se recalcula.
+3. **Job nocturno** `python -m app.jobs.diario`: se conecta como **`job_user`** (miembro de
+   `app_user`, sujeto a RLS), pide los ids con `empresas_activas()` (SECURITY DEFINER, solo para
+   `job_user`) y trabaja cada empresa en su transacción, con su tenant, un candado consultivo y
+   `statement_timeout`. En producción será un cron de Railway a las 06:00 UTC; en local lo programa
+   APScheduler dentro del backend si `JOB_DIARIO_EN_PROCESO=true` (`app.jobs.programador`, a las
+   `JOB_DIARIO_HORA` de `JOB_ZONA_HORARIA`).
+
+`job_user` lo crea `backend/db/roles.sql`, que Docker solo ejecuta al **inicializar** el volumen. En
+una base ya creada, aplicarlo una vez como superusuario:
+
+```powershell
+Get-Content backend\db\roles.sql | docker exec -i simap-db-1 psql -U simap -d simap
+```
+
+### Portabilidad: como en F3
+
+La guía escribe cada servicio con `INSERT … ON CONFLICT` y calcula el riesgo en una sentencia SQL.
+Aquí las consultas de negocio van por el ORM: `UPDATE` y, si no hubo fila, `INSERT` en un savepoint
+que absorbe la carrera; la fórmula del riesgo se evalúa en Python (un solo lugar para ella). Las
+garantías siguen en la base —índices únicos parciales, CHECK, triggers, RLS— y lo específico de
+PostgreSQL (candado consultivo, `statement_timeout`, `empresas_activas()`) está en
+`EstrategiaTenant` (`app.db.tenant`).
+
+### Inventario (`app.services.inventario`)
+
+- `stock_actual` y el **libro** `stock_movimientos` (solo se agrega: inicial, ingreso, consumo,
+  ajuste) deben coincidir; `GET /inventario/conciliacion` lo comprueba y debe devolver `[]`.
+- Las líneas (`orden_repuesto`) solo se tocan con la orden abierta: lo impone el trigger
+  `orden_repuesto_inmutable` (con `FOR SHARE` sobre la orden).
+- Al cerrar: se bloquean los repuestos de la orden **en orden de id**, se comprueban los faltantes
+  **antes** de descontar y, si alguno no alcanza, se revierte todo con 409 `stock_insuficiente` y la
+  lista `faltantes` (código, nombre, disponible, requerido). El índice `ix_stock_movimientos_consumo_unico`
+  impide descontar dos veces.
+- Reorden: stock **< mínimo** crea una alerta (una vigente por repuesto); al volver al mínimo se
+  resuelve sola.
+
+### Endpoints
+
+| Ruta | Roles |
+|---|---|
+| `GET /activos/{id}/riesgo` | supervisor, técnico, gerente, administrador |
+| `GET /riesgos` | supervisor, gerente, administrador |
+| `GET /activos/{id}/componentes` · `PUT …/{cid}` | lectura: supervisor, gerente, administrador · PUT: administrador |
+| `GET /componentes/{id}/modelo` | supervisor, gerente, administrador |
+| `GET` · `PUT /configuracion/prediccion` | lectura: supervisor, gerente, administrador · PUT: administrador |
+| `GET /alertas-sistema` | supervisor, gerente, administrador |
+| `POST /alertas-sistema/{id}/reconocer` · `/descartar` · `/orden` | supervisor, administrador |
+| `POST /ordenes/{id}/convertir-en-falla` | supervisor, administrador |
+| `GET /repuestos` · `GET /repuestos/{id}` | supervisor, técnico, gerente, administrador |
+| `POST /repuestos` · `PATCH /repuestos/{id}` · `POST /repuestos/{id}/ajuste` | administrador |
+| `POST /repuestos/{id}/ingresos` | supervisor, administrador |
+| `GET /repuestos/{id}/movimientos` | supervisor, gerente, administrador |
+| `GET` · `PUT` · `DELETE /ordenes/{id}/repuestos[/{rid}]` | técnico, supervisor, administrador (escritura solo con la orden abierta) |
+| `GET /inventario/conciliacion` | administrador |
+
+El operario no tiene acceso a nada de F4 (403). `tests/test_prediccion.py` recorre la matriz de
+roles 12.1 completa. Nuevos códigos de 409: `stock_insuficiente`, `alerta_no_disponible`,
+`codigo_repuesto_duplicado`; de 422: `edad_invalida`.
+
+### Datos de demostración y experimentos
+
+```powershell
+python tools/seed_demo.py                    # «Demo»: flota simulada, modelos y riesgos ya calculados
+python tools/seed_sectores.py --solo-fase4   # datos de F4 para las cinco empresas sectoriales (no toca claves)
+python tools/experimentos_fase4.py           # validación de la sección 14 (≈ 1 min; --completo ≈ 3 min)
+```
+
+`seed_demo` crea 14 bombas cuyo rodamiento falla según una Weibull **conocida** (β = 2,5; η = 1000 h),
+con reparaciones y reemplazos, una orden predictiva cerrada, 15 repuestos con su libro y los dos
+casos de la Definición de Hecho: **caso A** (pieza vieja, tres reparaciones, dos alertas de campo:
+riesgo alto y alerta) y **caso B** (pieza recién cambiada: riesgo bajo). Al final ajusta y calcula
+solo Demo e imprime el resultado (con la semilla 2026: β = 2,44, η = 1104 h con 51 fallas).
+`experimentos_fase4` usa **el mismo código de ajuste** que el backend; la versión completa está en
+`docs/contexto/anexos/experimentos-fase4.md`. **Todo son datos simulados**, y la tesis debe decirlo.
 
 ## Grafo de dependencias
 
@@ -687,7 +806,15 @@ de `src/app`; se avisan huérfanos (salvo convenciones de Next.js).
    FORCE alcanza también al dueño, y sin empresa fijada el UPDATE no vería ninguna fila.
 24. **«Quién reparó» es siempre un técnico.** Ni el administrador puede marcar Reparada: en una
    empresa sin técnico, se da de alta uno en vez de suplantar el campo.
-25. Antes de cada entrega: test automatizado de aislamiento entre tenants, OWASP Top 10 sobre lo nuevo,
+25. **El riesgo nunca se muestra sin su respaldo**: fallas registradas, confianza, «estimado» con
+    confianza baja y la hora del cálculo. «Sin edad» y «sin modelo» son avisos, nunca un 0 %.
+26. **El stock solo cambia por el libro.** Ningún cuerpo de petición lleva stock; los repuestos se
+    desactivan, no se borran.
+27. **El cálculo va después del commit.** Ninguna lectura, reporte o cierre espera ni falla por el
+    modelo; lo que quede pendiente lo recoge el job.
+28. **Una alerta del sistema no es una alerta de campo.** Viven en tablas distintas para que una
+    alerta nunca alimente el multiplicador que la originó.
+29. Antes de cada entrega: test automatizado de aislamiento entre tenants, OWASP Top 10 sobre lo nuevo,
    sin secretos en repo ni logs (`pip-audit` / `npm audit` en CI).
 
 > Si más adelante se añade PgBouncer, debe ir en **session pooling**. En transaction pooling la
@@ -750,6 +877,12 @@ los bordes de control 3:1.
 | `/panel/usuarios` | Personal de la empresa |
 | `/ordenes`, `/ordenes/{id}` | Bandeja y detalle de órdenes de trabajo (técnico, supervisor, gerente, administrador) |
 | `/activos/{id}/falla` | Reportar una falla; con `?alerta=id`, la convierte en orden |
+| `/riesgo` | Equipos por riesgo de falla (supervisor, gerente, administrador) |
+| `/alertas-sistema` | Bandeja de alertas del sistema: pestañas Riesgo y Reorden |
+| `/componentes/{id}/modelo` | Modelo del componente: β, η, curva de riesgo y curva de aprendizaje |
+| `/activos/{id}/componentes` | Componentes del equipo y edad de la pieza inicial (administrador) |
+| `/configuracion/prediccion` | Parámetros de la predicción de la empresa (administrador) |
+| `/inventario`, `/inventario/{id}` | Repuestos, stock, libro de movimientos, ingresos y conteos |
 
 ### Menú lateral (`src/components/arbol-navegacion.tsx`)
 
@@ -953,20 +1086,20 @@ npm run lint ; npm run graph:check
 <!-- graph:auto:start -->
 _Sección generada por `python tools/graph/graph.py docs`. No editar a mano; se sobrescribe en cada push a `main`._
 
-Última actualización: 2026-10-15 02:06 UTC
+Última actualización: 2026-10-23 03:03 UTC
 
 ### Estado del proyecto
 
 ```text
 === ESTADO DEL CÓDIGO ===
 
-[backend]  módulos: 54   LOC: 6948   TODO/FIXME: 0
-  con test: 45/54   stubs/vacíos: 0
-  por capa: api=12, cli=1, core=8, db=3, main=1, models=9, schemas=7, services=13
+[backend]  módulos: 71   LOC: 10587   TODO/FIXME: 0
+  con test: 52/71   stubs/vacíos: 0
+  por capa: api=14, cli=1, core=8, db=3, jobs=3, main=1, models=11, schemas=9, services=21
 
-[frontend]  módulos: 56   LOC: 9116   TODO/FIXME: 0
-  con test: 0/56   stubs/vacíos: 0
-  por capa: app=20, components=20, lib=15, src=1
+[frontend]  módulos: 68   LOC: 12391   TODO/FIXME: 0
+  con test: 0/68   stubs/vacíos: 0
+  por capa: app=27, components=23, lib=17, src=1
 
 ciclos de importación: 0
 
@@ -1014,7 +1147,7 @@ ciclos de importación: 0
     [ ] Verificar en producción que la sesión persiste entre frontend y backend (8.2)  <pending>
     [x] Confirmar una lectura marcada para revisión, y el evento «horómetro reiniciado»  <done>
 
-  F3 - Órdenes de trabajo (semanas 7-8)  (10/11, 90%)
+  F3 - Órdenes de trabajo (semanas 7-8)  (11/12, 91%)
     cubre: RF-11, RF-12, RF-13, RF-14, RF-15, RF-16, RNF-06
     hecho cuando: Una falla sigue su ciclo completo hasta cerrarse, con cada responsable visible en el historial.
     [x] Migración 0007: órdenes, contador, eventos, trigger de inmutabilidad, vista security_invoker, offset del horómetro  <done>
@@ -1023,23 +1156,31 @@ ciclos de importación: 0
     [x] Trazabilidad reportado_por / reparado_por / autorizado_por y tiempo fuera de servicio  <done>
     [x] Vincular alerta previa a la orden (alerta_origen_id) y pre-llenar el formulario  <done>
     [x] Reinicio del horómetro (offset) y confirmación del horómetro desde la orden  <done>
+    [x] Offset histórico: la falla usa el offset vigente en su fecha (revisión 0008)  <done>
     [x] Evento de dominio orden_cerrada, publicado después del commit  <done (auto)>
     [x] Frontend: formulario de falla, bandeja y detalle de orden con acciones por rol  <done (auto)>
     [x] Falla sin conexión sobre la cola de la fase 2  <done>
     [x] Datos de demostración (empresa Demo, Weibull conocida)  <done>
     [ ] Prueba con un teléfono real: reportar una falla desde el QR  <pending>
 
-  F4 - Predicción e inventario (semanas 9-12)  (0/8, 0%)
-    cubre: RF-17, RF-18, RF-19, RF-20, RF-21, RF-22, RF-23, RF-24, RF-25, RF-26
+  F4 - Predicción e inventario (semanas 9-12)  (14/15, 93%)
+    cubre: RF-17, RF-18, RF-19, RF-20, RF-21, RF-22, RF-23, RF-24, RF-25, RF-26, RNF-02, RNF-04
     hecho cuando: Al cerrar una orden real el modelo se reajusta; un activo con fallas frecuentes muestra riesgo visiblemente mayor.
-    [ ] Ajuste de Weibull por componente (scipy.stats.weibull_min.fit) sobre órdenes cerradas  <pending>
-    [ ] Riesgo condicional por activo 1 − R(T+Δt)/R(T), disparado por cada lectura de horómetro  <pending>
-    [ ] Multiplicador por alertas recientes (≥2 en 15 días → ×1.30)  <pending>
-    [ ] Alerta automática del sistema al superar RISK_THRESHOLD  <pending>
-    [ ] Tarea diaria APScheduler: recalcular riesgo y reajustar β, η  <pending>
-    [ ] Carga inicial con dataset público/simulado marcado como 'estimado'  <pending>
-    [ ] CRUD de repuestos y detalle orden_repuesto; descuento de stock al cerrar; alerta de reorden  <pending>
-    [ ] Frontend: inventario y riesgo visible en la ficha del activo  <pending>
+    [x] Migración 0009: inventario, componentes por equipo, alertas del sistema, modelos, riesgos, v_vidas, RLS y empresas_activas()  <done>
+    [x] Modelo Weibull con censura y prior (MAP), riesgo y nivel de confianza  <done (auto)>
+    [x] Componentes de cada equipo y edad de la pieza; configuración por empresa  <done (auto)>
+    [x] Reajuste con marca durable y generación; historial (curva de aprendizaje)  <done (auto)>
+    [x] Riesgo por lectura, cierre y job; multiplicador por alertas de campo (RF-18..20)  <done (auto)>
+    [x] Alertas del sistema con deduplicación, histéresis y silencio; orden predictiva y conversión en falla (RF-21)  <done (auto)>
+    [x] Job nocturno como job_user, con candado por empresa (RF-22)  <done (auto)>
+    [x] Inventario: repuestos, libro, líneas, descuento al cerrar con 409, reorden y conciliación (RF-23..26)  <done (auto)>
+    [x] Frontend: riesgo, bandeja de alertas, modelo del componente, edades, configuración  <done (auto)>
+    [x] Frontend: inventario, libro y repuestos en la orden  <done (auto)>
+    [x] e2e: alerta → orden predictiva → cierre con repuesto, y cierre sin stock  <done>
+    [x] Datos de demostración (flota Weibull β=2,5 η=1000, casos A y B) y datos de fase 4 de las empresas sectoriales  <done>
+    [x] Experimentos de validación de la sección 14  <done>
+    [x] Riesgo sin conexión como último valor conocido (10.2)  <done>
+    [ ] Despliegue del job como cron de Railway  <pending>
 
   F5 - Dashboard y cierre (semanas 13-16)  (0/5, 0%)
     cubre: RF-27, RF-28, RNF-01, RNF-02, RNF-04
@@ -1050,65 +1191,82 @@ ciclos de importación: 0
     [ ] Checklist OWASP Top 10 y verificación de secretos  <pending>
     [ ] Documentación técnica y manual de usuario finales  <pending>
 
-AVANCE GLOBAL: 40/56 tareas (71%)
+AVANCE GLOBAL: 55/64 tareas (85%)
 ```
 
 ### Módulos del backend
 
 | Módulo | Capa | Importa | Importado por | LOC | Test |
 |---|---|---:|---:|---:|:---:|
-| `app.api.v1.comun` | api | 7 | 6 | 97 | — |
-| `app.api.v1.router` | api | 10 | 1 | 30 | — |
-| `app.api.v1.routes.activos` | api | 11 | 1 | 202 | ✅ |
-| `app.api.v1.routes.alertas` | api | 8 | 1 | 87 | ✅ |
+| `app.api.v1.comun` | api | 7 | 8 | 97 | — |
+| `app.api.v1.router` | api | 12 | 1 | 35 | — |
+| `app.api.v1.routes.activos` | api | 12 | 1 | 217 | ✅ |
+| `app.api.v1.routes.alertas` | api | 9 | 1 | 96 | ✅ |
 | `app.api.v1.routes.auth` | api | 7 | 1 | 210 | ✅ |
-| `app.api.v1.routes.campo` | api | 6 | 1 | 27 | ✅ |
-| `app.api.v1.routes.componentes` | api | 6 | 1 | 53 | ✅ |
+| `app.api.v1.routes.campo` | api | 7 | 1 | 43 | ✅ |
+| `app.api.v1.routes.componentes` | api | 7 | 1 | 61 | ✅ |
 | `app.api.v1.routes.health` | api | 2 | 1 | 9 | ✅ |
-| `app.api.v1.routes.lecturas` | api | 9 | 1 | 128 | ✅ |
+| `app.api.v1.routes.lecturas` | api | 10 | 1 | 137 | ✅ |
 | `app.api.v1.routes.operador` | api | 9 | 1 | 315 | ✅ |
-| `app.api.v1.routes.ordenes` | api | 11 | 1 | 357 | ✅ |
+| `app.api.v1.routes.ordenes` | api | 13 | 3 | 404 | ✅ |
+| `app.api.v1.routes.prediccion` | api | 17 | 1 | 318 | ✅ |
+| `app.api.v1.routes.repuestos` | api | 10 | 1 | 208 | — |
 | `app.api.v1.routes.usuarios` | api | 5 | 1 | 66 | ✅ |
 | `app.cli` | cli | 5 | 0 | 189 | ✅ |
 | `app.core.almacen` | core | 1 | 6 | 112 | ✅ |
 | `app.core.auth` | core | 2 | 5 | 123 | ✅ |
-| `app.core.config` | core | 0 | 17 | 107 | ✅ |
-| `app.core.cursor` | core | 0 | 6 | 57 | ✅ |
+| `app.core.config` | core | 0 | 20 | 120 | ✅ |
+| `app.core.cursor` | core | 0 | 9 | 57 | ✅ |
 | `app.core.eventos_dominio` | core | 1 | 1 | 45 | ✅ |
-| `app.core.rbac` | core | 2 | 7 | 36 | ✅ |
-| `app.core.registro` | core | 0 | 8 | 99 | ✅ |
-| `app.core.security` | core | 1 | 18 | 225 | ✅ |
-| `app.db.deps` | db | 3 | 10 | 82 | ✅ |
-| `app.db.session` | db | 2 | 2 | 78 | ✅ |
-| `app.db.tenant` | db | 0 | 1 | 127 | ✅ |
-| `app.main` | main | 4 | 0 | 111 | — |
-| `app.models.activo` | models | 1 | 8 | 72 | — |
-| `app.models.alerta` | models | 1 | 4 | 78 | — |
-| `app.models.base` | models | 0 | 9 | 32 | — |
-| `app.models.componente` | models | 1 | 4 | 46 | — |
-| `app.models.empresa` | models | 1 | 4 | 19 | ✅ |
-| `app.models.lectura_horometro` | models | 1 | 4 | 93 | — |
+| `app.core.rbac` | core | 2 | 9 | 36 | ✅ |
+| `app.core.registro` | core | 0 | 15 | 99 | ✅ |
+| `app.core.security` | core | 1 | 20 | 225 | ✅ |
+| `app.db.deps` | db | 3 | 14 | 106 | ✅ |
+| `app.db.session` | db | 2 | 4 | 95 | ✅ |
+| `app.db.tenant` | db | 1 | 1 | 164 | ✅ |
+| `app.jobs.diario` | jobs | 3 | 0 | 29 | — |
+| `app.jobs.programador` | jobs | 3 | 1 | 32 | — |
+| `app.jobs.recalculo_riesgo` | jobs | 5 | 2 | 59 | — |
+| `app.main` | main | 5 | 0 | 129 | — |
+| `app.models.activo` | models | 1 | 12 | 72 | — |
+| `app.models.alerta` | models | 1 | 5 | 78 | — |
+| `app.models.base` | models | 0 | 11 | 32 | — |
+| `app.models.componente` | models | 1 | 8 | 59 | — |
+| `app.models.empresa` | models | 1 | 5 | 19 | ✅ |
+| `app.models.lectura_horometro` | models | 1 | 5 | 106 | — |
 | `app.models.operador` | models | 1 | 3 | 68 | ✅ |
-| `app.models.orden_trabajo` | models | 1 | 6 | 197 | ✅ |
+| `app.models.orden_trabajo` | models | 1 | 8 | 223 | ✅ |
+| `app.models.prediccion` | models | 1 | 7 | 302 | ✅ |
+| `app.models.repuesto` | models | 1 | 3 | 127 | — |
 | `app.models.usuario` | models | 2 | 5 | 61 | ✅ |
-| `app.schemas.activo` | schemas | 2 | 5 | 112 | — |
+| `app.schemas.activo` | schemas | 2 | 7 | 115 | — |
 | `app.schemas.auth` | schemas | 1 | 4 | 63 | ✅ |
 | `app.schemas.campo` | schemas | 1 | 4 | 118 | ✅ |
 | `app.schemas.health` | schemas | 0 | 1 | 6 | ✅ |
+| `app.schemas.inventario` | schemas | 0 | 1 | 87 | ✅ |
 | `app.schemas.operador` | schemas | 1 | 1 | 66 | ✅ |
-| `app.schemas.orden_trabajo` | schemas | 0 | 4 | 150 | ✅ |
+| `app.schemas.orden_trabajo` | schemas | 0 | 5 | 153 | ✅ |
+| `app.schemas.prediccion` | schemas | 0 | 2 | 151 | ✅ |
 | `app.schemas.usuario` | schemas | 1 | 1 | 40 | ✅ |
-| `app.services.activos` | services | 6 | 4 | 267 | ✅ |
+| `app.services.activos` | services | 6 | 6 | 299 | ✅ |
 | `app.services.alertas` | services | 6 | 2 | 160 | ✅ |
 | `app.services.auth` | services | 8 | 2 | 300 | ✅ |
 | `app.services.campo` | services | 6 | 1 | 163 | ✅ |
-| `app.services.capturas` | services | 2 | 8 | 53 | ✅ |
-| `app.services.componentes` | services | 1 | 3 | 83 | ✅ |
+| `app.services.capturas` | services | 2 | 9 | 53 | ✅ |
+| `app.services.componentes` | services | 2 | 3 | 97 | ✅ |
+| `app.services.inventario` | services | 6 | 2 | 452 | ✅ |
 | `app.services.lecturas` | services | 8 | 3 | 288 | ✅ |
 | `app.services.limites` | services | 2 | 5 | 50 | ✅ |
 | `app.services.operador` | services | 8 | 1 | 323 | ✅ |
-| `app.services.ordenes` | services | 11 | 3 | 621 | ✅ |
-| `app.services.ordenes_estados` | services | 5 | 1 | 217 | ✅ |
+| `app.services.ordenes` | services | 14 | 7 | 677 | ✅ |
+| `app.services.ordenes_estados` | services | 10 | 1 | 304 | ✅ |
+| `app.services.prediccion.ajuste` | services | 4 | 6 | 214 | — |
+| `app.services.prediccion.alertas` | services | 8 | 2 | 267 | ✅ |
+| `app.services.prediccion.componentes_equipo` | services | 4 | 2 | 147 | — |
+| `app.services.prediccion.configuracion` | services | 1 | 3 | 49 | — |
+| `app.services.prediccion.riesgo` | services | 7 | 2 | 429 | — |
+| `app.services.prediccion.tareas` | services | 5 | 8 | 102 | — |
+| `app.services.prediccion.weibull` | services | 0 | 2 | 172 | ✅ |
 | `app.services.qr` | services | 0 | 2 | 84 | ✅ |
 | `app.services.usuarios` | services | 2 | 1 | 114 | ✅ |
 
@@ -1116,60 +1274,72 @@ AVANCE GLOBAL: 40/56 tareas (71%)
 
 | Módulo | Capa | Importa | Importado por | LOC | Test |
 |---|---|---:|---:|---:|:---:|
+| `src/app/activos/[id]/componentes/page.tsx` | app | 10 | 0 | 285 | — |
 | `src/app/activos/[id]/editar/page.tsx` | app | 5 | 0 | 55 | — |
 | `src/app/activos/[id]/etiqueta/page.tsx` | app | 5 | 0 | 83 | — |
 | `src/app/activos/[id]/falla/page.tsx` | app | 6 | 0 | 89 | — |
 | `src/app/activos/nuevo/page.tsx` | app | 4 | 0 | 32 | — |
 | `src/app/activos/page.tsx` | app | 9 | 0 | 224 | — |
+| `src/app/alertas-sistema/page.tsx` | app | 12 | 0 | 366 | — |
 | `src/app/alertas/page.tsx` | app | 8 | 0 | 210 | — |
-| `src/app/componentes/page.tsx` | app | 7 | 0 | 207 | — |
-| `src/app/equipo/page.tsx` | app | 18 | 0 | 564 | — |
+| `src/app/componentes/[id]/modelo/page.tsx` | app | 8 | 0 | 185 | — |
+| `src/app/componentes/page.tsx` | app | 7 | 0 | 269 | — |
+| `src/app/configuracion/prediccion/page.tsx` | app | 7 | 0 | 196 | — |
+| `src/app/equipo/page.tsx` | app | 20 | 0 | 696 | — |
 | `src/app/escanear/page.tsx` | app | 6 | 0 | 72 | — |
 | `src/app/globals.css` | app | 0 | 1 | 186 | — |
+| `src/app/inventario/[id]/page.tsx` | app | 10 | 0 | 351 | — |
+| `src/app/inventario/page.tsx` | app | 10 | 0 | 247 | — |
 | `src/app/layout.tsx` | app | 2 | 0 | 66 | — |
 | `src/app/login/page.tsx` | app | 7 | 0 | 185 | — |
 | `src/app/operador/clave/page.tsx` | app | 3 | 0 | 60 | — |
 | `src/app/operador/page.tsx` | app | 5 | 0 | 566 | — |
-| `src/app/ordenes/[id]/page.tsx` | app | 11 | 0 | 221 | — |
+| `src/app/ordenes/[id]/page.tsx` | app | 13 | 0 | 241 | — |
 | `src/app/ordenes/page.tsx` | app | 8 | 0 | 201 | — |
 | `src/app/page.tsx` | app | 2 | 0 | 44 | — |
 | `src/app/panel/clave/page.tsx` | app | 4 | 0 | 55 | — |
 | `src/app/panel/page.tsx` | app | 3 | 0 | 87 | — |
 | `src/app/panel/usuarios/page.tsx` | app | 9 | 0 | 267 | — |
-| `src/components/acciones-orden.tsx` | components | 6 | 1 | 698 | — |
+| `src/app/riesgo/page.tsx` | app | 8 | 0 | 173 | — |
+| `src/components/acciones-orden.tsx` | components | 7 | 1 | 855 | — |
 | `src/components/arbol-navegacion.tsx` | components | 2 | 2 | 169 | — |
 | `src/components/avisos-cola.tsx` | components | 7 | 1 | 149 | — |
 | `src/components/barra-sesion.tsx` | components | 4 | 1 | 114 | — |
-| `src/components/boton.tsx` | components | 0 | 20 | 72 | — |
-| `src/components/campo.tsx` | components | 0 | 11 | 143 | — |
+| `src/components/boton.tsx` | components | 0 | 27 | 72 | — |
+| `src/components/campo.tsx` | components | 0 | 14 | 143 | — |
 | `src/components/escaner-qr.tsx` | components | 3 | 1 | 153 | — |
-| `src/components/estado.tsx` | components | 1 | 8 | 149 | — |
+| `src/components/estado.tsx` | components | 1 | 14 | 149 | — |
 | `src/components/formulario-activo.tsx` | components | 4 | 2 | 147 | — |
 | `src/components/formulario-alerta.tsx` | components | 9 | 1 | 147 | — |
 | `src/components/formulario-clave.tsx` | components | 3 | 2 | 165 | — |
 | `src/components/formulario-falla.tsx` | components | 11 | 2 | 452 | — |
 | `src/components/formulario-horometro.tsx` | components | 10 | 3 | 195 | — |
 | `src/components/historial-orden.tsx` | components | 3 | 1 | 120 | — |
-| `src/components/iconos.tsx` | components | 0 | 13 | 137 | — |
+| `src/components/iconos.tsx` | components | 0 | 18 | 137 | — |
 | `src/components/indicador-cola.tsx` | components | 2 | 1 | 77 | — |
 | `src/components/lecturas-por-revisar.tsx` | components | 6 | 1 | 139 | — |
-| `src/components/marco.tsx` | components | 0 | 17 | 209 | — |
-| `src/components/pantalla.tsx` | components | 7 | 14 | 121 | — |
+| `src/components/marco.tsx` | components | 0 | 22 | 209 | — |
+| `src/components/pantalla.tsx` | components | 7 | 21 | 121 | — |
 | `src/components/registro-sw.tsx` | components | 0 | 1 | 28 | — |
+| `src/components/repuestos-orden.tsx` | components | 5 | 1 | 321 | — |
+| `src/components/riesgo.tsx` | components | 5 | 4 | 318 | — |
+| `src/components/segmento.tsx` | components | 0 | 2 | 42 | — |
 | `src/lib/acceso.ts` | lib | 3 | 1 | 53 | — |
-| `src/lib/activos.ts` | lib | 1 | 17 | 135 | — |
-| `src/lib/api.ts` | lib | 0 | 28 | 206 | — |
-| `src/lib/auth.ts` | lib | 1 | 26 | 328 | — |
+| `src/lib/activos.ts` | lib | 1 | 20 | 142 | — |
+| `src/lib/api.ts` | lib | 0 | 38 | 221 | — |
+| `src/lib/auth.ts` | lib | 1 | 35 | 368 | — |
 | `src/lib/campo.ts` | lib | 2 | 9 | 141 | — |
 | `src/lib/captura.ts` | lib | 5 | 2 | 83 | — |
-| `src/lib/formato.ts` | lib | 0 | 13 | 31 | — |
+| `src/lib/formato.ts` | lib | 0 | 19 | 31 | — |
 | `src/lib/horometro.ts` | lib | 2 | 3 | 42 | — |
-| `src/lib/offline-queue.ts` | lib | 4 | 6 | 366 | — |
+| `src/lib/inventario.ts` | lib | 2 | 5 | 114 | — |
+| `src/lib/offline-queue.ts` | lib | 4 | 6 | 378 | — |
 | `src/lib/operador.ts` | lib | 1 | 3 | 121 | — |
-| `src/lib/ordenes.ts` | lib | 4 | 7 | 217 | — |
+| `src/lib/ordenes.ts` | lib | 4 | 10 | 227 | — |
+| `src/lib/prediccion.ts` | lib | 3 | 7 | 222 | — |
 | `src/lib/qr.ts` | lib | 0 | 4 | 60 | — |
 | `src/lib/sesion.ts` | lib | 3 | 2 | 98 | — |
-| `src/lib/sondeo.ts` | lib | 0 | 2 | 41 | — |
+| `src/lib/sondeo.ts` | lib | 0 | 4 | 41 | — |
 | `src/lib/usuarios.ts` | lib | 2 | 1 | 41 | — |
 | `src/proxy.ts` | src | 0 | 0 | 95 | — |
 

@@ -27,6 +27,11 @@ URL_DUENO = "postgresql+asyncpg://simap_owner:changeme_owner@localhost:5432/sima
 URL_SUPER = "postgresql+asyncpg://simap:simap_dev@localhost:5432/simap"
 
 EN_CI = os.getenv("CI", "").lower() in {"1", "true", "yes"}
+#: Rol del job nocturno de la fase 4 (backend/db/roles.sql).
+URL_JOB = "postgresql+asyncpg://job_user:changeme_job@localhost:5432/simap"
+
+# Las pruebas nunca programan el job nocturno dentro del proceso, diga lo que diga el `.env`.
+os.environ["JOB_DIARIO_EN_PROCESO"] = "false"
 
 #: Fixtures de las pruebas de la fase 2 (una planta con su personal). Como plugin y no importadas en
 #: cada archivo: así `client` está disponible sin importarlo, y las suites que definen su propio

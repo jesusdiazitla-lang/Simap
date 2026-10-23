@@ -40,6 +40,9 @@ class Settings(BaseSettings):
     database_url_operador: str = (
         "postgresql+asyncpg://operador_user:changeme_operador@localhost:5432/simap"
     )
+    # El job nocturno de la fase 4 (07-fase4, 9.3) se conecta con job_user: miembro de app_user y
+    # sujeto a RLS, con el único privilegio extra de listar los ids de las empresas.
+    database_url_job: str = "postgresql+asyncpg://job_user:changeme_job@localhost:5432/simap"
     db_pool_size: int = 5
     db_max_overflow: int = 10
     # Deja trazas SQL en consola. Solo para depurar en local.
@@ -105,8 +108,18 @@ class Settings(BaseSettings):
     falla_max_por_minuto: int = 20
     transicion_max_por_minuto: int = 60
 
-    # --- Motor de predicción (se usa a partir de F4) -------------------------
-    risk_threshold: float = Field(default=0.25, ge=0.0, le=1.0)
+    # --- Motor de predicción e inventario (F4) ----------------------------------
+    # El umbral, el horizonte y el multiplicador son de cada empresa (configuracion_empresa,
+    # decisión 5); aquí solo lo que es del proceso.
+    # Programa el job diario dentro del propio backend (APScheduler) a las 02:00 de Santo Domingo.
+    # En producción lo sustituye un cron que ejecuta `python -m app.jobs.diario`.
+    job_diario_en_proceso: bool = False
+    job_diario_hora: int = Field(default=2, ge=0, le=23)
+    job_zona_horaria: str = "America/Santo_Domingo"
+    # Una consulta atascada no debe detener a las demás empresas (9.3).
+    job_statement_timeout_ms: int = Field(default=60_000, ge=1_000)
+    linea_repuesto_max_por_minuto: int = 30
+    ingreso_max_por_minuto: int = 20
 
     @field_validator("jwt_secret")
     @classmethod

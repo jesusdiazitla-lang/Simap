@@ -8,7 +8,16 @@ uno dejaría órdenes apuntando a nada y un modelo de riesgo sin historia.
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Text, UniqueConstraint, Uuid
+from sqlalchemy import (
+    Boolean,
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    Integer,
+    Text,
+    UniqueConstraint,
+    Uuid,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base, IdUUID, _ahora
@@ -42,12 +51,16 @@ class Componente(IdUUID, Base):
         UniqueConstraint("empresa_id", "nombre", name="uq_componentes_empresa_id_nombre"),
         # Clave candidata para las referencias compuestas de la fase 3 (ordenes_trabajo).
         UniqueConstraint("empresa_id", "id", name="uq_componentes_empresa_id_id"),
+        CheckConstraint("vida_nominal_horas BETWEEN 10 AND 1000000", name="vida_nominal_rango"),
     )
 
     empresa_id: Mapped[UUID] = mapped_column(Uuid, ForeignKey("empresas.id"), nullable=False)
     nombre: Mapped[str] = mapped_column(Text, nullable=False)
     descripcion: Mapped[str | None] = mapped_column(Text, nullable=True)
     activo: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    #: Vida nominal declarada por el administrador (F4, decisión 6): el centro del conocimiento
+    #: previo del modelo. Sin ella y con menos de dos fallas, el componente queda «sin modelo».
+    vida_nominal_horas: Mapped[int | None] = mapped_column(Integer, nullable=True)
     creado_en: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=_ahora
     )

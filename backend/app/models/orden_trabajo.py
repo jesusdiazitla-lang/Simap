@@ -11,8 +11,9 @@ lo que la fase 4 usa para ajustar Weibull. Por eso la base impone casi todo lo q
 - **Una abierta por equipo y componente**, y una por alerta: índices únicos parciales.
 - **Historial de solo adición**: `app_user` no puede modificar ni borrar `orden_eventos`.
 
-El trigger y la vista `v_intervalos_entre_fallas` son de PostgreSQL y viven solo en la migración:
-el modelo no los declara porque SQLAlchemy no los representa.
+Los triggers y la vista `v_vidas` (revisión 0009, que reemplazó a `v_intervalos_entre_fallas`)
+son de PostgreSQL y viven solo en la migración: el modelo no los declara porque SQLAlchemy no los
+representa.
 """
 
 from datetime import datetime
@@ -116,6 +117,27 @@ class OrdenTrabajo(IdUUID, Base):
         _mismo_tenant("reportado_por", "usuarios", "fk_ordenes_trabajo_reportado_mismo_tenant"),
         _mismo_tenant("reparado_por", "usuarios", "fk_ordenes_trabajo_reparado_mismo_tenant"),
         _mismo_tenant("autorizado_por", "usuarios", "fk_ordenes_trabajo_autorizado_mismo_tenant"),
+        _mismo_tenant(
+            "alerta_sistema_id", "alertas_sistema", "fk_ordenes_trabajo_alerta_sistema_mismo_tenant"
+        ),
+        # Una alerta del sistema origina como máximo una orden vigente (F4, 7.5).
+        Index(
+            "ix_ordenes_trabajo_una_por_alerta_sistema",
+            "empresa_id",
+            "alerta_sistema_id",
+            unique=True,
+            postgresql_where=text("alerta_sistema_id IS NOT NULL AND estado <> 'cancelada'"),
+        ),
+        # Apoya la ventana de v_vidas: misma partición y orden (F4, 7.5).
+        Index(
+            "ix_ordenes_trabajo_cerradas_vida",
+            "empresa_id",
+            "activo_id",
+            "componente_id",
+            "fecha_falla",
+            "numero",
+            postgresql_where=text("estado = 'cerrada' AND NOT requiere_revision"),
+        ),
         Index(
             "ix_ordenes_trabajo_una_abierta_por_componente",
             "empresa_id",
@@ -173,6 +195,10 @@ class OrdenTrabajo(IdUUID, Base):
         DateTime(timezone=True), nullable=True
     )
     tiempo_fuera_servicio_min: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    #: Intervención planificada desde una alerta de riesgo (F4, 6.4): se cambia la pieza antes de
+    #: que falle. Un reemplazo predictivo cierra la vida **sin** falla (censura, decisión 8).
+    es_predictiva: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    alerta_sistema_id: Mapped[UUID | None] = mapped_column(Uuid, nullable=True)
 
     def __repr__(self) -> str:
         return f"<OrdenTrabajo OT-{self.numero:04d} {self.estado}>"

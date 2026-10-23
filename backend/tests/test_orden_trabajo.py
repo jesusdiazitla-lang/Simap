@@ -4,12 +4,12 @@ Cada prueba ataca como `app_user`, el rol del backend, sin pasar por el servicio
 la base se cayera, el servicio podría seguir tapándola y nadie se enteraría.
 """
 
-from datetime import UTC, datetime
 from uuid import uuid4
 
 import pytest
 from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError, IntegrityError
+from sqlalchemy.ext.asyncio import create_async_engine
 
 from app.models.orden_trabajo import OrdenContador
 from app.services import ordenes
@@ -22,7 +22,7 @@ from tests.base_ordenes import (
     motor_app,
     sembrar,
 )
-from tests.conftest import requiere_base
+from tests.conftest import URL_DUENO, requiere_base
 
 pytestmark = requiere_base
 
@@ -118,9 +118,9 @@ def test_rnf06_orden_cerrada_y_eventos_no_se_modifican_ni_se_borran() -> None:
 
 
 def test_rnf06_columnas_que_no_se_reescriben_nunca() -> None:
-    """Número, empresa, fecha de la falla y quién reportó no tienen permiso de UPDATE para
-    `app_user`, ni con la orden abierta (revisión 0007). Las horas acumuladas tienen su propio
-    cerrojo: `test_horas_acumuladas_solo_cambian_al_confirmar_el_horometro`."""
+    """Número, empresa y quién reportó no tienen permiso de UPDATE para `app_user`, ni con la
+    orden abierta (revisión 0007). Horas, dial y fecha de la falla tienen su propio cerrojo, el
+    trigger `ot_datos_de_falla` (revisiones 0008 y 0009)."""
 
     async def escenario() -> None:
         (a,) = await sembrar("Empresa A")
@@ -130,7 +130,6 @@ def test_rnf06_columnas_que_no_se_reescriben_nunca() -> None:
         try:
             for columna, valor in (
                 ("numero", 99),
-                ("fecha_falla", datetime(2020, 1, 1, tzinfo=UTC)),
                 ("reportado_por", a.usuario_id),
             ):
                 async with motor.connect() as conn:
@@ -301,15 +300,15 @@ def test_rf12_numeros_correlativos_sin_huecos_tras_rollback() -> None:
     assert correr(escenario()) == [1, 2, 2]
 
 
-def test_vista_intervalos_entre_fallas_con_los_valores_de_la_guia() -> None:
-    """La secuencia de la sección 6.6, fila por fila.
+def test_vista_de_vidas_con_la_secuencia_de_la_fase_3() -> None:
+    """La secuencia de la sección 6.6 de la fase 3, leída con `v_vidas` (F4, decisión 10).
 
-    La vida se mide desde la última falla anterior que **renovó** el componente (reemplazo). Las
-    canceladas y las que tienen el horómetro en revisión no cuentan, ni como medida ni como
-    referencia.
+    Una vida termina en un reemplazo; un ajuste o una reparación quedan dentro de la misma vida. Las
+    canceladas y las que tienen el horómetro en revisión no cuentan. La pieza instalada hoy es la
+    vida abierta.
     """
 
-    async def escenario() -> list[tuple[int, int | None]]:
+    async def escenario() -> list[tuple[int, bool, int, float]]:
         (a,) = await sembrar("Empresa A")
         secuencia = [
             fila_orden(a, numero=1, horas=1000, tipo="reemplazo"),
@@ -320,18 +319,36 @@ def test_vista_intervalos_entre_fallas_con_los_valores_de_la_guia() -> None:
             fila_orden(a, numero=6, horas=2900, tipo="reparacion"),
         ]
         await insertar_ordenes(a, secuencia)
+        motor_dueno = create_async_engine(URL_DUENO)
+        try:
+            async with motor_dueno.begin() as conn:
+                await fijar(conn, a.empresa_id)
+                await conn.execute(
+                    text(
+                        "INSERT INTO activo_componentes"
+                        " (empresa_id, activo_id, componente_id, horas_instalacion_inicial)"
+                        " VALUES (:e, :a, :c, 0)"
+                    ),
+                    {"e": a.empresa_id, "a": a.activo_id, "c": a.componente_id},
+                )
+        finally:
+            await motor_dueno.dispose()
         motor = motor_app()
         try:
             async with motor.connect() as conn, conn.begin():
                 await fijar(conn, a.empresa_id)
                 filas = await conn.execute(
                     text(
-                        "SELECT horas_acumuladas_en_falla, horas_de_vida"
-                        " FROM v_intervalos_entre_fallas ORDER BY fecha_falla"
+                        "SELECT vida, abierta, n_eventos, exposicion FROM v_vidas"
+                        " ORDER BY abierta, vida"
                     )
                 )
-                return [(int(h), None if v is None else int(v)) for h, v in filas.all()]
+                return [(int(v), bool(ab), int(n), float(x)) for v, ab, n, x in filas.all()]
         finally:
             await motor.dispose()
 
-    assert correr(escenario()) == [(1000, None), (1500, 500), (2200, 1200), (2900, 700)]
+    assert correr(escenario()) == [
+        (0, False, 1, 1000.0),  # reemplazo a las 1000 h
+        (1, False, 2, 1200.0),  # ajuste a las 1500 y reemplazo a las 2200
+        (2, True, 1, 700.0),  # abierta: la reparación de las 2900 h, sin renovar la pieza
+    ]

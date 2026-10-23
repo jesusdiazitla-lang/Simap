@@ -67,6 +67,8 @@ export interface Componente {
   readonly nombre: string;
   readonly descripcion: string | null;
   readonly activo: boolean;
+  /** Vida nominal en horas (F4, decisión 6): el centro del conocimiento previo del modelo. */
+  readonly vida_nominal_horas: number | null;
 }
 
 export const ETIQUETA_CRITICIDAD: Readonly<Record<Criticidad, string>> = {
@@ -143,7 +145,12 @@ export async function crearComponente(nombre: string, descripcion: string | null
 
 export async function editarComponente(
   id: string,
-  cambios: { nombre?: string; descripcion?: string | null; activo?: boolean },
+  cambios: {
+    nombre?: string;
+    descripcion?: string | null;
+    activo?: boolean;
+    vida_nominal_horas?: number | null;
+  },
 ): Promise<Componente> {
   return llamar<Componente>(`/componentes/${encodeURIComponent(id)}`, {
     method: "PATCH",

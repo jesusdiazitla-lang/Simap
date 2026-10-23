@@ -30,6 +30,11 @@
    - [5.3.2 Revisar alertas y lecturas que no cuadran](#532--revisar-alertas-y-lecturas-que-no-cuadran)
    - [5.4 Reportar una falla](#54--reportar-una-falla-se-abre-una-orden-de-trabajo)
    - [5.5 Seguir y cerrar una orden de trabajo](#55--seguir-y-cerrar-una-orden-de-trabajo)
+   - [5.6 Consultar el riesgo de un equipo](#56--consultar-el-riesgo-de-un-equipo)
+   - [5.6.1 Alertas del sistema y orden predictiva](#561--alertas-del-sistema-y-orden-predictiva)
+   - [5.6.2 Componentes del equipo, vida nominal y configuración](#562--componentes-del-equipo-vida-nominal-y-configuración-administrador)
+   - [5.7 Gestionar el inventario de repuestos](#57--gestionar-el-inventario-de-repuestos)
+   - [5.7.1 Repuestos usados en una orden](#571--repuestos-usados-en-una-orden)
    - [5.9 Administrar el personal y el catálogo de componentes](#59--administrar-el-personal-y-el-catálogo-de-componentes)
    - [5.10 La consola del operador de SIMAP](#510--la-consola-del-operador-de-simap)
 6. [Cómo calcula SIMAP el riesgo de un equipo](#6-cómo-calcula-simap-el-riesgo-de-un-equipo)
@@ -125,10 +130,11 @@ En el ordenador, el **menú está siempre a la izquierda**, agrupado por lo que 
 
 - **Inicio**: tu panel del turno.
 - **Campo**: escanear un equipo y, si eres operario, tus alertas.
+- **Mantenimiento**: órdenes de trabajo, riesgo de falla, alertas del sistema e inventario.
 - **Equipos**: la lista de equipos y, si administras la planta, dar de alta uno nuevo y el catálogo
   de componentes.
 - **Supervisión**: las alertas y las lecturas por revisar.
-- **Administración**: el personal de la empresa.
+- **Administración**: el personal de la empresa y la configuración de la predicción.
 - **Mi cuenta**: cambiar tu contraseña.
 
 Solo ves las partes que tu rol puede usar. Pulsa el nombre de un grupo para plegarlo o desplegarlo;
@@ -158,10 +164,10 @@ Tres cosas que sí notarás:
 | Rol | Puede hacer |
 |---|---|
 | **Operario** | Escanear el QR de un equipo, registrar lecturas de horómetro y reportar alertas. |
-| **Supervisor** | Todo lo del operario, además de reportar fallas, revisar alertas, y autorizar, rechazar o cancelar órdenes de trabajo. |
-| **Técnico de taller** | Llevar una orden al taller, registrar el trabajo realizado y marcarla como reparada. Es el único rol que puede marcarla reparada. (Los repuestos llegan en la fase 4.) |
-| **Gerente / Stakeholder** | Consultar las órdenes de trabajo y, más adelante, los indicadores de su empresa. Solo lectura: no autoriza cierres. |
-| **Administrador** | Gestionar usuarios, equipos y catálogo de componentes; lo mismo que el supervisor con las órdenes, además de corregir una orden cerrada y reiniciar un horómetro. |
+| **Supervisor** | Todo lo del operario, además de reportar fallas, revisar alertas, y autorizar, rechazar o cancelar órdenes de trabajo. Ver el riesgo, gestionar las alertas del sistema y crear órdenes predictivas; registrar ingresos de repuestos. |
+| **Técnico de taller** | Llevar una orden al taller, anotar los repuestos usados, registrar el trabajo realizado y marcarla como reparada. Es el único rol que puede marcarla reparada. Ve el riesgo del equipo y las existencias del almacén. |
+| **Gerente / Stakeholder** | Consultar las órdenes, el riesgo, las alertas del sistema y el inventario y, más adelante, los indicadores de su empresa. Solo lectura. |
+| **Administrador** | Gestionar usuarios, equipos y catálogo de componentes; lo mismo que el supervisor con las órdenes, además de corregir una orden cerrada y reiniciar un horómetro. Declarar la edad de las piezas y la vida nominal, configurar la predicción, dar de alta repuestos y ajustar por conteo. |
 
 ## 5. Funcionalidades
 
@@ -329,21 +335,105 @@ cualquier momento, también con la orden cerrada. El **gerente** consulta las ó
   por confirmar**, y SIMAP ya cuenta sus horas como eran **antes** del reinicio. Al confirmarla no
   cambian, y no se suman dos veces las horas que el equipo llevaba.
 
-### 5.6 ⏳ Gestionar el inventario de repuestos
-- **Objetivo:** saber qué repuestos hay y avisar antes de quedarse sin ellos.
-- **Quién:** Administrador o Supervisor.
-- **Cómo llegar:** menú **Inventario**.
-- **Pasos:** registra un repuesto (nombre, código, stock inicial, stock mínimo) o ajusta el stock de uno existente.
-- **Resultado:** cuando el stock cae por debajo del mínimo (por ejemplo al cerrar una orden), SIMAP genera una
-  **alerta de reorden**.
-
-### 5.7 ⏳ Consultar el riesgo de un equipo y las alertas automáticas
+### 5.6 ✅ Consultar el riesgo de un equipo
 - **Objetivo:** saber qué equipos conviene revisar antes de que fallen.
-- **Quién:** Supervisor, Gerente.
-- **Cómo llegar:** ficha del equipo (desde el QR o el listado) o panel del supervisor.
-- **Qué verás:** el **riesgo de falla** estimado para el próximo periodo y, si supera el umbral de tu empresa,
-  una **alerta preventiva** generada por el sistema. Si el equipo aún tiene poco historial, el riesgo aparece
-  marcado como **"estimado"** (se calcula con un modelo genérico).
+- **Quién:** supervisor, técnico de taller, gerente y administrador. El operario no lo ve.
+- **Cómo llegar:** en la pantalla del equipo (desde su QR o la lista), la tarjeta **Riesgo de falla**;
+  y **Mantenimiento → Riesgo de falla** para ver todos los equipos ordenados del más al menos
+  riesgoso.
+- **Qué verás, por cada componente del equipo:**
+  - el **porcentaje**: la probabilidad de que falle en las próximas horas de operación (50 por
+    defecto; SIMAP lo traduce a días aproximados con el uso reciente del equipo);
+  - el **nivel** escrito —**Riesgo bajo**, **Vigilar** o **Riesgo alto**—, que se mide contra el
+    umbral de tu empresa, no contra números fijos;
+  - su **respaldo**: cuántas fallas de tu empresa lo sostienen y con qué **confianza** (baja, media o
+    alta). Con confianza baja el número dice **«estimado»**;
+  - una frase que lo explica: «Esta pieza lleva 2.274 h; a esa edad el modelo estima 5 % de falla en
+    las próximas 50 h (21 fallas registradas)», y si cuenta el aumento por alertas de campo, también;
+  - **cuándo se calculó**. Un cálculo atrasado se ve atrasado.
+- **«Sin edad»** quiere decir que nadie ha dicho a cuántas horas del equipo se instaló esa pieza: no
+  es un 0 %, es que no se puede calcular. Lo resuelve el administrador (5.6.2) o el primer reemplazo.
+- **«Sin modelo»** quiere decir que el componente no tiene vida nominal declarada ni dos fallas
+  registradas. Lo resuelve el administrador declarando la vida nominal (5.6.2).
+- **Sin cobertura**, la pantalla del equipo muestra el **último cálculo conocido**, guardado en el
+  teléfono la última vez que lo abriste con red, con la hora de cada cálculo. No se actualiza hasta
+  que vuelva la red.
+- Desde **Riesgo de falla**, el nombre del componente lleva a su **modelo**: la curva de riesgo según
+  la edad de la pieza y la **curva de aprendizaje**, cómo cambió el modelo a medida que tu empresa
+  registró fallas (supervisor, gerente y administrador).
+
+### 5.6.1 ✅ Alertas del sistema y orden predictiva
+- **Objetivo:** cambiar una pieza antes de que falle, cuando su riesgo supera el umbral.
+- **Quién:** supervisor y administrador actúan; el gerente consulta.
+- **Cómo llegar:** **Mantenimiento → Alertas del sistema**. Pestañas **Riesgo** y **Reorden**, y
+  **Vigentes** o **Historial**.
+- Las alertas del sistema las crea SIMAP, no el personal: una por componente de cada equipo, aunque
+  el cálculo se repita. No son las alertas de campo del operario (5.3).
+- **Qué puedes hacer con una alerta de riesgo:**
+  1. **Crear orden predictiva**: abre una orden de trabajo marcada **Cambio planificado** para ese
+     componente y te lleva a ella. Sigue el ciclo de siempre (5.5). Al cerrarla, la alerta queda
+     resuelta.
+  2. **Reconocer**: «la vi». No cambia nada más; la alerta sigue vigente.
+  3. **Descartar…**, con una nota obligatoria: ese componente no vuelve a avisar durante unos días
+     (7 por defecto). Pasado el plazo, si el riesgo sigue alto, avisa de nuevo.
+- Si nadie hace nada y el riesgo baja claramente (por debajo del 80 % del umbral), la alerta **se
+  resuelve sola**. Así un riesgo que ronda el umbral no crea y borra alertas cada noche.
+- **Si el equipo falla antes del cambio planificado**, en la orden predictiva usa **Convertir en
+  falla** con el horómetro y la fecha reales: deja de ser un cambio planificado y cuenta como falla
+  para el cálculo.
+- **Si otra persona ya la gestionó**, la bandeja te avisa y se recarga.
+
+### 5.6.2 ✅ Componentes del equipo, vida nominal y configuración (administrador)
+- **Componentes y edad de las piezas:** en la pantalla del equipo, **Gestión del equipo →
+  Componentes y edad de las piezas**. Para cada componente escribe a cuántas horas del equipo se
+  instaló la pieza que tenía **al empezar a usar SIMAP**: 0 si el equipo era nuevo; vacío si no se
+  sabe. Los cambios posteriores los toma SIMAP de las órdenes cerradas con **Reemplazo**. Ahí también
+  se añade un componente del catálogo al equipo.
+- **Vida nominal:** en **Equipos → Componentes**, cuántas horas suele durar ese componente según el
+  fabricante o tu experiencia. Es el punto de partida del cálculo mientras tu empresa no tenga fallas
+  propias; a medida que las tenga, pesan más ellas.
+- **Configuración de la predicción:** **Administración → Predicción**. Umbral de alerta (25 % por
+  defecto), horizonte en horas de operación (50), cuántas alertas de campo y en qué ventana de días
+  suben el riesgo (2 en 15), cuánto lo suben (×1,30) y cuántos días calla un componente tras
+  descartarse su alerta (7). Cada campo dice sus límites.
+- Un umbral más bajo evita más fallas pero pide cambiar piezas más a menudo: en las simulaciones del
+  proyecto, con el 25 % se evita cerca de la mitad de las fallas a cambio de un cambio planificado
+  por cada falla evitada. Lo que conviene depende de lo que cuesta en tu planta una falla frente a
+  un cambio programado.
+
+### 5.7 ✅ Gestionar el inventario de repuestos
+- **Objetivo:** saber qué repuestos hay, de dónde sale cada número y avisar antes de quedarse sin
+  ellos.
+- **Quién:** consultar, supervisor, técnico de taller, gerente y administrador (el técnico ve las
+  existencias, no el libro). Dar de alta y editar, y el ajuste por conteo: administrador. Registrar
+  la mercancía que llega: supervisor y administrador.
+- **Cómo llegar:** **Mantenimiento → Inventario**. Filtro **Bajo el mínimo** y búsqueda por nombre o
+  código.
+- **Pasos (administrador):** en **Nuevo repuesto**, nombre, código, stock inicial, stock mínimo y
+  costo unitario (RD$) → **Dar de alta**. El stock inicial entra al libro como primer movimiento.
+- **El libro:** al abrir un repuesto ves cada movimiento —stock inicial, ingreso, consumo de una orden
+  o ajuste por conteo— con quién lo hizo, cuándo y cuánto quedó. Nadie puede modificarlo ni borrarlo.
+  El stock **no se edita a mano**: solo cambia por esos movimientos.
+- **Registrar un ingreso** (supervisor o administrador): la cantidad que llega y, si quieres, una nota
+  (factura, proveedor). No pongas datos personales: las notas no se borran.
+- **Ajuste por conteo físico** (administrador): cuando el conteo del almacén no coincide con el
+  sistema. Escribes las unidades contadas y por qué no coincide; queda en el libro con la diferencia.
+- **Alerta de reorden:** cuando un repuesto queda **por debajo** de su mínimo (igual al mínimo todavía
+  no avisa), aparece en **Alertas del sistema → Reorden**. Se resuelve sola cuando un ingreso lo
+  devuelve al mínimo.
+- Un repuesto que ya no se usa se **desactiva**; no se borra, porque lo referencian órdenes pasadas.
+
+### 5.7.1 ✅ Repuestos usados en una orden
+- **Quién:** el técnico de taller (y el supervisor o el administrador) mientras la orden está abierta.
+- **Cómo:** en la orden, panel **Repuestos** → **Añadir un repuesto**: busca por nombre o código,
+  elige, pon la cantidad y **Añadir**. Para corregir, cambia la cantidad o quítalo. Al lado verás
+  cuántos hay en el almacén, como orientación.
+- **Anotar no descuenta.** El stock se descuenta cuando un supervisor o administrador **autoriza el
+  cierre**, y el resumen de lo que vas a firmar incluye los repuestos y su costo.
+- **Si no hay stock suficiente**, el cierre no se hace: la orden sigue «Reparada» y un aviso dice qué
+  repuesto falta y cuánto («hay 1, la orden pide 3»). Si se anotó de más, el técnico corrige la
+  cantidad; si de verdad falta, se registra el ingreso en Inventario y se vuelve a autorizar.
+- Con la orden cerrada o cancelada, sus repuestos ya no cambian.
 
 ### 5.8 ⏳ Paneles por rol
 - **Operario:** tus reportes recientes.
@@ -453,21 +543,30 @@ esquivar sino en los permisos del motor de base de datos.
 
 ## 6. Cómo calcula SIMAP el riesgo de un equipo
 
-Sin tecnicismos: para cada **componente** (por ejemplo, la bomba de aceite) SIMAP mira cuántas horas de
-operación duró entre una falla y la siguiente en el historial de tu empresa. Con esas duraciones construye
-una curva de **confiabilidad** que responde a la pregunta *"si lleva T horas sin fallar, ¿qué probabilidad
-hay de que falle en las próximas X horas?"*.
+Sin tecnicismos: SIMAP mira cada **pieza** instalada en cada equipo y cuántas horas de operación lleva
+desde que se puso (su **edad**). Con todas las piezas de ese componente en tu empresa —las que fallaron
+y, muy importante, **las que siguen funcionando**— construye una curva que responde a *«si esta pieza
+lleva T horas, ¿qué probabilidad hay de que falle en las próximas X horas de operación?»*.
 
-Ejemplo: si una bomba suele fallar entre las 380 y 420 horas y hoy lleva 350, la probabilidad de que falle
-en las próximas 50 horas ronda el **25 %**. Si ese valor supera el **umbral** que configuró tu empresa, SIMAP
-genera una alerta preventiva.
+- Una **reparación** o un **ajuste** dejan la misma pieza, que sigue envejeciendo. Un **reemplazo** pone
+  una pieza nueva y su edad vuelve a cero. Por eso un equipo reparado muchas veces sin cambiar la pieza
+  muestra más riesgo que uno con la pieza recién cambiada.
+- Mientras tu empresa no tenga fallas de un componente, SIMAP parte de su **vida nominal** (lo que suele
+  durar) y lo marca **«estimado»**. Con cada falla registrada, pesa más tu historia que esa suposición.
+- Ejemplo: una pieza que suele fallar hacia las 430 h y hoy lleva 350 tiene alrededor de un **25 %** de
+  fallar en las próximas 50 horas. Si supera el **umbral** de tu empresa, SIMAP crea una alerta.
+- Si el equipo acumula **dos o más alertas de campo en los últimos 15 días**, el riesgo sube (con los
+  valores por defecto, ese 25 % pasa a 31 %): lo que ve el personal cuenta.
+- Un cambio planificado (orden predictiva) no se cuenta como falla: la pieza se retiró funcionando.
+  Contarlo como falla haría creer al sistema que las piezas duran poquísimo y pediría cambios sin fin.
 
-Además, si el equipo acumula **dos o más alertas de campo en los últimos 15 días**, el riesgo estimado sube
-un 30 %: lo que ve el personal cuenta.
+El cálculo se repite con **cada lectura de horómetro**, al **cerrar cada orden** (que además reajusta el
+modelo de ese componente) y una vez cada madrugada para todos los equipos.
 
-El cálculo se repite con **cada lectura de horómetro** y una vez al día para todos los equipos, y la curva de
-cada componente se reajusta a medida que se cierran más órdenes de trabajo: cuanto más se usa SIMAP, más
-acertado es.
+**Qué no hay que esperar del número.** Es una estimación: con pocas fallas puede equivocarse varios
+puntos, y por eso SIMAP enseña siempre cuántas fallas lo respaldan y con qué confianza. «Confianza alta»
+no quiere decir «exacto». Las pruebas del proyecto con datos simulados midieron cuánto se equivoca
+(`docs/contexto/anexos/experimentos-fase4.md`).
 
 ## 7. Preguntas frecuentes
 
@@ -486,6 +585,20 @@ hasta que el supervisor decide si era correcta (sección 5.3.2).
 En el panel, **Tu cuenta → Cambiar contraseña** (sección 5.0.1). Si no recuerdas la actual, pide al
 administrador de tu planta que te la restablezca; si el administrador eres tú, pídeselo a quien
 opera SIMAP.
+
+**¿Por qué un equipo dice «Sin edad» y no tiene riesgo?**
+Porque nadie ha dicho a cuántas horas del equipo se instaló esa pieza. Inventarla daría riesgos falsos.
+El administrador la declara en **Componentes y edad de las piezas** (5.6.2), o se conoce sola con el
+primer reemplazo.
+
+**¿Por qué el riesgo dice «estimado»?**
+Porque se apoya sobre todo en la vida nominal declarada, con pocas o ninguna falla de tu empresa
+(confianza baja). Irá ganando confianza a medida que se registren fallas.
+
+**No puedo cerrar una orden: dice que no hay stock.**
+Algún repuesto anotado no alcanza en el almacén. El aviso dice cuál y cuánto falta. Si se anotó de
+más, que el técnico corrija la cantidad; si falta de verdad, registra el ingreso y vuelve a autorizar
+(5.7.1).
 
 **¿Puedo ver los equipos de otra empresa?**
 No. Cada empresa solo ve sus datos; la restricción está en la base de datos.
@@ -508,7 +621,10 @@ En `http://<servidor>:8000/api/v1/health` aparece `"version"`.
 | «Sin decimales» al registrar el horómetro | Escribiste un punto o una coma decimal | Escribe solo la parte entera de las horas |
 | «Demasiados intentos» al entrar, aunque tu contraseña es correcta | Desde la red de la planta se han hecho muchos intentos fallidos en el último minuto | Espera un minuto y vuelve a entrar; si se repite, avisa al administrador |
 | La cámara no abre dentro de SIMAP | Falta permiso, o la conexión no es segura (HTTPS) | Usa la cámara del teléfono directamente, o teclea el código de la etiqueta |
-| No puedo marcar una orden como "Reparada" | Tu rol no lo permite | Solo el técnico de taller puede; el cierre lo autoriza supervisor o gerente |
+| No puedo marcar una orden como "Reparada" | Tu rol no lo permite | Solo el técnico de taller puede; el cierre lo autoriza el supervisor o el administrador |
+| «No hay stock para cerrar la orden» | Un repuesto anotado supera lo que hay en el almacén | Corregir la cantidad en **Repuestos** o registrar el ingreso en **Inventario** y volver a autorizar |
+| El riesgo de un equipo no aparece o dice «Sin edad» / «Sin modelo» | Falta la edad de la pieza o la vida nominal del componente | Avisa al administrador (5.6.2) |
+| El riesgo dice «Calculado hace» muchas horas | El último cálculo es viejo (sin lecturas recientes, o falló el cálculo nocturno) | Registra una lectura de horómetro: recalcula ese equipo; si persiste, avisa al administrador |
 
 ## 9. Glosario
 
@@ -521,7 +637,15 @@ En `http://<servidor>:8000/api/v1/health` aparece `"version"`.
 | Componente | Parte del equipo que falla (catálogo: tren motriz, sistema hidráulico…). |
 | Criticidad | Importancia del equipo para la producción: alta, media o baja. |
 | Riesgo de falla | Probabilidad estimada de que el equipo falle en el próximo periodo. |
-| Umbral | Valor de riesgo a partir del cual SIMAP genera una alerta preventiva. |
+| Umbral | Valor de riesgo a partir del cual SIMAP genera una alerta preventiva (25 % por defecto). |
+| Horizonte | Las próximas horas de operación para las que se calcula el riesgo (50 por defecto). |
+| Edad de la pieza | Horas de operación de la pieza instalada desde que se puso (o desde el último reemplazo). |
+| Vida nominal | Cuántas horas suele durar un componente: el punto de partida del cálculo sin fallas propias. |
+| Confianza | Cuántas fallas de tu empresa respaldan un riesgo: baja (menos de 8), media (8 a 19), alta (20 o más). |
+| Alerta del sistema | La crea SIMAP: un componente con riesgo sobre el umbral, o un repuesto bajo su mínimo. |
+| Orden predictiva | Orden para cambiar una pieza antes de que falle («Cambio planificado»). |
+| Libro de movimientos | Registro de cada entrada y salida de un repuesto. Solo se agrega; no se modifica. |
+| Reorden | Aviso de que un repuesto quedó por debajo de su stock mínimo. |
 | MTBF | Tiempo medio entre fallas. |
 | Disponibilidad | Porcentaje del tiempo en que el equipo estuvo operativo. |
 | API | Servicio que la interfaz usa para leer y guardar datos. |
@@ -543,6 +667,7 @@ En `http://<servidor>:8000/api/v1/health` aparece `"version"`.
 | 2026-10-02 | 0.6.0 | **Cambiar tu contraseña**, en el panel y en la consola del operador (nueva sección 5.0.1). Al cambiarla, o cuando te la restablecen, se cierran tus sesiones en otros aparatos. El acceso a la consola del operador pasa a tener límite de intentos. |
 | 2026-10-02 | 0.6.0 | Sin conexión, SIMAP muestra su propio aviso en lugar del error del navegador. Quien entra sin sesión va directo a la pantalla de acceso, sin pantallas intermedias. Corregida la sección 3.4, que describía un registro de intentos que ya no aparece en pantalla. |
 | 2026-10-07 | 0.7.0 | **Fase 2: equipos y registro de campo.** Equipos con etiqueta QR imprimible (5.1); horómetro (5.2) y alertas (5.3) desde el teléfono en tres pasos; **funciona sin cobertura** y lo pendiente se envía solo (5.3.1); bandeja de alertas y de lecturas que no cuadran, con reinicio del horómetro (5.3.2); el administrador gestiona su personal y el catálogo de componentes (5.9). |
+| 2026-10-22 | 0.9.0 | **Fase 4: predicción e inventario.** Riesgo de falla de cada componente con su respaldo y su confianza, también sin cobertura como último valor conocido (5.6); lista de equipos por riesgo y modelo de cada componente con su curva de aprendizaje; **alertas del sistema** y **orden predictiva** para cambiar una pieza antes de que falle (5.6.1); edad de las piezas, vida nominal y configuración de la predicción (5.6.2); **inventario** con libro de movimientos, ingresos, conteos y alerta de reorden (5.7); repuestos usados en la orden, descontados al autorizar el cierre (5.7.1). Reescrita la sección 6. |
 | 2026-10-15 | 0.8.1 | Corrección: una falla reportada sin cobertura **antes** de un reinicio del horómetro, que llega después, ya no cuenta dos veces las horas que el equipo llevaba antes del cambio (5.5.2). Afecta a la vida de los componentes que usará el cálculo de riesgo. |
 | 2026-10-14 | 0.8.0 | **Fase 3: órdenes de trabajo.** Reportar una falla desde el equipo o desde una alerta abre una orden numerada (5.4); el taller la lleva de «Reportada» a «Reparada» y un supervisor autoriza su salida, con el tiempo fuera de servicio calculado; rechazo de cierre, cancelación con motivo, notas e historial completo con cada responsable (5.5). Corrección administrativa de una orden cerrada (5.5.1) y reinicio del horómetro sin perder las horas del equipo (5.5.2). Los equipos con una orden abierta aparecen **En falla**. Nueva rama **Mantenimiento** en el menú. |
 | 2026-10-11 | 0.7.2 | **Menú lateral en árbol**, agrupado por área de trabajo; en el teléfono se abre con el botón **Menú** (3.5). Las lecturas por revisar tienen su propia entrada en el menú. |

@@ -58,25 +58,37 @@ Con cada lectura de horómetro o cierre de orden:
 Se dispara con **cada lectura de ronda**, no solo al fallar: así se advierte antes de la falla.
 
 ### 5.3 Modelo estadístico: análisis de supervivencia (Weibull)
-Por cada **componente** se ajusta una distribución de Weibull sobre el historial de horas hasta la falla de
-las órdenes cerradas (`scipy.stats.weibull_min.fit`, no a mano).
+Por cada **componente** se ajusta una distribución de Weibull con el historial de órdenes cerradas de la empresa.
+
+*[Actualizado en F4, decisión 11 de `07-fase4-prediccion-e-inventario.md` §4, confirmada el 2026-10-18.]* El ajuste no
+es `scipy.stats.weibull_min.fit` sobre los intervalos entre fallas, porque ese método no ve las piezas que siguen
+funcionando (censura) y en las simulaciones se equivoca de 4 a 7 veces más. Es un **máximo a posteriori** de Weibull con
+reparación mínima, sobre las **vidas** de cada pieza (fallas, edades y horas observadas, incluida la pieza instalada
+hoy), con un conocimiento previo centrado en la **vida nominal** del componente (`07-fase4…` §5). scipy se usa para
+verificarlo.
 
 - Confiabilidad: `R(t) = exp(−(t/η)^β)` — η vida característica, β>1 desgaste progresivo.
 - Probabilidad condicional de falla en un intervalo Δt, habiendo operado T horas: `1 − R(T+Δt) / R(T)`.
 
-Ejemplo: bomba de aceite falla entre 380–420 h → β≈3.5, η≈430. Con 350 h desde la última falla:
+Ejemplo **ilustrativo** (β y η no salen de ajustar esas fallas, que darían β≈30): bomba de aceite falla entre
+380–420 h → β≈3.5, η≈430. Con 350 h de **edad de la pieza**:
 R(350)≈0.61, R(400)≈0.46 → ≈25 % de fallar en las próximas 50 h. Si supera el umbral de la empresa
-(`RISK_THRESHOLD`), se genera una **alerta preventiva automática**.
+(`configuracion_empresa.umbral_riesgo`, 25 % por defecto), se genera una **alerta preventiva automática**. *[Actualizado
+en F4, decisión 5.]*
 
 ### 5.4 Señal secundaria: alertas de campo
-Multiplicador simple y explicable: p. ej. **2+ alertas en los últimos 15 días → riesgo × 1.30**.
+Multiplicador simple y explicable: p. ej. **2+ alertas en los últimos 15 días → riesgo × 1.30**. *[Actualizado en F4,
+`07-fase4…` §5.4.]* El 1,30 multiplica la intensidad de falla, no la probabilidad, para que el resultado nunca pase de
+1: con el ejemplo de 5.3 el riesgo pasa de 25,2 % a 31,4 %.
 
 ### 5.5 Aislamiento del aprendizaje
 Cada empresa ajusta su propio modelo solo con su historial; nunca se combinan datos entre tenants.
 
 ### 5.6 Actualización continua
 Proceso programado diario (APScheduler) que recalcula el riesgo de todos los activos y reajusta β y η de cada
-componente cuando hay suficientes órdenes nuevas.
+componente cuando hay suficientes órdenes nuevas. *[Actualizado en F4, decisión 13.]* Además, cada cierre de orden deja
+una marca durable y el modelo de ese componente se reajusta en segundo plano al momento; el job de la madrugada recoge
+lo que quede pendiente.
 
 ## 6. Modelo de datos (conceptual)
 

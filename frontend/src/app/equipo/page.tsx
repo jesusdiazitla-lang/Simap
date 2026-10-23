@@ -34,6 +34,7 @@ import { Panel } from "@/components/marco";
 import { EnlaceBoton, Esqueleto, Pantalla } from "@/components/pantalla";
 import { Boton } from "@/components/boton";
 import { Campo } from "@/components/campo";
+import { RiesgoPorComponente } from "@/components/riesgo";
 import { ErrorApi } from "@/lib/api";
 import {
   activoPorCodigo,
@@ -51,14 +52,28 @@ import {
   type Lectura,
 } from "@/lib/campo";
 import { fecha, fechaHora, hace, horas } from "@/lib/formato";
-import { equipoGuardado, guardarEquipo } from "@/lib/offline-queue";
+import { equipoGuardado, guardarEquipo, guardarRiesgo } from "@/lib/offline-queue";
 import { leerHorometro } from "@/lib/horometro";
 import { ETIQUETA_ESTADO_ORDEN, numeroOrden } from "@/lib/ordenes";
+import {
+  listarAlertasSistema,
+  numero,
+  porcentaje,
+  riesgoDelEquipo,
+  type AlertaSistema,
+  type RiesgoEquipo,
+} from "@/lib/prediccion";
 import { normalizarCodigo, presentarCodigo } from "@/lib/qr";
 
 type Carga =
   | { readonly tipo: "cargando" }
-  | { readonly tipo: "listo"; readonly activo: Activo; readonly guardadoEn: number | null }
+  | {
+      readonly tipo: "listo";
+      readonly activo: Activo;
+      readonly guardadoEn: number | null;
+      /** Sin red: el último riesgo guardado en este teléfono, si lo hay. */
+      readonly riesgoGuardado: RiesgoEquipo | null;
+    }
   | { readonly tipo: "no-encontrado" }
   | { readonly tipo: "sin-datos" }
   | { readonly tipo: "error"; readonly mensaje: string };
@@ -90,7 +105,7 @@ function Equipo({ usuario, sinRed }: { readonly usuario: Usuario; readonly sinRe
       try {
         const activo = await activoPorCodigo(codigo, control.signal);
         await guardarEquipo(usuario.id, activo);
-        setCarga({ tipo: "listo", activo, guardadoEn: null });
+        setCarga({ tipo: "listo", activo, guardadoEn: null, riesgoGuardado: null });
       } catch (error) {
         if (error instanceof DOMException && error.name === "AbortError") return;
         if (error instanceof ErrorApi && error.estado === 404) {
@@ -102,7 +117,13 @@ function Equipo({ usuario, sinRed }: { readonly usuario: Usuario; readonly sinRe
           setCarga(
             guardado === null
               ? { tipo: "sin-datos" }
-              : { tipo: "listo", activo: guardado.activo, guardadoEn: guardado.guardado_en },
+              : {
+                  tipo: "listo",
+                  activo: guardado.activo,
+                  guardadoEn: guardado.guardado_en,
+                  // Lo guardó esta misma pantalla con la respuesta de riesgoDelEquipo.
+                  riesgoGuardado: (guardado.riesgo as RiesgoEquipo | null) ?? null,
+                },
           );
           return;
         }
@@ -162,6 +183,7 @@ function Equipo({ usuario, sinRed }: { readonly usuario: Usuario; readonly sinRe
       usuario={usuario}
       inicial={carga.activo}
       guardadoEn={carga.guardadoEn}
+      riesgoGuardado={carga.riesgoGuardado}
     />
   );
 }
@@ -170,10 +192,12 @@ function FichaEquipo({
   usuario,
   inicial,
   guardadoEn,
+  riesgoGuardado,
 }: {
   readonly usuario: Usuario;
   readonly inicial: Activo;
   readonly guardadoEn: number | null;
+  readonly riesgoGuardado: RiesgoEquipo | null;
 }) {
   const [activo, setActivo] = useState(inicial);
   const rol = usuario.rol;
@@ -211,6 +235,11 @@ function FichaEquipo({
       <Identidad activo={activo} />
 
       <EnFalla activo={activo} veOrdenes={rol !== "operario"} />
+
+      {rol !== "operario" && guardadoEn === null ? <TarjetaRiesgo usuario={usuario} activo={activo} /> : null}
+      {rol !== "operario" && guardadoEn !== null && riesgoGuardado !== null ? (
+        <RiesgoSinConexion usuario={usuario} datos={riesgoGuardado} />
+      ) : null}
 
       {activo.estado === "baja" ? (
         <p className="flex gap-2 rounded-[var(--radius-control)] border border-borde-fuerte bg-superficie px-3 py-2.5 text-[0.9375rem] leading-6 text-texto">
@@ -344,6 +373,14 @@ function Gestion({ activo, alCambiar }: { readonly activo: Activo; readonly alCa
 
   return (
     <Panel nivel={2} titulo="Gestión del equipo">
+      <p className="pb-3 text-[0.9375rem]">
+        <Link href={`/activos/${activo.id}/componentes`} className="font-medium text-accion underline-offset-2 hover:underline">
+          Componentes y edad de las piezas
+        </Link>
+        <span className="block text-[0.8125rem] text-texto-suave">
+          Sin la edad de una pieza no se puede calcular su riesgo.
+        </span>
+      </p>
       <div className="flex flex-col gap-3">
         <div className="grid gap-2 sm:grid-cols-2">
           <EnlaceBoton href={`/activos/${activo.id}/editar`}>Editar ficha</EnlaceBoton>
@@ -596,5 +633,106 @@ function Historial({ activo }: { readonly activo: Activo }) {
         )}
       </Panel>
     </div>
+  );
+}
+
+
+/**
+ * Riesgo de falla del equipo (F4, 10.1): cada componente con su respaldo, y las alertas del sistema
+ * vigentes. El operario no lo ve (tabla 12.1); el técnico ve el riesgo pero no la bandeja.
+ */
+/**
+ * Sin red: el último riesgo que este teléfono vio del equipo, marcado como tal (07-fase4, 10.2).
+ * Cada componente conserva la hora de su cálculo; sin red no hay acciones ni enlaces al modelo.
+ */
+function RiesgoSinConexion({ usuario, datos }: { readonly usuario: Usuario; readonly datos: RiesgoEquipo }) {
+  return (
+    <Panel
+      nivel={2}
+      titulo="Riesgo de falla"
+      descripcion={`Último cálculo conocido, guardado en este teléfono. Sin conexión no se actualiza. Umbral de la empresa: ${porcentaje(Number(datos.umbral))}.`}
+    >
+      <RiesgoPorComponente datos={datos} usuario={usuario} verModelo={false} />
+    </Panel>
+  );
+}
+
+function TarjetaRiesgo({ usuario, activo }: { readonly usuario: Usuario; readonly activo: Activo }) {
+  const [datos, setDatos] = useState<RiesgoEquipo | null>(null);
+  const [alertas, setAlertas] = useState<readonly AlertaSistema[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const veBandeja = usuario.rol !== "tecnico_taller";
+
+  useEffect(() => {
+    const control = new AbortController();
+    riesgoDelEquipo(activo.id, control.signal)
+      .then((r) => {
+        setDatos(r);
+        // Para verlo sin red como último valor conocido (10.2). Si no se puede guardar, da igual.
+        void guardarRiesgo(usuario.id, activo.codigo, r).catch(() => undefined);
+      })
+      .catch((e: unknown) => {
+        if (e instanceof DOMException && e.name === "AbortError") return;
+        setError(e instanceof ErrorApi ? e.message : "No se pudo calcular el riesgo.");
+      });
+    if (veBandeja) {
+      listarAlertasSistema({ tipo: "riesgo", estado: "vigentes", activoId: activo.id }, control.signal)
+        .then((p) => setAlertas(p.items))
+        .catch(() => setAlertas([]));
+    }
+    return () => control.abort();
+  }, [activo.id, activo.codigo, usuario.id, veBandeja]);
+
+  return (
+    <Panel
+      nivel={2}
+      titulo="Riesgo de falla"
+      descripcion={
+        datos !== null
+          ? `Probabilidad de falla de cada componente en las próximas ${horas(datos.horizonte_horas)} de operación. Umbral de la empresa: ${porcentaje(Number(datos.umbral))}.`
+          : undefined
+      }
+    >
+      {error !== null ? (
+        <p role="alert" className="text-[0.9375rem] text-error">{error}</p>
+      ) : datos === null ? (
+        <Esqueleto filas={2} />
+      ) : (
+        <div className="flex flex-col gap-4">
+          {alertas.length > 0 ? (
+            <ul className="flex flex-col gap-2">
+              {alertas.map((a) => (
+                <li
+                  key={a.id}
+                  className="flex flex-wrap items-center justify-between gap-2 rounded-[var(--radius-control)] border border-estado-falla bg-superficie px-3 py-2.5 text-[0.9375rem] text-texto"
+                >
+                  <span className="flex gap-2">
+                    <IconoAviso className="mt-0.5 shrink-0 text-estado-falla" />
+                    <span>
+                      Alerta de riesgo: {a.componente} al {porcentaje(numero(a.riesgo) ?? 0)}
+                      {a.estado === "atendida" && a.orden_numero !== null
+                        ? ` · cambio planificado en ${numeroOrden(a.orden_numero)}`
+                        : a.estado === "reconocida"
+                          ? " · reconocida"
+                          : ""}
+                    </span>
+                  </span>
+                  <Link href="/alertas-sistema" className="text-[0.875rem] font-medium text-accion underline-offset-2 hover:underline">
+                    Ver en la bandeja
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+          {datos.alertas_de_campo >= datos.alertas_minimas ? (
+            <p className="text-[0.875rem] leading-5 text-texto-suave">
+              {datos.alertas_de_campo} alertas de campo recientes: el riesgo de este equipo se calcula
+              con el multiplicador de la empresa.
+            </p>
+          ) : null}
+          <RiesgoPorComponente datos={datos} usuario={usuario} verModelo={veBandeja} />
+        </div>
+      )}
+    </Panel>
   );
 }

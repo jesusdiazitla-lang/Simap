@@ -78,3 +78,28 @@ $$;
 GRANT CONNECT ON DATABASE simap TO operador_user;
 GRANT USAGE ON SCHEMA public TO operador_user;
 REVOKE CREATE ON SCHEMA public FROM operador_user;
+
+-- =============================================================================
+-- QUINTO ROL: el job nocturno de la fase 4 (07-fase4, seccion 7.10).
+--
+-- Recorre todas las empresas para recalcular su riesgo: necesita saber cuales
+-- existen, pero no puede leer sus datos. Es miembro de app_user, asi que hereda
+-- sus permisos y sigue sujeto a RLS: solo ve algo despues de fijar el tenant,
+-- empresa por empresa. Su unico privilegio propio es ejecutar
+-- empresas_activas(), que concede la migracion 0009 y devuelve solo los ids.
+--
+-- Vive aqui y no en la migracion porque simap_owner no puede crear roles ni
+-- conceder pertenencias.
+-- =============================================================================
+
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'job_user') THEN
+        CREATE ROLE job_user LOGIN PASSWORD 'changeme_job' NOSUPERUSER NOBYPASSRLS;
+    END IF;
+END
+$$;
+
+GRANT app_user TO job_user;
+GRANT CONNECT ON DATABASE simap TO job_user;
+GRANT USAGE ON SCHEMA public TO job_user;

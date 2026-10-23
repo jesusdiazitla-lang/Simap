@@ -16,11 +16,14 @@ import { AccionesOrden } from "@/components/acciones-orden";
 import { EstadoOrdenInsignia, HorometroEnRevision } from "@/components/estado";
 import { HistorialOrden } from "@/components/historial-orden";
 import { IconoAviso } from "@/components/iconos";
+import { Insignia } from "@/components/estado";
+import { RepuestosOrden } from "@/components/repuestos-orden";
 import { Panel } from "@/components/marco";
 import { EnlaceBoton, Esqueleto, Pantalla } from "@/components/pantalla";
 import { ErrorApi } from "@/lib/api";
 import type { Rol, Usuario } from "@/lib/auth";
 import { fechaHora, hace, horas } from "@/lib/formato";
+import { lineasDeOrden, type Linea } from "@/lib/inventario";
 import {
   duracion,
   ETIQUETA_INTERVENCION,
@@ -46,12 +49,14 @@ function Detalle({ usuario }: { readonly usuario: Usuario }) {
   const [orden, setOrden] = useState<OrdenDetalle | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [conflicto, setConflicto] = useState<string | null>(null);
+  const [lineas, setLineas] = useState<readonly Linea[] | null>(null);
 
   const cargar = useCallback(
     (signal?: AbortSignal) =>
-      obtenerOrden(id, signal)
-        .then((o) => {
+      Promise.all([obtenerOrden(id, signal), lineasDeOrden(id, signal)])
+        .then(([o, l]) => {
           setOrden(o);
+          setLineas(l);
           setError(null);
         })
         .catch((e: unknown) => {
@@ -114,15 +119,20 @@ function Detalle({ usuario }: { readonly usuario: Usuario }) {
             <AccionesOrden
               orden={orden}
               usuario={usuario}
+              lineas={lineas}
               alCambiar={(o) => {
                 setOrden(o);
                 setConflicto(null);
+                void cargar();
               }}
               alConflicto={(mensaje) => {
                 setConflicto(mensaje);
                 void cargar();
               }}
             />
+          </Panel>
+          <Panel nivel={2} titulo="Repuestos">
+            <RepuestosOrden orden={orden} usuario={usuario} lineas={lineas} alCambiar={setLineas} />
           </Panel>
           <Panel nivel={2} titulo="Historial">
             <HistorialOrden eventos={orden.eventos} />
@@ -149,7 +159,17 @@ function Cabecera({ orden }: { readonly orden: OrdenDetalle }) {
         </h1>
         <EstadoOrdenInsignia estado={orden.estado} />
         {orden.requiere_revision ? <HorometroEnRevision /> : null}
+        {orden.es_predictiva ? <Insignia tono="neutro">Cambio planificado</Insignia> : null}
       </div>
+      {orden.es_predictiva ? (
+        <p className="pt-2 text-[0.875rem] leading-5 text-texto-suave">
+          Orden predictiva: nació de una{" "}
+          <Link href="/alertas-sistema" className="text-accion underline-offset-2 hover:underline">
+            alerta de riesgo
+          </Link>
+          , no de una falla. Si el equipo falla antes de la intervención, conviértela en falla.
+        </p>
+      ) : null}
       <p className="pt-2 text-[1.0625rem] font-semibold leading-6 text-texto [overflow-wrap:anywhere]">
         <Link href={`/a/${orden.activo_codigo}`} className="text-accion underline-offset-2 hover:underline">
           {orden.activo_nombre}

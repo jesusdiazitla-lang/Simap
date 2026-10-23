@@ -62,13 +62,24 @@ export interface Conflicto {
   readonly codigo: string;
   readonly ordenId: string | null;
   readonly numero: number | null;
+  /** Repuestos que no alcanzan para cerrar la orden (409 `stock_insuficiente`, F4). */
+  readonly faltantes: readonly Faltante[];
+}
+
+/** Un repuesto que no alcanza al cerrar: lo que hay y lo que pide la orden. */
+export interface Faltante {
+  readonly codigo: string;
+  readonly nombre: string;
+  readonly disponible: number;
+  readonly requerido: number;
 }
 
 interface DetalleConflicto {
   readonly codigo: string;
   readonly mensaje: string;
-  readonly orden_id: string | null;
-  readonly numero: number | null;
+  readonly orden_id?: string | null;
+  readonly numero?: number | null;
+  readonly faltantes?: readonly Faltante[];
 }
 
 function esConflicto(valor: unknown): valor is DetalleConflicto {
@@ -176,7 +187,12 @@ async function lanzarSiFalla(resp: Response): Promise<void> {
     camposDesdeDetalle(detalle),
     reintentar !== null ? Number(reintentar) : undefined,
     esConflicto(detalle)
-      ? { codigo: detalle.codigo, ordenId: detalle.orden_id, numero: detalle.numero }
+      ? {
+          codigo: detalle.codigo,
+          ordenId: detalle.orden_id ?? null,
+          numero: detalle.numero ?? null,
+          faltantes: detalle.faltantes ?? [],
+        }
       : undefined,
   );
 }

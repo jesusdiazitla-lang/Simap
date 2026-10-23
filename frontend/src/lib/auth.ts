@@ -120,6 +120,16 @@ export const ACCIONES_POR_ROL: Readonly<Record<Rol, readonly Accion[]>> = {
       descripcion: "Fallas abiertas, autorizar o rechazar el cierre del taller, y el historial.",
       ruta: "/ordenes",
     },
+    {
+      nombre: "Riesgo de falla",
+      descripcion: "Equipos ordenados por riesgo y las alertas del sistema para atender.",
+      ruta: "/riesgo",
+    },
+    {
+      nombre: "Inventario",
+      descripcion: "Existencias de repuestos e ingresos de mercancía.",
+      ruta: "/inventario",
+    },
   ],
   tecnico_taller: [
     {
@@ -129,8 +139,13 @@ export const ACCIONES_POR_ROL: Readonly<Record<Rol, readonly Accion[]>> = {
     },
     {
       nombre: "Repuestos usados",
-      descripcion: "Anota qué se consumió en cada reparación.",
-      fase: "F4",
+      descripcion: "Anota en la orden qué se consumió; el stock se descuenta al cerrarla.",
+      ruta: "/ordenes",
+    },
+    {
+      nombre: "Existencias",
+      descripcion: "Qué repuestos hay en el almacén antes de empezar una reparación.",
+      ruta: "/inventario",
     },
   ],
   gerente: [
@@ -147,7 +162,7 @@ export const ACCIONES_POR_ROL: Readonly<Record<Rol, readonly Accion[]>> = {
     {
       nombre: "Activos de mayor riesgo",
       descripcion: "Qué equipos conviene intervenir antes de que fallen.",
-      fase: "F4",
+      ruta: "/riesgo",
     },
     {
       nombre: "Costo de repuestos",
@@ -175,6 +190,16 @@ export const ACCIONES_POR_ROL: Readonly<Record<Rol, readonly Accion[]>> = {
       nombre: "Órdenes de trabajo",
       descripcion: "Todas las fallas de la empresa; corregir una orden cerrada si hace falta.",
       ruta: "/ordenes",
+    },
+    {
+      nombre: "Riesgo de falla",
+      descripcion: "Equipos por riesgo, alertas del sistema y la configuración de la predicción.",
+      ruta: "/riesgo",
+    },
+    {
+      nombre: "Inventario de repuestos",
+      descripcion: "Altas, mínimos, costos, ingresos y conteos.",
+      ruta: "/inventario",
     },
   ],
 };
@@ -228,6 +253,18 @@ const ARBOL: readonly {
         ruta: "/ordenes",
         roles: ["supervisor", "tecnico_taller", "gerente", "administrador"],
       },
+      // F4: predicción e inventario.
+      { nombre: "Riesgo de falla", ruta: "/riesgo", roles: ["supervisor", "gerente", "administrador"] },
+      {
+        nombre: "Alertas del sistema",
+        ruta: "/alertas-sistema",
+        roles: ["supervisor", "gerente", "administrador"],
+      },
+      {
+        nombre: "Inventario",
+        ruta: "/inventario",
+        roles: ["supervisor", "tecnico_taller", "gerente", "administrador"],
+      },
     ],
   },
   {
@@ -251,7 +288,10 @@ const ARBOL: readonly {
   {
     area: "administracion",
     nombre: "Administración",
-    hojas: [{ nombre: "Personal", ruta: "/panel/usuarios", roles: ["administrador"] }],
+    hojas: [
+      { nombre: "Personal", ruta: "/panel/usuarios", roles: ["administrador"] },
+      { nombre: "Predicción", ruta: "/configuracion/prediccion", roles: ["administrador"] },
+    ],
   },
   {
     area: "cuenta",

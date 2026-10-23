@@ -28,8 +28,10 @@ dialecto que usa SQLAlchemy (`engine.dialect.name`). Nada más en toda la aplica
 from abc import ABC, abstractmethod
 from uuid import UUID
 
-from sqlalchemy import text
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models.empresa import Empresa
 
 
 class EstrategiaTenant(ABC):
@@ -56,6 +58,24 @@ class EstrategiaTenant(ABC):
         ya la empresa. Cada motor lo resuelve a su manera; en los que no aplican aislamiento en la
         base no hace falta nada.
         """
+
+    async def empresas_activas(self, session: AsyncSession) -> list[UUID]:
+        """Los ids de todas las empresas, para el job nocturno (07-fase4, 7.10).
+
+        Sin RLS no hay nada que esquivar: se leen de la tabla. En PostgreSQL lo resuelve una
+        función que solo `job_user` puede ejecutar.
+        """
+        return list((await session.scalars(select(Empresa.id).order_by(Empresa.id))).all())
+
+    async def tomar_candado_empresa(self, session: AsyncSession, empresa_id: UUID) -> bool:
+        """Candado por empresa durante la transacción, para que dos procesos del job no la
+        trabajen a la vez (9.3). Sin candados consultivos en el motor, siempre se concede: el
+        trabajo es idempotente y dos corridas simultáneas solo repiten cálculo."""
+        return True
+
+    async def limitar_duracion(self, session: AsyncSession, milisegundos: int) -> None:
+        """Tiempo máximo de cada sentencia en esta transacción. Sin soporte, no hace nada."""
+        return None
 
     async def permitir_correccion(self, session: AsyncSession) -> None:
         """Deja modificar una orden cerrada durante esta transacción (corrección administrativa).
@@ -121,6 +141,33 @@ class RowLevelSecurityPostgres(EstrategiaTenant):
         await session.execute(
             text("SELECT set_config(:variable, 'on', true)"),
             {"variable": self.VARIABLE_CORRECCION},
+        )
+
+    async def empresas_activas(self, session: AsyncSession) -> list[UUID]:
+        """`empresas_activas()` (revisión 0009): SECURITY DEFINER, ejecutable solo por job_user.
+
+        Con `app_user` responde «permission denied»: la aplicación no puede listar empresas.
+        """
+        filas = await session.execute(text("SELECT empresas_activas()"))
+        return [fila[0] for fila in filas]
+
+    async def tomar_candado_empresa(self, session: AsyncSession, empresa_id: UUID) -> bool:
+        """`pg_try_advisory_xact_lock` con una clave derivada de la empresa (9.3).
+
+        No espera: si otro proceso ya la trabaja, devuelve `False` y el job la salta. El candado se
+        libera solo al terminar la transacción. Es lo que permite lanzar varios procesos del job
+        en paralelo sin coordinarlos.
+        """
+        concedido = await session.scalar(
+            text("SELECT pg_try_advisory_xact_lock(hashtextextended(:clave, 0))"),
+            {"clave": f"simap-job:{empresa_id}"},
+        )
+        return bool(concedido)
+
+    async def limitar_duracion(self, session: AsyncSession, milisegundos: int) -> None:
+        await session.execute(
+            text("SELECT set_config('statement_timeout', :valor, true)"),
+            {"valor": str(int(milisegundos))},
         )
 
 

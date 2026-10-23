@@ -67,6 +67,7 @@ class Persona:
     correo: str
     token: str
     id: UUID
+    empresa_id: UUID | None = None
 
     @property
     def cabeceras(self) -> dict[str, str]:
@@ -154,6 +155,43 @@ class Planta:
         resp = self.reparar(orden_id, tipo)
         assert resp.status_code == 200, resp.text
 
+    def ciclo(
+        self, activo_id: str, componente_id: str, horometro: int, tipo: str = "reemplazo"
+    ) -> dict[str, Any]:
+        """Una falla de principio a fin (F3): reportada, en taller, reparada y cerrada.
+
+        Al cerrarla corre, en segundo plano, el reajuste del modelo y el recálculo (F4, 9.2).
+        """
+        orden = self.orden(activo_id, componente_id=componente_id, horometro=horometro)
+        self.llevar_a_reparada(orden["id"], tipo)
+        cierre = self.mover(self.supervisor, orden["id"], "cerrar")
+        assert cierre.status_code == 200, cierre.text
+        return dict(cierre.json())
+
+    def edad(self, activo_id: str, componente_id: str, horas: int | None = 0) -> httpx.Response:
+        """Declara a qué horas del equipo se instaló la pieza (F4, 6.1). 0: equipo nuevo."""
+        return self.pedir(
+            self.admin,
+            "PUT",
+            f"/activos/{activo_id}/componentes/{componente_id}",
+            json={"horas_instalacion_inicial": horas},
+        )
+
+    def vida_nominal(self, componente_id: str, horas: int | None) -> httpx.Response:
+        return self.pedir(
+            self.admin, "PATCH", f"/componentes/{componente_id}", json={"vida_nominal_horas": horas}
+        )
+
+    def riesgo(self, activo_id: str, quien: Persona | None = None) -> dict[str, Any]:
+        resp = self.pedir(quien or self.supervisor, "GET", f"/activos/{activo_id}/riesgo")
+        assert resp.status_code == 200, resp.text
+        return dict(resp.json())
+
+    @property
+    def empresa_id(self) -> UUID:
+        assert self.admin.empresa_id is not None
+        return self.admin.empresa_id
+
     def pedir(self, quien: Persona, metodo: str, ruta: str, **kwargs: Any) -> httpx.Response:
         self.client.cookies.clear()
         cabeceras = {**quien.cabeceras, **kwargs.pop("headers", {})}
@@ -194,7 +232,13 @@ def entrar(client: TestClient, correo: str, password: str) -> Persona:
     token = client.cookies.get(COOKIE_ACCESO)
     assert token
     client.cookies.clear()
-    return Persona(correo=correo, token=token, id=UUID(resp.json()["usuario"]["id"]))
+    usuario = resp.json()["usuario"]
+    return Persona(
+        correo=correo,
+        token=token,
+        id=UUID(usuario["id"]),
+        empresa_id=UUID(usuario["empresa_id"]),
+    )
 
 
 def montar_planta(client: TestClient, monkeypatch: pytest.MonkeyPatch, nombre: str) -> Planta:

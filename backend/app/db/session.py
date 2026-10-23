@@ -84,14 +84,37 @@ def get_sessionmaker_operador() -> async_sessionmaker[AsyncSession]:
     )
 
 
+# =============================================================================
+# Job nocturno de la fase 4: motor aparte porque se conecta con job_user (07-fase4, 9.3), el único
+# rol que puede listar las empresas. Sigue sujeto a RLS: fija el tenant empresa por empresa.
+# =============================================================================
+
+
+@lru_cache
+def get_engine_job() -> AsyncEngine:
+    s = get_settings()
+    return create_async_engine(s.database_url_job, echo=s.db_echo, pool_size=2, max_overflow=2)
+
+
+@lru_cache
+def get_sessionmaker_job() -> async_sessionmaker[AsyncSession]:
+    return async_sessionmaker(
+        bind=get_engine_job(), class_=AsyncSession, expire_on_commit=False, autoflush=False
+    )
+
+
 async def dispose_engine() -> None:
     """Cierra los pools. Se llama al apagar la aplicación y entre tests."""
     if get_engine.cache_info().currsize:
         await get_engine().dispose()
     if get_engine_operador.cache_info().currsize:
         await get_engine_operador().dispose()
+    if get_engine_job.cache_info().currsize:
+        await get_engine_job().dispose()
     get_engine.cache_clear()
     get_sessionmaker.cache_clear()
     get_estrategia_tenant.cache_clear()
     get_engine_operador.cache_clear()
     get_sessionmaker_operador.cache_clear()
+    get_engine_job.cache_clear()
+    get_sessionmaker_job.cache_clear()

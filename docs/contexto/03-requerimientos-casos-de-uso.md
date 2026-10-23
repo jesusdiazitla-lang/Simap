@@ -66,9 +66,9 @@
 | ID | Requerimiento | Categoría |
 |---|---|---|
 | RNF-01 | Ningún usuario debe poder acceder a datos de otra empresa, verificado en BD y en aplicación. | Seguridad |
-| RNF-02 | Registro de reportes y consulta de activos disponibles aunque falle el cálculo de riesgo. | Disponibilidad |
+| RNF-02 | Registro de reportes y consulta de activos disponibles aunque falle el cálculo de riesgo. *Se diseña y mide en F4 (`07-fase4…` §9.2); la Fase 5 lo verifica.* | Disponibilidad |
 | RNF-03 | El flujo de reporte desde el QR hasta el envío no excede tres pasos para el operario. | Usabilidad |
-| RNF-04 | El cálculo de riesgo de un activo no tarda más de dos segundos. | Rendimiento |
+| RNF-04 | El cálculo de riesgo de un activo no tarda más de dos segundos. *Se diseña y mide en F4 (`07-fase4…` §9.4: 123 ms con 60.000 órdenes); la Fase 5 lo verifica.* | Rendimiento |
 | RNF-05 | Accesible desde cualquier navegador móvil moderno, sin instalación. | Portabilidad |
 | RNF-06 | Toda acción sobre una orden queda registrada con usuario y marca de tiempo. | Auditabilidad |
 | RNF-07 | La arquitectura permite aumentar empresas y activos sin rediseño. | Escalabilidad |
@@ -87,7 +87,7 @@ Operario · Supervisor · Técnico de Taller · Gerente/Stakeholder · Administr
 | CU-03 Actualizar y Cerrar Orden de Trabajo | Técnico de Taller; Supervisor o Administrador *[Actualizado en F3, decisión 2 de `06-fase3-ordenes-de-trabajo.md` §4, confirmada el 2026-10-14.]* |
 | CU-04 Calcular Riesgo de Falla de un Activo | Sistema (automático) |
 | CU-05 Registrar Nuevo Activo con Código QR | Administrador |
-| CU-06 Gestionar Stock de Repuestos | Administrador o Supervisor |
+| CU-06 Gestionar Stock de Repuestos | Administrador (altas, conteos); Supervisor (ingresos, líneas); Técnico (líneas de su orden); Gerente (lectura) *[Actualizado en F4, decisión 2 de `07-fase4-prediccion-e-inventario.md` §4, confirmada el 2026-10-18.]* |
 
 ### CU-01 Reportar Alerta
 - **Pre:** sesión activa; activo registrado. **Post:** alerta en estado `pendiente`, visible para el supervisor.
@@ -109,20 +109,25 @@ Operario · Supervisor · Técnico de Taller · Gerente/Stakeholder · Administr
 
 ### CU-03 Actualizar y Cerrar Orden de Trabajo
 - **Pre:** orden en `reportada` o `en_taller`. **Post:** orden `cerrada` con trazabilidad; stock actualizado.
-- **Flujo:** técnico marca `en_taller` → repara y registra trabajo + repuestos → marca `reparada` → sistema descuenta
-  inventario → supervisor o administrador autoriza cierre → `cerrada`, registra `autorizado_por` y calcula tiempo fuera
-  de servicio. El gerente consulta las órdenes pero no las mueve. *[Actualizado en F3, decisión 2 de `06-fase3-ordenes-de-trabajo.md` §4, confirmada el 2026-10-14.]*
+- **Flujo:** técnico marca `en_taller` → repara y registra trabajo + repuestos → marca `reparada` → supervisor o
+  administrador autoriza cierre → `cerrada`, registra `autorizado_por`, calcula tiempo fuera de servicio y **descuenta el
+  inventario en la misma transacción del cierre** (no al marcar `reparada`). *[Actualizado en F4, decisión 1 de `07-fase4-prediccion-e-inventario.md` §4, confirmada el 2026-10-18.]* El gerente consulta las órdenes pero no las mueve. *[Actualizado en F3, decisión 2 de `06-fase3-ordenes-de-trabajo.md` §4, confirmada el 2026-10-14.]*
 - **Alternativo:** cierre rechazado por reparación incompleta → vuelve a `en_taller` con nota.
+- **Alternativo:** stock insuficiente para alguna línea → el cierre no se hace (409 `stock_insuficiente`), la orden sigue
+  en `reparada` y la pantalla dice qué repuesto falta y cuánto. *[Actualizado en F4, decisión 3 de `07-fase4-prediccion-e-inventario.md` §4, confirmada el 2026-10-18.]*
 - **Alternativo:** orden reportada por error o duplicada → supervisor o administrador la **cancela** con motivo; no se
   borra, libera el componente y, si venía de una alerta, la devuelve a `revisada`. *[Actualizado en F3, decisión 1 de `06-fase3-ordenes-de-trabajo.md` §4, confirmada el 2026-10-14.]*
 
 ### CU-04 Calcular Riesgo de Falla de un Activo (automático)
-- **Pre:** el componente tiene historial o modelo pre-cargado con dataset público. **Post:** riesgo actualizado; alerta
-  del sistema si corresponde.
-- **Flujo:** nueva lectura de horómetro → identificar componente crítico y su Weibull (β, η) → horas desde la última falla
-  → probabilidad condicional en el horizonte (p. ej. 30 días) → ajustar por alertas recientes → si supera el umbral,
-  alerta automática visible para el supervisor.
-- **Alternativo:** sin historial suficiente → modelo genérico del dataset público, marcado "estimado" en la UI.
+- **Pre:** el componente tiene **vida nominal** declarada o al menos dos fallas cerradas, y se conoce la edad de la pieza
+  instalada. **Post:** riesgo actualizado; alerta del sistema si corresponde.
+- **Flujo:** nueva lectura de horómetro, cierre de orden o job nocturno → para cada componente del equipo, su Weibull
+  (β, η) y la **edad de la pieza** (horas desde su instalación o último reemplazo) → probabilidad de falla en el
+  horizonte, **en horas de operación (50 por defecto)** → ajustar por alertas de campo recientes → si supera el umbral de
+  la empresa, alerta automática visible para el supervisor. *[Actualizado en F4, decisión 4 de `07-fase4-prediccion-e-inventario.md` §4, confirmada el 2026-10-18.]*
+- **Alternativo:** sin historial suficiente → modelo de partida centrado en la **vida nominal** del componente (no un
+  dataset público), marcado «estimado» en la UI (fuente `previo`, confianza baja). Sin vida nominal ni dos fallas, «sin
+  modelo»; sin edad conocida, «sin edad»: nunca un 0 %. *[Actualizado en F4, decisión 6 y 7 de `07-fase4-prediccion-e-inventario.md` §4, confirmada el 2026-10-18.]*
 
 ### CU-05 Registrar Nuevo Activo con Código QR
 - **Pre:** administrador con sesión. **Post:** activo disponible para lecturas, alertas y órdenes.
@@ -132,8 +137,11 @@ Operario · Supervisor · Técnico de Taller · Gerente/Stakeholder · Administr
 
 ### CU-06 Gestionar Stock de Repuestos
 - **Pre:** permisos sobre inventario. **Post:** inventario actualizado y referenciable por órdenes.
-- **Flujo:** módulo Inventario → registrar repuesto (nombre, código, stock inicial, mínimo) o ajustar stock → guardar.
-- **Alternativo:** stock bajo el mínimo al usarse en una orden → alerta de reorden automática.
+- **Flujo:** módulo Inventario → el administrador registra el repuesto (nombre, código, stock inicial, mínimo, costo); el
+  supervisor registra ingresos; el administrador ajusta por conteo físico con nota. Todo movimiento queda en el libro, que
+  solo se agrega. *[Actualizado en F4, decisión 2 de `07-fase4-prediccion-e-inventario.md` §4, confirmada el 2026-10-18.]*
+- **Alternativo:** stock **estrictamente** bajo el mínimo tras un consumo, ingreso o ajuste → alerta de reorden
+  automática, una sola vigente, que se resuelve sola al volver al mínimo. *[Actualizado en F4, decisión 12 de `07-fase4-prediccion-e-inventario.md` §4, confirmada el 2026-10-18.]*
 
 ## 5. Plan de desarrollo por fases
 

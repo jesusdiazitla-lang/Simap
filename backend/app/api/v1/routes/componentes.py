@@ -3,7 +3,7 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 
 from app.api.v1.comun import TODOS
 from app.core.rbac import requiere_roles
@@ -11,6 +11,7 @@ from app.core.security import Claims, Rol
 from app.db.deps import SesionDB
 from app.schemas.activo import ComponenteCrear, ComponenteEditar, ComponenteOut
 from app.services import componentes as servicio
+from app.services.prediccion import tareas
 
 router = APIRouter(prefix="/componentes", tags=["componentes"])
 
@@ -53,7 +54,11 @@ async def cargar_plantilla(claims: Administrador, session: SesionDB) -> list[Com
 
 @router.patch("/{componente_id}", response_model=ComponenteOut)
 async def editar(
-    componente_id: UUID, datos: ComponenteEditar, _: Administrador, session: SesionDB
+    componente_id: UUID,
+    datos: ComponenteEditar,
+    claims: Administrador,
+    session: SesionDB,
+    tareas_fondo: BackgroundTasks,
 ) -> ComponenteOut:
     """Renombrar o desactivar. No existe DELETE: lo referencian las órdenes de la fase 3."""
     try:
@@ -64,4 +69,7 @@ async def editar(
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Componente no encontrado.") from exc
     except servicio.NombreRepetido as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, NOMBRE_REPETIDO) from exc
+    if "vida_nominal_horas" in datos.model_fields_set:
+        # La vida nominal es el centro del conocimiento previo: el modelo se reajusta (F4, 6.2).
+        tareas_fondo.add_task(tareas.tras_ajuste_de_componente, claims.empresa_id, componente_id)
     return ComponenteOut.model_validate(componente)

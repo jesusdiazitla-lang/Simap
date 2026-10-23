@@ -12,6 +12,8 @@ from app.api.v1.routes import (
     lecturas,
     operador,
     ordenes,
+    prediccion,
+    repuestos,
     usuarios,
 )
 
@@ -33,3 +35,7 @@ api_router.include_router(campo.router)
 
 # Fase 3: órdenes de trabajo.
 api_router.include_router(ordenes.router)
+
+# Fase 4: predicción de fallas e inventario de repuestos.
+api_router.include_router(prediccion.router)
+api_router.include_router(repuestos.router)

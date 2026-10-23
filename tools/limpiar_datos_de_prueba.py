@@ -50,6 +50,15 @@ EMPRESAS_DE_PRUEBA = [
     "Cliente %",  # tests/test_operador.py
     "Planta E2E %",  # frontend/e2e/consola-operador.spec.ts
     *[f"Planta {c}%" for c in "0123456789abcdef"],  # tests/test_operador.py, nombres hex
+    # Fase 3 y 4: `montar_planta(..., "X")` añade un sufijo de 6 hex; `sembrar("X")`, uno de 8.
+    # `_` es un carácter exacto en LIKE: «A ______» no alcanza a una empresa real que empiece por A.
+    "Planta A ______",  # tests/test_ordenes.py
+    "Planta B ______",
+    "A ______",  # tests/test_inventario.py, tests/test_prediccion.py
+    "B ______",
+    "Otra ______",  # tests/test_inventario.py
+    "Flota ________",  # tests/test_prediccion_base.py
+    "RNF-04 ________",  # tests/test_prediccion_base.py
 ]
 
 #: Correo de los operadores que crean las pruebas.
@@ -58,7 +67,10 @@ OPERADORES_DE_PRUEBA = "op-%@simap.do"
 #: Lo que las pruebas e2e crean DENTRO de la empresa de demostración (que no se borra): equipos y
 #: personas por ejecución (fase 2: un compresor y un operario; fase 3: una prensa, una supervisora y
 #: un técnico). Explícito, igual que lo de arriba.
-EQUIPOS_E2E = ("Compresor E2E %", "Prensa E2E %")
+EQUIPOS_E2E = ("Compresor E2E %", "Prensa E2E %", "Bomba E2E %")
+#: Fase 4: el componente y los repuestos que crea `frontend/e2e/fase4.spec.ts` en la empresa Demo.
+COMPONENTES_E2E = "Rodamiento E2E %"
+REPUESTOS_E2E = "E2E-%"
 PERSONAS_E2E = (
     "operario-e2e-%@example.com",
     "supervisor-e2e-%@example.com",
@@ -69,8 +81,18 @@ PERSONAS_E2E = (
 #: llaves foráneas. Al añadir una tabla con empresa_id en una fase nueva, añadirla aquí.
 TABLAS_DE_NEGOCIO = (
     "orden_eventos",
+    "stock_movimientos",
+    "orden_repuesto",
+    "riesgos",
     "ordenes_trabajo",
     "ordenes_contador",
+    "alertas_sistema",
+    "modelos_historial",
+    "modelos_componente",
+    "reajustes_pendientes",
+    "activo_componentes",
+    "repuestos",
+    "configuracion_empresa",
     "alertas",
     "lecturas_horometro",
     "activos",
@@ -149,7 +171,11 @@ async def limpiar(ejecutar: bool) -> int:
             params_e2e: dict[str, str] = {
                 **{f"eq{i}": v for i, v in enumerate(EQUIPOS_E2E)},
                 **{f"pe{i}": v for i, v in enumerate(PERSONAS_E2E)},
+                "co": COMPONENTES_E2E,
+                "re": REPUESTOS_E2E,
             }
+            componentes = "SELECT id FROM componentes WHERE nombre LIKE :co"
+            repuestos = "SELECT id FROM repuestos WHERE codigo LIKE :re"
             equipos = "SELECT id FROM activos WHERE " + " OR ".join(
                 f"nombre LIKE :eq{i}" for i in range(len(EQUIPOS_E2E))
             )
@@ -161,15 +187,34 @@ async def limpiar(ejecutar: bool) -> int:
                 f" OR reportado_por IN ({personas}) OR reparado_por IN ({personas})"
                 f" OR autorizado_por IN ({personas})"
             )
+            ordenes = f"{ordenes} OR componente_id IN ({componentes})"
             for sentencia in (
                 f"DELETE FROM orden_eventos WHERE orden_id IN ({ordenes})"
                 f" OR usuario_id IN ({personas})",
+                # Fase 4: el libro y las líneas de esas órdenes y de los repuestos de prueba, y lo
+                # que la predicción calculó para esos equipos y componentes.
+                f"DELETE FROM stock_movimientos WHERE orden_id IN ({ordenes})"
+                f" OR repuesto_id IN ({repuestos}) OR usuario_id IN ({personas})",
+                f"DELETE FROM orden_repuesto WHERE orden_id IN ({ordenes})"
+                f" OR repuesto_id IN ({repuestos}) OR registrado_por IN ({personas})",
+                f"DELETE FROM riesgos WHERE activo_id IN ({equipos})"
+                f" OR componente_id IN ({componentes})",
                 f"DELETE FROM ordenes_trabajo WHERE id IN ({ordenes})",
+                f"DELETE FROM alertas_sistema WHERE activo_id IN ({equipos})"
+                f" OR componente_id IN ({componentes}) OR repuesto_id IN ({repuestos})"
+                f" OR gestionada_por IN ({personas})",
+                f"DELETE FROM activo_componentes WHERE activo_id IN ({equipos})"
+                f" OR componente_id IN ({componentes})",
+                f"DELETE FROM modelos_historial WHERE componente_id IN ({componentes})",
+                f"DELETE FROM modelos_componente WHERE componente_id IN ({componentes})",
+                f"DELETE FROM reajustes_pendientes WHERE componente_id IN ({componentes})",
+                f"DELETE FROM repuestos WHERE id IN ({repuestos})",
                 f"DELETE FROM alertas WHERE activo_id IN ({equipos})"
                 f" OR reportado_por IN ({personas}) OR revisada_por IN ({personas})",
                 f"DELETE FROM lecturas_horometro WHERE activo_id IN ({equipos})"
                 f" OR registrado_por IN ({personas}) OR revisada_por IN ({personas})",
                 f"DELETE FROM activos WHERE id IN ({equipos})",
+                f"DELETE FROM componentes WHERE id IN ({componentes})",
                 f"DELETE FROM usuarios WHERE id IN ({personas})",
             ):
                 await conn.execute(text(sentencia), params_e2e)

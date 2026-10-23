@@ -8,6 +8,7 @@
  * las listas de elección sin romper la historia que ya lo nombra.
  */
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { Boton } from "@/components/boton";
@@ -147,16 +148,21 @@ function FilaComponente({
   readonly componente: Componente;
   readonly alCambiar: (c: Componente) => void;
 }) {
-  const [editando, setEditando] = useState(false);
+  const [editando, setEditando] = useState<"nombre" | "vida" | null>(null);
   const [nombre, setNombre] = useState(componente.nombre);
+  const [vida, setVida] = useState(componente.vida_nominal_horas?.toString() ?? "");
   const [error, setError] = useState<string | undefined>();
   const [enCurso, setEnCurso] = useState(false);
 
-  async function guardar(cambios: { nombre?: string; activo?: boolean }): Promise<void> {
+  async function guardar(cambios: {
+    nombre?: string;
+    activo?: boolean;
+    vida_nominal_horas?: number | null;
+  }): Promise<void> {
     setEnCurso(true);
     try {
       alCambiar(await editarComponente(componente.id, cambios));
-      setEditando(false);
+      setEditando(null);
       setError(undefined);
     } catch (fallo) {
       setError(fallo instanceof ErrorApi ? fallo.message : "No se pudo guardar.");
@@ -165,7 +171,49 @@ function FilaComponente({
     }
   }
 
-  if (editando) {
+  if (editando === "vida") {
+    const n = Number(vida);
+    const vacia = vida.trim() === "";
+    const valida = vacia || (/^\d+$/.test(vida) && n >= 10 && n <= 1_000_000);
+    return (
+      <li className="py-3 first:pt-0 last:pb-0">
+        <form
+          noValidate
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (!valida) {
+              setError("Entre 10 y 1,000,000 horas, o vacío si no se conoce.");
+              return;
+            }
+            void guardar({ vida_nominal_horas: vacia ? null : n });
+          }}
+          className="flex flex-col gap-1"
+        >
+          <Campo
+            id={`vida-${componente.id}`}
+            etiqueta={`Vida nominal de ${componente.nombre}, en horas`}
+            ayuda="Lo que dura normalmente según el fabricante o la experiencia de la planta. El modelo parte de aquí y se corrige con las fallas reales. Vacío si no se conoce."
+            nombre="vida_nominal_horas"
+            modoTeclado="numeric"
+            valor={vida}
+            onCambio={(v) => setVida(v.replace(/\D/g, ""))}
+            error={error}
+            maxLength={7}
+            autoFocus
+            autoComplete="off"
+          />
+          <div className="flex gap-2">
+            <Boton enCurso={enCurso} textoEnCurso="Guardando…">Guardar</Boton>
+            <Boton tipo="button" variante="secundario" onClick={() => setEditando(null)}>
+              Cancelar
+            </Boton>
+          </div>
+        </form>
+      </li>
+    );
+  }
+
+  if (editando === "nombre") {
     return (
       <li className="py-3 first:pt-0 last:pb-0">
         <form
@@ -179,7 +227,7 @@ function FilaComponente({
           <Campo id={`renombrar-${componente.id}`} etiqueta="Nuevo nombre" nombre="nombre" valor={nombre} onCambio={setNombre} error={error} maxLength={120} autoFocus autoComplete="off" />
           <div className="flex gap-2">
             <Boton enCurso={enCurso} textoEnCurso="Guardando…">Guardar</Boton>
-            <Boton tipo="button" variante="secundario" onClick={() => setEditando(false)}>
+            <Boton tipo="button" variante="secundario" onClick={() => setEditando(null)}>
               Cancelar
             </Boton>
           </div>
@@ -197,13 +245,28 @@ function FilaComponente({
         {componente.descripcion !== null ? (
           <p className="text-[0.875rem] leading-5 text-texto-suave">{componente.descripcion}</p>
         ) : null}
+        <p className="pt-0.5 text-[0.8125rem] text-texto-tenue">
+          {componente.vida_nominal_horas !== null
+            ? `Vida nominal: ${componente.vida_nominal_horas.toLocaleString("en-US")} h · `
+            : "Sin vida nominal · "}
+          <Link href={`/componentes/${componente.id}/modelo`} className="text-accion underline-offset-2 hover:underline">
+            Ver modelo
+          </Link>
+        </p>
         {error !== undefined ? <p role="alert" className="text-[0.8125rem] text-error">{error}</p> : null}
       </div>
       <div className="flex items-center gap-2">
         {!componente.activo ? <Insignia tono="neutro">Desactivado</Insignia> : null}
         <button
           type="button"
-          onClick={() => setEditando(true)}
+          onClick={() => setEditando("vida")}
+          className="h-11 cursor-pointer rounded-[var(--radius-control)] px-3 text-[0.875rem] font-medium text-accion hover:underline"
+        >
+          Vida nominal
+        </button>
+        <button
+          type="button"
+          onClick={() => setEditando("nombre")}
           className="h-11 cursor-pointer rounded-[var(--radius-control)] px-3 text-[0.875rem] font-medium text-accion hover:underline"
         >
           Renombrar

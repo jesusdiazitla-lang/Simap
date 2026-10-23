@@ -317,7 +317,7 @@ Dos variantes y ninguna más; sólidos, sin animación de entrada ni de pulsaci�
 - **Error / Disabled:** borde `error`, mensaje en la ranura de error que está siempre reservada (24 px mínimo) para que la geometría no se mueva; `aria-invalid` y `aria-live`. Deshabilitado: fondo `superficie-alterna`, texto tenue. Las contraseñas llevan un conmutador «Ver/Ocultar» en texto azul con `aria-pressed`, y siempre se puede pegar.
 
 ### Navigation
-Menú en árbol (`ArbolNavegacion`), agrupado por área de trabajo y no por pantalla: **Inicio** suelto arriba, y las ramas **Campo**, **Mantenimiento** (órdenes de trabajo, desde F3), **Equipos**, **Supervisión**, **Administración** y **Mi cuenta**. Cada rol ve solo las hojas que puede abrir; una rama sin hojas no se pinta.
+Menú en árbol (`ArbolNavegacion`), agrupado por área de trabajo y no por pantalla: **Inicio** suelto arriba, y las ramas **Campo**, **Mantenimiento** (órdenes de trabajo desde F3; riesgo de falla, alertas del sistema e inventario desde F4), **Equipos**, **Supervisión**, **Administración** (personal y, desde F4, predicción) y **Mi cuenta**. Cada rol ve solo las hojas que puede abrir; una rama sin hojas no se pinta.
 - **Rama:** botón de fila completa con icono de área a la izquierda, nombre en Body small 600 `texto` y chevron a la derecha (girado −90° si está plegada, sin animación); `aria-expanded` y `aria-controls`. Las ramas plegadas se recuerdan en el navegador.
 - **Hoja:** Body small 500 en `texto-suave`, colgada de una guía vertical de 1 px `borde` alineada con el centro del icono de la rama. Hover y página actual sobre `superficie-alterna` con `texto`; la actual además en 600 y con su tramo de guía oscurecido a `texto` (1 px, neutro: es posición, no acción). `aria-current="page"` en la hoja de ruta más larga que contiene la página abierta.
 - **Escritorio (`lg`):** columna de 240 px, `superficie` con borde derecho de 1 px, filas de 36 px, fija bajo la barra superior (que queda fija). La marca «SIMAP» se alinea encima de la columna. Nombre y rol de la sesión a la derecha de la barra desde `lg`; «Cerrar sesión» como control con caja de 36 px.
@@ -328,6 +328,24 @@ Radios reales presentados como baldosas de un toque (56 px de alto, rejilla de 2
 
 ### Avisos de envío e indicador de cola
 Caja con radio de control, fondo `superficie`, borde del tono (`estado-ok` hecho, `estado-aviso` en cola, `error` con `error-fondo` en fallo), icono y frase completa. El indicador de cola de la barra (32 px) dice «Sin conexión», «N pendientes por enviar» o «Enviado» con icono y palabra, y no ocupa sitio si no tiene nada que decir.
+
+### Riesgo de falla (F4)
+El riesgo es el estado de una máquina, no una acción: usa los colores de estado, nunca el azul, y no es pulsable.
+- **Nivel (`NivelRiesgo`):** insignia con palabra. «Riesgo bajo» en `ok`; «Vigilar» en `aviso` con icono; «Riesgo alto» en `falla` con icono. La escala parte del umbral **de la empresa** (vigilar desde el 80 % del umbral, la misma banda de la histéresis; alto desde el umbral), no de números fijos.
+- **Cifra (`Porcentaje`):** Title 600 con cifras tabulares; con confianza baja lleva la palabra «estimado» en Caption `texto-suave` a su lado.
+- **Respaldo (`ConfianzaInsignia`):** insignia neutra «Confianza baja/media/alta» y, junto a ella, «N fallas registradas» y «Calculado hace…». Un porcentaje nunca aparece sin respaldo.
+- **Explicación (`Explicacion`):** una frase en Body small `texto-suave` («Esta pieza lleva…; a esa edad el modelo estima…»).
+- **Sin cálculo (`SinCalculo`):** «Sin edad» y «Sin modelo» son insignias neutras con icono de aviso y la acción que lo resuelve; nunca un 0 % ni una barra vacía.
+- **Curva (`CurvaRiesgo`):** SVG propio sin librería: un trazo de 2 px `texto`, rejilla de 1 px `borde`, umbral en línea discontinua `estado-aviso` con su etiqueta, y la edad actual como punto hueco. El SVG mide su contenedor (texto siempre a 12 px) y va en posición absoluta dentro de él para no ensanchar la rejilla; en anchos menores de 420 px muestra tres marcas en el eje en vez de cinco.
+- **Sin conexión:** el mismo panel con la descripción «Último cálculo conocido… Sin conexión no se actualiza» y sin enlaces al modelo.
+
+### Inventario y repuestos (F4)
+- **Bajo el mínimo:** insignia `aviso` con icono; el stock en la fila sigue en `texto` (la insignia ya lo dice).
+- **Libro:** tabla con movimiento, cambio con signo (`+14`, `−2`) en 600 y el stock que queda en `texto-suave`; en móvil se apila. No hay acciones por fila: el libro no se edita.
+- **Repuestos de la orden (`RepuestosOrden`):** búsqueda con campo de 48 px y resultados como filas-botón de 48 px con nombre, código en monoespaciada y «N en almacén» a la derecha; al elegir uno, una caja `superficie-alterna` con la cantidad y «Añadir». El aviso de faltantes (`SinStock`) es un aviso con borde `estado-aviso`, icono, la lista «nombre (código): hay X, la orden pide Y» y quién puede resolverlo.
+
+### Control segmentado (`Segmento`)
+Vistas de una bandeja (Riesgo/Reorden, Vigentes/Historial, Todos/Bajo el mínimo): radios nativos ocultos dentro de un `fieldset` con leyenda, presentados como cajas de 48 px en una tira con divisores de 1 px `borde-fuerte`; la elegida en `accion-halo` con texto `accion`. Se navega con flechas. Es una elección del usuario, por eso azul.
 
 ### Esqueleto de carga
 Barras estáticas en `superficie-alterna` con radio de control, separadas por bordes de fila; sin animación de brillo.
