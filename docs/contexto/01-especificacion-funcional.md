@@ -90,6 +90,23 @@ componente cuando hay suficientes órdenes nuevas. *[Actualizado en F4, decisió
 una marca durable y el modelo de ese componente se reajusta en segundo plano al momento; el job de la madrugada recoge
 lo que quede pendiente.
 
+### 5.7 Indicadores del gerente *[Actualizado en F5, `08-fase5-dashboard-y-cierre.md` §22.]*
+Definiciones fijadas antes que las consultas (`08-fase5…` §5), para leerlas como hechos:
+
+- **Parada:** una falla para al equipo desde su fecha de falla; una intervención predictiva, desde que
+  entra al taller (no desde que se crea la orden). Las canceladas no cuentan. Dos órdenes solapadas son
+  una sola parada, y el solape entre una falla y una planificada se atribuye a la falla.
+- **Disponibilidad** = 1 − horas de parada ÷ horas de calendario de 24 h, desde que se observa cada
+  equipo (`activos.creado_en`) hasta su baja o ahora; nunca horas futuras. Se muestra también sin las
+  paradas planificadas y junto a la **utilización** (horas operadas ÷ horas de calendario).
+- **MTBF** = horas operadas (horómetro) ÷ fallas no planificadas, siempre con su intervalo de confianza
+  del 90 %; sin fallas, una cota inferior. **MTTR** = duración media, de la falla a la salida del
+  taller, de las fallas cerradas del periodo.
+- **Costo de repuestos:** del libro de movimientos, al precio del momento del consumo, separado entre
+  fallas y trabajo planificado.
+- Meses cortados en America/Santo_Domingo; las razones se arman sobre los totales del periodo, nunca
+  como promedio de razones mensuales.
+
 ## 6. Modelo de datos (conceptual)
 
 ```
@@ -101,6 +118,12 @@ EMPRESA ──< ACTIVO ──< LECTURA_HOROMETRO
 ```
 
 Diccionario de datos completo: ver el DDL en `backend/db/schema.sql` (transcrito de `02-arquitectura.md`).
+
+*[Actualizado en F5, `08-fase5-dashboard-y-cierre.md` §22.]* Añadidos de la fase 5: `activos.creado_en` (desde cuándo se observa el equipo; el administrador
+puede adelantarla), `lecturas_horometro.horas_acumuladas` (horas del equipo en esa lectura, mantenida por
+un trigger y nula si la lectura es dudosa) y la vista `v_paradas` (una fila por parada, con su inicio,
+su fin y si fue planificada). Una orden predictiva cuenta su tiempo fuera de servicio desde que entra al
+taller.
 
 ## 7. Arquitectura y tecnología (resumen)
 

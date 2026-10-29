@@ -12,7 +12,7 @@ from datetime import date, datetime
 from typing import Generic, Literal, TypeVar
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator
 
 from app.core.config import get_settings
 from app.schemas.orden_trabajo import OrdenAbierta
@@ -113,8 +113,12 @@ class ActivoEditar(_FichaTecnica):
     """Todo opcional: solo cambia lo que se envía. No admite `qr_code` ni `empresa_id`."""
 
     nombre: str | None = Field(default=None, min_length=2, max_length=CORTO)
+    #: Desde cuándo se observa el equipo (`activos.creado_en`; 08-fase5, decisión 8). Solo se puede
+    #: adelantar, para cargar la historia de antes de usar SIMAP: posponerla escondería horas de
+    #: calendario y subiría la disponibilidad sin que nada mejorara.
+    observado_desde: AwareDatetime | None = None
 
-    @field_validator("nombre")
+    @field_validator("nombre", "observado_desde")
     @classmethod
     def _sin_nulos(cls, valor: object) -> object:
         # Omitir un campo lo deja como está; enviarlo como null pedía vaciar una columna que no lo
@@ -140,6 +144,8 @@ class ActivoOut(_Salida):
     horometro_actualizado_en: datetime | None
     #: Horas acumuladas antes del último cambio o reinicio del horómetro (F3, 5.1).
     horometro_offset: int = 0
+    #: Desde cuándo se observa el equipo: inicio de sus horas de calendario (F5, decisión 8).
+    creado_en: datetime | None = None
     fecha_ultima_falla: date | None
     #: El código tal cual, y presentado en dos grupos para imprimir y dictar (`XK7P-2QH9`).
     codigo: str

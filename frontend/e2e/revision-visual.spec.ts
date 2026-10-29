@@ -135,7 +135,7 @@ test("credenciales validas llevan al panel del rol", async ({ page }) => {
   await page.getByRole("button", { name: "Entrar" }).click();
 
   await expect(page).toHaveURL(/\/panel$/);
-  await expect(page.getByRole("heading", { name: /administración/i })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /panel del administrador/i })).toBeVisible();
   // En un aparato compartido, cerrar sesion tiene que estar siempre a la vista.
   await expect(page.getByRole("button", { name: /cerrar sesión/i })).toBeVisible();
   await sinDesplazamientoHorizontal(page);

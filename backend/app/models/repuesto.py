@@ -112,6 +112,13 @@ class StockMovimiento(IdUUID, Base):
             postgresql_where=text("tipo = 'consumo'"),
         ),
         Index("ix_stock_movimientos_repuesto", "empresa_id", "repuesto_id", text("creado_en DESC")),
+        # Costos de los paneles (F5, 6.2): consumos de un periodo.
+        Index(
+            "ix_stock_movimientos_consumo_fecha",
+            "empresa_id",
+            "creado_en",
+            postgresql_where=text("tipo = 'consumo'"),
+        ),
     )
 
     empresa_id: Mapped[UUID] = mapped_column(Uuid, ForeignKey("empresas.id"), nullable=False)

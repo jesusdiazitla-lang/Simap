@@ -14,9 +14,10 @@ from enum import StrEnum
 from typing import Any, Final
 from uuid import UUID, uuid4
 
+import jwt
 from argon2 import PasswordHasher
 from argon2.exceptions import Argon2Error, InvalidHashError
-from jose import JWTError, jwt
+from jwt import PyJWTError
 
 from app.core.config import get_settings
 
@@ -147,7 +148,6 @@ def _crear_token(claims: Claims, expira_en: timedelta) -> str:
         "exp": int((ahora + expira_en).timestamp()),
     }
     s = get_settings()
-    # python-jose no trae stubs, asi que mypy ve Any: se acota aqui en lugar de propagarlo.
     return str(jwt.encode(payload, s.jwt_secret, algorithm=s.jwt_algorithm))
 
 
@@ -176,7 +176,7 @@ def decodificar_token(token: str, tipo_esperado: TipoToken = TipoToken.ACCESO) -
     s = get_settings()
     try:
         payload = jwt.decode(token, s.jwt_secret, algorithms=[s.jwt_algorithm])
-    except JWTError as exc:
+    except PyJWTError as exc:
         raise ErrorDeToken("token inválido o expirado") from exc
 
     # Un token del plano de control no vale aquí. Hoy tampoco pasaría, porque no lleva
@@ -272,7 +272,7 @@ def decodificar_token_operador(
     s = get_settings()
     try:
         payload = jwt.decode(token, s.jwt_secret, algorithms=[s.jwt_algorithm])
-    except JWTError as exc:
+    except PyJWTError as exc:
         raise ErrorDeToken("token inválido o expirado") from exc
 
     if payload.get(CLAIM_SUJETO) != Sujeto.OPERADOR.value:

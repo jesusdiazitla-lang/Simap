@@ -66,6 +66,48 @@ function pistaVisible(request: NextRequest): boolean {
   }
 }
 
+/**
+ * Política de seguridad de contenido con un nonce nuevo en cada petición (08-fase5, 10.2).
+ *
+ * Ningún script ni estilo en línea se ejecuta si no lleva el nonce: un XSS que logre meter un
+ * `<script>` en el marcado no lo ve ejecutarse. Next lee el nonce de esta cabecera al renderizar y
+ * se lo pone a sus propios scripts; por eso todas las páginas se renderizan por petición
+ * (`connection()` en el layout raíz). `'strict-dynamic'` deja que los scripts de confianza carguen
+ * los suyos y hace que el navegador ignore `'self'` en `script-src`; el service worker se registra
+ * por `worker-src`, que por eso se declara aparte: sin él, el modo sin conexión dejaría de instalarse.
+ * En desarrollo React necesita `'unsafe-eval'` para reconstruir pilas de llamadas; en producción no.
+ */
+function politicaDeContenido(nonce: string, https: boolean): string {
+  const desarrollo = process.env.NODE_ENV !== "production";
+  return [
+    "default-src 'self'",
+    `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'${desarrollo ? " 'unsafe-eval'" : ""}`,
+    `style-src 'self' 'nonce-${nonce}'`,
+    "img-src 'self' blob: data:",
+    "font-src 'self'",
+    "connect-src 'self'",
+    "worker-src 'self'",
+    "manifest-src 'self'",
+    "object-src 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    "frame-ancestors 'none'",
+    // Solo por HTTPS: en la red de la planta, por http://192.168.x.x, subiría a https cada recurso y
+    // la página no cargaría desde el teléfono.
+    ...(https ? ["upgrade-insecure-requests"] : []),
+  ].join("; ");
+}
+
+/** Sigue a la página con el nonce en la petición (para que Next lo lea) y la CSP en la respuesta. */
+function seguir(request: NextRequest, nonce: string, csp: string): NextResponse {
+  const cabeceras = new Headers(request.headers);
+  cabeceras.set("x-nonce", nonce);
+  cabeceras.set("content-security-policy", csp);
+  const respuesta = NextResponse.next({ request: { headers: cabeceras } });
+  respuesta.headers.set("content-security-policy", csp);
+  return respuesta;
+}
+
 function hacia(request: NextRequest, ruta: string): NextResponse {
   return NextResponse.redirect(new URL(ruta, request.url));
 }
@@ -84,19 +126,22 @@ function alAcceso(request: NextRequest): NextResponse {
 
 export function proxy(request: NextRequest): NextResponse {
   const ruta = request.nextUrl.pathname;
+  const nonce = btoa(crypto.randomUUID());
+  const csp = politicaDeContenido(nonce, request.nextUrl.protocol === "https:");
+  const pasar = () => seguir(request, nonce, csp);
 
-  if (PUBLICAS.has(ruta) || !pistaVisible(request)) return NextResponse.next();
+  if (PUBLICAS.has(ruta) || !pistaVisible(request)) return pasar();
 
   if (esConsola(ruta)) {
     // Sin `next`: el acceso es el mismo para todos y el operador va siempre a su consola.
-    return request.cookies.has(PISTA_OPERADOR) ? NextResponse.next() : hacia(request, "/login");
+    return request.cookies.has(PISTA_OPERADOR) ? pasar() : hacia(request, "/login");
   }
 
   const conSesion = request.cookies.has(PISTA_SESION);
   // La raíz no tiene contenido propio: solo decide a dónde ir. Hacerlo aquí evita la pantalla
   // intermedia «Comprobando tu sesión…» en el caso normal.
   if (ruta === "/") return hacia(request, conSesion ? "/panel" : "/login");
-  return conSesion ? NextResponse.next() : alAcceso(request);
+  return conSesion ? pasar() : alAcceso(request);
 }
 
 export const config = {

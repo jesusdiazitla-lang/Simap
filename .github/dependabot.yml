@@ -1,0 +1,18 @@
+# Revision semanal de dependencias (08-fase5, 13.1; OWASP A03): pip del backend, npm del frontend
+# y las acciones de GitHub. Cada actualizacion llega como pull request y pasa por el CI.
+version: 2
+updates:
+  - package-ecosystem: pip
+    directory: /backend
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+  - package-ecosystem: npm
+    directory: /frontend
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly

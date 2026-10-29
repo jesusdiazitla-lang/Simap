@@ -49,6 +49,11 @@
 > **Desviaciones del scaffold actual respecto al documento** (decididas al montar el repo; revisar si importa):
 > Python **3.11.9** instalado localmente (doc: 3.12) · React **19** y Next **16** (doc: React 18; Next 16 exige
 > React 19) · Node **22** (doc: 20). Ninguna afecta la funcionalidad descrita.
+>
+> *[Actualizado en F5, `08-fase5-dashboard-y-cierre.md` §22.]* Versiones al cierre: Node 22, Next.js 16.4.3, React 19, Tailwind 4 (sí se usa, con el sistema de
+> diseño de `DESIGN.md`). Los gráficos del panel son SVG propio, sin biblioteca. Redis no se usa como caché de
+> paneles: guarda los contadores del límite de intentos y la lista de refresh tokens revocados
+> (`app.core.almacen`). La sesión se valida con PyJWT (sustituyó a python-jose por avisos de seguridad).
 
 ## 3. Motor de base de datos
 
@@ -134,7 +139,7 @@ RISK_THRESHOLD=0.25
 | Backend | Railway desde el Dockerfile; variables en su panel; despliegue automático en cada push a `main`. |
 | Tarea programada | Segundo proceso (worker) en Railway con APScheduler, una vez al día. |
 | Frontend | Vercel conectado al repo; despliega en cada push. |
-| Caché / colas | Upstash Redis. |
+| Caché / colas | Upstash Redis: límite de intentos y tokens revocados; sin caché de paneles. *[Actualizado en F5, `08-fase5-dashboard-y-cierre.md` §22.]* |
 | CI/CD | GitHub Actions: pytest y Playwright en cada push; solo si pasan despliegan Railway y Vercel. |
 
 ## 8. Guía de inicio rápido

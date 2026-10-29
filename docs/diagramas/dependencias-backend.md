@@ -19,6 +19,7 @@ graph LR
     app_api_v1_routes_lecturas["api.v1.routes.lecturas"]
     app_api_v1_routes_operador["api.v1.routes.operador"]
     app_api_v1_routes_ordenes["api.v1.routes.ordenes"]
+    app_api_v1_routes_paneles["api.v1.routes.paneles"]
     app_api_v1_routes_prediccion["api.v1.routes.prediccion"]
     app_api_v1_routes_repuestos["api.v1.routes.repuestos"]
     app_api_v1_routes_usuarios["api.v1.routes.usuarios"]
@@ -39,6 +40,7 @@ graph LR
     app_core_rbac["core.rbac"]
     app_core_registro["core.registro"]
     app_core_security["core.security"]
+    app_core_seguridad_http["core.seguridad_http"]
   end
   subgraph db[db]
     app_db["db"]
@@ -95,6 +97,11 @@ graph LR
     app_services_operador["services.operador"]
     app_services_ordenes["services.ordenes"]
     app_services_ordenes_estados["services.ordenes_estados"]
+    app_services_paneles["services.paneles"]
+    app_services_paneles_consultas["services.paneles.consultas"]
+    app_services_paneles_ensamblador["services.paneles.ensamblador"]
+    app_services_paneles_indicadores["services.paneles.indicadores"]
+    app_services_paneles_widgets["services.paneles.widgets"]
     app_services_prediccion["services.prediccion"]
     app_services_prediccion_ajuste["services.prediccion.ajuste"]
     app_services_prediccion_alertas["services.prediccion.alertas"]
@@ -122,6 +129,7 @@ graph LR
   app_api_v1_router --> app_api_v1_routes_lecturas
   app_api_v1_router --> app_api_v1_routes_operador
   app_api_v1_router --> app_api_v1_routes_ordenes
+  app_api_v1_router --> app_api_v1_routes_paneles
   app_api_v1_router --> app_api_v1_routes_prediccion
   app_api_v1_router --> app_api_v1_routes_repuestos
   app_api_v1_router --> app_api_v1_routes_usuarios
@@ -201,6 +209,11 @@ graph LR
   app_api_v1_routes_ordenes --> app_services_ordenes
   app_api_v1_routes_ordenes --> app_services_ordenes_estados
   app_api_v1_routes_ordenes --> app_services_prediccion_tareas
+  app_api_v1_routes_paneles --> app_core_rbac
+  app_api_v1_routes_paneles --> app_core_security
+  app_api_v1_routes_paneles --> app_services_paneles_ensamblador
+  app_api_v1_routes_paneles --> app_services_paneles_indicadores
+  app_api_v1_routes_paneles --> app_services_paneles_widgets
   app_api_v1_routes_prediccion --> app_api_v1_comun
   app_api_v1_routes_prediccion --> app_api_v1_routes_ordenes
   app_api_v1_routes_prediccion --> app_core_cursor
@@ -266,6 +279,7 @@ graph LR
   app_main --> app_core_config
   app_main --> app_core_cursor
   app_main --> app_core_registro
+  app_main --> app_core_seguridad_http
   app_main --> app_jobs_programador
   app_models --> app_models_activo
   app_models --> app_models_alerta
@@ -374,6 +388,19 @@ graph LR
   app_services_ordenes_estados --> app_services_ordenes
   app_services_ordenes_estados --> app_services_prediccion_ajuste
   app_services_ordenes_estados --> app_services_prediccion_alertas
+  app_services_paneles_consultas --> app_models_activo
+  app_services_paneles_consultas --> app_models_alerta
+  app_services_paneles_consultas --> app_models_componente
+  app_services_paneles_consultas --> app_models_lectura_horometro
+  app_services_paneles_consultas --> app_models_orden_trabajo
+  app_services_paneles_consultas --> app_models_prediccion
+  app_services_paneles_consultas --> app_models_repuesto
+  app_services_paneles_consultas --> app_models_usuario
+  app_services_paneles_consultas --> app_services_paneles_indicadores
+  app_services_paneles_widgets --> app_db_deps
+  app_services_paneles_widgets --> app_services_paneles_consultas
+  app_services_paneles_widgets --> app_services_paneles_ensamblador
+  app_services_paneles_widgets --> app_services_paneles_indicadores
   app_services_prediccion_ajuste --> app_core_registro
   app_services_prediccion_ajuste --> app_models_componente
   app_services_prediccion_ajuste --> app_models_prediccion

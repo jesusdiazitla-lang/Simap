@@ -677,6 +677,92 @@ solo Demo e imprime el resultado (con la semilla 2026: β = 2,44, η = 1104 h co
 `experimentos_fase4` usa **el mismo código de ajuste** que el backend; la versión completa está en
 `docs/contexto/anexos/experimentos-fase4.md`. **Todo son datos simulados**, y la tesis debe decirlo.
 
+## Fase 5: paneles, indicadores y cierre
+
+Alcance y criterios en [`docs/contexto/08-fase5-dashboard-y-cierre.md`](docs/contexto/08-fase5-dashboard-y-cierre.md).
+Las **catorce decisiones** de su sección 4 las confirmó el usuario el 2026-10-28 tal como se
+proponían, con las consultas por el ORM y el cálculo en Python (como en F3 y F4) y la web como
+cliente con CSP de nonce. Las desviaciones respecto a la guía están en el anexo del mismo documento.
+
+### Un panel por rol (`app.services.paneles`)
+
+`GET /panel` devuelve los widgets del rol de la sesión. Cada widget es una función con su consulta;
+la tabla `WIDGETS` (`widgets.py`) dice quién lo ve:
+
+| Widget | Roles | Qué muestra |
+|---|---|---|
+| `mis_lecturas`, `mis_alertas` | operario | Sus últimas lecturas y alertas, con su estado |
+| `cola_taller`, `mis_trabajos` | técnico | Órdenes en espera o en taller; lo que reparó |
+| `contadores`, `alertas_campo`, `alertas_sistema`, `ordenes_abiertas` | supervisor, administrador | Lo que espera revisión |
+| `indicadores`, `repuestos_costo`, `riesgo_top`, `riesgo_cobertura` | gerente, administrador | Disponibilidad, MTBF, MTTR, costos y riesgo |
+| `salud` | administrador | Lecturas en revisión, modelos, último job, conciliación del inventario |
+
+El **ensamblador** (`ensamblador.py`) corre cada widget en su propia transacción de solo lectura
+(`sesion_de_lectura`, `REPEATABLE READ READ ONLY` vía `EstrategiaTenant.lectura_consistente`), con
+un límite de 3 s para los indicadores y 2 s para los demás y como mucho tres a la vez. Si uno falla
+o se pasa de tiempo vuelve como `error` o `tiempo_agotado`, el texto del error se queda en el
+registro (`simap.paneles`) y el resto del panel responde (RNF-02). La cancelación se propaga.
+
+### Indicadores (`indicadores.py`)
+
+Las definiciones están en 08-fase5 §5 y en `01-especificacion-funcional.md` §5.7. Se calculan en
+Python sobre cuatro conjuntos (equipos, paradas, lecturas y consumos) leídos con una sola foto:
+
+- **Meses** cortados en `America/Santo_Domingo`; el periodo por defecto son los últimos 12 meses y
+  el máximo 24 (más da 422).
+- **Paradas** de `v_paradas`: una falla desde su fecha de falla; una predictiva desde que entra al
+  taller (`inicio_de_parada`, también al cerrar). La unión de intervalos evita contar dos veces y
+  el solape se atribuye a la falla.
+- **Horas operadas** desde `lecturas_horometro.horas_acumuladas`, que mantiene un trigger (nula si
+  la lectura está en revisión); la última lectura antes del periodo sirve de base.
+- **Razones sobre totales**, nunca promedios de razones mensuales. El MTBF lleva su intervalo de
+  confianza del 90 % (chi-cuadrado); sin fallas, una cota inferior.
+
+`tests/test_indicadores.py` los compara con casos hechos a mano y con 80 flotas al azar contra una
+implementación independiente (barrido de eventos); `test_rf28_indicadores_coinciden_con_el_calculo_a_mano`
+hace lo mismo sobre datos sembrados en PostgreSQL.
+
+### Lo que añade la base (revisión 0011)
+
+- `activos.creado_en` rellenado (desde cuándo se observa el equipo). El administrador puede
+  **adelantarlo** con `PATCH /activos/{id}` y `observado_desde` (422 si es posterior o futuro): así
+  carga historia de antes de usar SIMAP sin poder esconder horas de calendario.
+- `lecturas_horometro.horas_acumuladas` con su trigger y su CHECK.
+- Vista `v_paradas` (`security_invoker`, sin escritura para la aplicación).
+- Índices para el cierre de órdenes, las fallas reales, los consumos por fecha y los paneles por
+  usuario. JIT apagado para `app_user` y `job_user` (`roles.sql`; en una base existente, aplicarlo
+  como en F4).
+
+### Endpoints
+
+| Ruta | Roles |
+|---|---|
+| `GET /panel?planta=&desde=&hasta=` | todos (cada uno recibe sus widgets; un rol sin widgets, 403) |
+| `GET /indicadores?planta=&desde=&hasta=` | gerente, administrador |
+| `GET /plantas` | supervisor, gerente, administrador |
+
+La empresa y el usuario salen siempre del token. La planta es la ubicación del equipo: **ordena la
+vista, no es frontera de seguridad** (decisión 1).
+
+### Seguridad del cierre
+
+- **Auditoría de aislamiento** (`tests/test_auditoria_aislamiento.py`): controles de catálogo C1–C13
+  (RLS forzada, políticas con `app_empresa_id()`, roles sin privilegios, nada para PUBLIC, vistas
+  sin escritura, tablas de solo agregar) y un recorrido de **todas** las rutas de la API: sin sesión
+  401; con un usuario de otra empresa, la misma respuesta que para un id que no existe.
+- **Cabeceras de la API** (`app.core.seguridad_http`): middleware ASGI que envuelve toda la pila,
+  así también los 500 las llevan. `/docs`, `/redoc` y `/openapi.json` se apagan con
+  `EXPONER_DOCS=false` (en producción).
+- **CSP de la web** con nonce por petición (ver «Desvío por sesión»).
+- **Dependencias**: `python-jose` se sustituyó por **PyJWT 2.15.0** y `python-dotenv` subió a 1.2.2;
+  `pip-audit` y `npm audit --omit=dev` sin hallazgos el 2026-10-28. CI con `permissions: contents:
+  read`, gitleaks sobre todo el historial y Dependabot semanal.
+- Checklist completa en [`docs/contexto/anexos/owasp-top10-2025.md`](docs/contexto/anexos/owasp-top10-2025.md)
+  y trazabilidad en [`anexos/matriz-trazabilidad.md`](docs/contexto/anexos/matriz-trazabilidad.md).
+
+Si `uvicorn` corre con otro intérprete que el del `.venv`, instalar ahí también `requirements.txt`
+(PyJWT sustituye a `python-jose` y sin él la API no arranca).
+
 ## Grafo de dependencias
 
 `tools/graph/graph.py` fusiona el grafo de imports de Python (grimp) y de
@@ -863,7 +949,7 @@ los bordes de control 3:1.
 |---|---|
 | `/` | Desvía: al panel si hay sesión, al acceso si no |
 | `/login` | Acceso único: usuarios de una empresa y operador de SIMAP |
-| `/panel` | Panel del turno, distinto según el rol |
+| `/panel` | Panel de cada rol (F5): lo del turno para operario, técnico y supervisor; indicadores, costos y riesgo para gerente y administrador. Filtros de planta y periodo en la URL |
 | `/panel/clave` | Cambiar la contraseña propia |
 | `/operador/login` | Redirige a `/login` (el acceso se unificó) |
 | `/operador` | Consola: alta de clientes, suspensión, claves y bitácora |
@@ -922,6 +1008,13 @@ Tres decisiones que no son obvias:
 
 Protege **todo por defecto** y enumera lo público, igual que en el backend un endpoint sin roles se
 rechaza: una pantalla nueva nace protegida.
+
+Desde F5 también pone la **política de contenido**: un nonce nuevo en cada petición, `'strict-dynamic'`,
+sin `unsafe-inline` ni `unsafe-eval`, `frame-ancestors 'none'` y `upgrade-insecure-requests` solo con
+HTTPS. Por eso `layout.tsx` espera `connection()`: la página se pinta en cada petición para que
+Next ponga el nonce en sus scripts. El resto de cabeceras fijas está en `next.config.ts`
+(`Permissions-Policy`, HSTS solo en producción). Lo comprueba
+`e2e/fase5.spec.ts` (`test_csp_con_nonce_por_peticion_y_script_inyectado_no_se_ejecuta`).
 
 ### Service worker (`public/sw.js`)
 
@@ -1086,20 +1179,20 @@ npm run lint ; npm run graph:check
 <!-- graph:auto:start -->
 _Sección generada por `python tools/graph/graph.py docs`. No editar a mano; se sobrescribe en cada push a `main`._
 
-Última actualización: 2026-10-23 09:17 UTC
+Última actualización: 2026-10-29 02:53 UTC
 
 ### Estado del proyecto
 
 ```text
 === ESTADO DEL CÓDIGO ===
 
-[backend]  módulos: 71   LOC: 10613   TODO/FIXME: 0
-  con test: 52/71   stubs/vacíos: 0
-  por capa: api=14, cli=1, core=8, db=3, jobs=3, main=1, models=11, schemas=9, services=21
+[backend]  módulos: 77   LOC: 11975   TODO/FIXME: 0
+  con test: 55/77   stubs/vacíos: 0
+  por capa: api=15, cli=1, core=9, db=3, jobs=3, main=1, models=11, schemas=9, services=25
 
-[frontend]  módulos: 68   LOC: 12391   TODO/FIXME: 0
-  con test: 0/68   stubs/vacíos: 0
-  por capa: app=27, components=23, lib=17, src=1
+[frontend]  módulos: 70   LOC: 13726   TODO/FIXME: 0
+  con test: 0/70   stubs/vacíos: 0
+  por capa: app=27, components=24, lib=18, src=1
 
 ciclos de importación: 0
 
@@ -1182,16 +1275,21 @@ ciclos de importación: 0
     [x] Riesgo sin conexión como último valor conocido (10.2)  <done>
     [ ] Despliegue del job como cron de Railway  <pending>
 
-  F5 - Dashboard y cierre (semanas 13-16)  (0/5, 0%)
+  F5 - Dashboard y cierre (semanas 13-16)  (9/10, 90%)
     cubre: RF-27, RF-28, RNF-01, RNF-02, RNF-04
     hecho cuando: Los tres paneles muestran datos reales; las pruebas de aislamiento entre tenants pasan sin excepción.
-    [ ] Endpoints de indicadores: disponibilidad, MTBF, costo de repuestos, activos de mayor riesgo  <pending>
-    [ ] Frontend: panel de operario, supervisor y gerente según rol  <pending>
-    [ ] Auditoría de aislamiento entre tenants automatizada + pruebas e2e (Playwright) de flujos críticos  <pending>
-    [ ] Checklist OWASP Top 10 y verificación de secretos  <pending>
-    [ ] Documentación técnica y manual de usuario finales  <pending>
+    [x] Migración 0011: activos.creado_en, horas_acumuladas con trigger, v_paradas, índices, JIT apagado  <done>
+    [x] Indicadores: disponibilidad, utilización, MTBF con IC 90 %, MTTR, costos por mes (RF-28)  <done (auto)>
+    [x] Widgets por rol con ensamblador aislado (timeout, degradación, RNF-02) y endpoints /panel, /indicadores, /plantas (RF-27)  <done (auto)>
+    [x] Frontend: panel de cada rol con filtros, gráficas accesibles y tabla  <done (auto)>
+    [x] Adelantar desde cuándo se observa un equipo (decisión 8)  <done>
+    [x] Auditoría de aislamiento entre tenants automatizada + pruebas e2e (Playwright) de flujos críticos  <done>
+    [x] Checklist OWASP Top 10 y verificación de secretos  <done>
+    [x] Cabeceras de seguridad de la API y CSP con nonce en la web  <done (auto)>
+    [x] Documentación técnica y manual de usuario finales  <done>
+    [ ] Auditoría de aislamiento contra staging y RNF-04 con latencia real  <pending>
 
-AVANCE GLOBAL: 55/64 tareas (85%)
+AVANCE GLOBAL: 64/69 tareas (92%)
 ```
 
 ### Módulos del backend
@@ -1199,8 +1297,8 @@ AVANCE GLOBAL: 55/64 tareas (85%)
 | Módulo | Capa | Importa | Importado por | LOC | Test |
 |---|---|---:|---:|---:|:---:|
 | `app.api.v1.comun` | api | 7 | 8 | 97 | — |
-| `app.api.v1.router` | api | 12 | 1 | 35 | — |
-| `app.api.v1.routes.activos` | api | 12 | 1 | 217 | ✅ |
+| `app.api.v1.router` | api | 13 | 1 | 38 | — |
+| `app.api.v1.routes.activos` | api | 12 | 1 | 219 | ✅ |
 | `app.api.v1.routes.alertas` | api | 9 | 1 | 96 | ✅ |
 | `app.api.v1.routes.auth` | api | 7 | 1 | 210 | ✅ |
 | `app.api.v1.routes.campo` | api | 7 | 1 | 43 | ✅ |
@@ -1209,37 +1307,39 @@ AVANCE GLOBAL: 55/64 tareas (85%)
 | `app.api.v1.routes.lecturas` | api | 10 | 1 | 137 | ✅ |
 | `app.api.v1.routes.operador` | api | 9 | 1 | 315 | ✅ |
 | `app.api.v1.routes.ordenes` | api | 13 | 3 | 404 | ✅ |
+| `app.api.v1.routes.paneles` | api | 5 | 1 | 75 | ✅ |
 | `app.api.v1.routes.prediccion` | api | 17 | 1 | 318 | ✅ |
 | `app.api.v1.routes.repuestos` | api | 10 | 1 | 208 | — |
 | `app.api.v1.routes.usuarios` | api | 5 | 1 | 66 | ✅ |
 | `app.cli` | cli | 5 | 0 | 189 | ✅ |
 | `app.core.almacen` | core | 1 | 6 | 112 | ✅ |
 | `app.core.auth` | core | 2 | 5 | 123 | ✅ |
-| `app.core.config` | core | 0 | 20 | 120 | ✅ |
+| `app.core.config` | core | 0 | 20 | 122 | ✅ |
 | `app.core.cursor` | core | 0 | 9 | 57 | ✅ |
 | `app.core.eventos_dominio` | core | 1 | 1 | 45 | ✅ |
-| `app.core.rbac` | core | 2 | 9 | 36 | ✅ |
+| `app.core.rbac` | core | 2 | 10 | 36 | ✅ |
 | `app.core.registro` | core | 0 | 15 | 99 | ✅ |
-| `app.core.security` | core | 1 | 20 | 225 | ✅ |
-| `app.db.deps` | db | 3 | 14 | 106 | ✅ |
+| `app.core.security` | core | 1 | 21 | 225 | ✅ |
+| `app.core.seguridad_http` | core | 0 | 1 | 56 | — |
+| `app.db.deps` | db | 3 | 15 | 118 | ✅ |
 | `app.db.session` | db | 2 | 4 | 95 | ✅ |
-| `app.db.tenant` | db | 1 | 1 | 164 | ✅ |
+| `app.db.tenant` | db | 1 | 1 | 174 | ✅ |
 | `app.jobs.diario` | jobs | 3 | 0 | 29 | — |
 | `app.jobs.programador` | jobs | 3 | 1 | 32 | — |
 | `app.jobs.recalculo_riesgo` | jobs | 5 | 2 | 59 | — |
-| `app.main` | main | 5 | 0 | 129 | — |
-| `app.models.activo` | models | 1 | 12 | 72 | — |
-| `app.models.alerta` | models | 1 | 5 | 78 | — |
+| `app.main` | main | 6 | 0 | 123 | — |
+| `app.models.activo` | models | 1 | 13 | 72 | — |
+| `app.models.alerta` | models | 1 | 6 | 80 | — |
 | `app.models.base` | models | 0 | 11 | 32 | — |
-| `app.models.componente` | models | 1 | 8 | 59 | — |
+| `app.models.componente` | models | 1 | 9 | 59 | — |
 | `app.models.empresa` | models | 1 | 5 | 19 | ✅ |
-| `app.models.lectura_horometro` | models | 1 | 5 | 106 | — |
+| `app.models.lectura_horometro` | models | 1 | 6 | 125 | — |
 | `app.models.operador` | models | 1 | 3 | 68 | ✅ |
-| `app.models.orden_trabajo` | models | 1 | 8 | 223 | ✅ |
-| `app.models.prediccion` | models | 1 | 7 | 302 | ✅ |
-| `app.models.repuesto` | models | 1 | 3 | 127 | — |
-| `app.models.usuario` | models | 2 | 5 | 61 | ✅ |
-| `app.schemas.activo` | schemas | 2 | 7 | 115 | — |
+| `app.models.orden_trabajo` | models | 1 | 9 | 236 | ✅ |
+| `app.models.prediccion` | models | 1 | 8 | 318 | ✅ |
+| `app.models.repuesto` | models | 1 | 4 | 134 | — |
+| `app.models.usuario` | models | 2 | 6 | 61 | ✅ |
+| `app.schemas.activo` | schemas | 2 | 7 | 121 | — |
 | `app.schemas.auth` | schemas | 1 | 4 | 63 | ✅ |
 | `app.schemas.campo` | schemas | 1 | 4 | 118 | ✅ |
 | `app.schemas.health` | schemas | 0 | 1 | 6 | ✅ |
@@ -1248,7 +1348,7 @@ AVANCE GLOBAL: 55/64 tareas (85%)
 | `app.schemas.orden_trabajo` | schemas | 0 | 5 | 153 | ✅ |
 | `app.schemas.prediccion` | schemas | 0 | 2 | 151 | ✅ |
 | `app.schemas.usuario` | schemas | 1 | 1 | 40 | ✅ |
-| `app.services.activos` | services | 6 | 6 | 299 | ✅ |
+| `app.services.activos` | services | 6 | 6 | 312 | ✅ |
 | `app.services.alertas` | services | 6 | 2 | 160 | ✅ |
 | `app.services.auth` | services | 8 | 2 | 300 | ✅ |
 | `app.services.campo` | services | 6 | 1 | 163 | ✅ |
@@ -1259,7 +1359,11 @@ AVANCE GLOBAL: 55/64 tareas (85%)
 | `app.services.limites` | services | 2 | 5 | 50 | ✅ |
 | `app.services.operador` | services | 8 | 1 | 323 | ✅ |
 | `app.services.ordenes` | services | 14 | 7 | 677 | ✅ |
-| `app.services.ordenes_estados` | services | 11 | 1 | 330 | ✅ |
+| `app.services.ordenes_estados` | services | 11 | 1 | 342 | ✅ |
+| `app.services.paneles.consultas` | services | 9 | 1 | 583 | — |
+| `app.services.paneles.ensamblador` | services | 0 | 2 | 90 | ✅ |
+| `app.services.paneles.indicadores` | services | 0 | 3 | 320 | ✅ |
+| `app.services.paneles.widgets` | services | 4 | 1 | 119 | — |
 | `app.services.prediccion.ajuste` | services | 4 | 6 | 214 | — |
 | `app.services.prediccion.alertas` | services | 8 | 2 | 267 | ✅ |
 | `app.services.prediccion.componentes_equipo` | services | 4 | 2 | 147 | — |
@@ -1275,7 +1379,7 @@ AVANCE GLOBAL: 55/64 tareas (85%)
 | Módulo | Capa | Importa | Importado por | LOC | Test |
 |---|---|---:|---:|---:|:---:|
 | `src/app/activos/[id]/componentes/page.tsx` | app | 10 | 0 | 285 | — |
-| `src/app/activos/[id]/editar/page.tsx` | app | 5 | 0 | 55 | — |
+| `src/app/activos/[id]/editar/page.tsx` | app | 8 | 0 | 104 | — |
 | `src/app/activos/[id]/etiqueta/page.tsx` | app | 5 | 0 | 83 | — |
 | `src/app/activos/[id]/falla/page.tsx` | app | 6 | 0 | 89 | — |
 | `src/app/activos/nuevo/page.tsx` | app | 4 | 0 | 32 | — |
@@ -1287,10 +1391,10 @@ AVANCE GLOBAL: 55/64 tareas (85%)
 | `src/app/configuracion/prediccion/page.tsx` | app | 7 | 0 | 196 | — |
 | `src/app/equipo/page.tsx` | app | 20 | 0 | 696 | — |
 | `src/app/escanear/page.tsx` | app | 6 | 0 | 72 | — |
-| `src/app/globals.css` | app | 0 | 1 | 186 | — |
+| `src/app/globals.css` | app | 0 | 1 | 197 | — |
 | `src/app/inventario/[id]/page.tsx` | app | 10 | 0 | 351 | — |
 | `src/app/inventario/page.tsx` | app | 10 | 0 | 247 | — |
-| `src/app/layout.tsx` | app | 2 | 0 | 66 | — |
+| `src/app/layout.tsx` | app | 2 | 0 | 73 | — |
 | `src/app/login/page.tsx` | app | 7 | 0 | 185 | — |
 | `src/app/operador/clave/page.tsx` | app | 3 | 0 | 60 | — |
 | `src/app/operador/page.tsx` | app | 5 | 0 | 566 | — |
@@ -1298,50 +1402,52 @@ AVANCE GLOBAL: 55/64 tareas (85%)
 | `src/app/ordenes/page.tsx` | app | 8 | 0 | 201 | — |
 | `src/app/page.tsx` | app | 2 | 0 | 44 | — |
 | `src/app/panel/clave/page.tsx` | app | 4 | 0 | 55 | — |
-| `src/app/panel/page.tsx` | app | 3 | 0 | 87 | — |
+| `src/app/panel/page.tsx` | app | 13 | 0 | 726 | — |
 | `src/app/panel/usuarios/page.tsx` | app | 9 | 0 | 267 | — |
 | `src/app/riesgo/page.tsx` | app | 8 | 0 | 173 | — |
 | `src/components/acciones-orden.tsx` | components | 7 | 1 | 855 | — |
 | `src/components/arbol-navegacion.tsx` | components | 2 | 2 | 169 | — |
 | `src/components/avisos-cola.tsx` | components | 7 | 1 | 149 | — |
 | `src/components/barra-sesion.tsx` | components | 4 | 1 | 114 | — |
-| `src/components/boton.tsx` | components | 0 | 27 | 72 | — |
-| `src/components/campo.tsx` | components | 0 | 14 | 143 | — |
+| `src/components/boton.tsx` | components | 0 | 29 | 72 | — |
+| `src/components/campo.tsx` | components | 0 | 15 | 143 | — |
 | `src/components/escaner-qr.tsx` | components | 3 | 1 | 153 | — |
-| `src/components/estado.tsx` | components | 1 | 14 | 149 | — |
+| `src/components/estado.tsx` | components | 1 | 15 | 149 | — |
 | `src/components/formulario-activo.tsx` | components | 4 | 2 | 147 | — |
 | `src/components/formulario-alerta.tsx` | components | 9 | 1 | 147 | — |
 | `src/components/formulario-clave.tsx` | components | 3 | 2 | 165 | — |
 | `src/components/formulario-falla.tsx` | components | 11 | 2 | 452 | — |
 | `src/components/formulario-horometro.tsx` | components | 10 | 3 | 195 | — |
+| `src/components/graficas.tsx` | components | 1 | 1 | 317 | — |
 | `src/components/historial-orden.tsx` | components | 3 | 1 | 120 | — |
-| `src/components/iconos.tsx` | components | 0 | 18 | 137 | — |
+| `src/components/iconos.tsx` | components | 0 | 19 | 137 | — |
 | `src/components/indicador-cola.tsx` | components | 2 | 1 | 77 | — |
 | `src/components/lecturas-por-revisar.tsx` | components | 6 | 1 | 139 | — |
 | `src/components/marco.tsx` | components | 0 | 22 | 209 | — |
 | `src/components/pantalla.tsx` | components | 7 | 21 | 121 | — |
 | `src/components/registro-sw.tsx` | components | 0 | 1 | 28 | — |
 | `src/components/repuestos-orden.tsx` | components | 5 | 1 | 321 | — |
-| `src/components/riesgo.tsx` | components | 5 | 4 | 318 | — |
+| `src/components/riesgo.tsx` | components | 5 | 5 | 319 | — |
 | `src/components/segmento.tsx` | components | 0 | 2 | 42 | — |
 | `src/lib/acceso.ts` | lib | 3 | 1 | 53 | — |
-| `src/lib/activos.ts` | lib | 1 | 20 | 142 | — |
-| `src/lib/api.ts` | lib | 0 | 38 | 221 | — |
+| `src/lib/activos.ts` | lib | 1 | 20 | 155 | — |
+| `src/lib/api.ts` | lib | 0 | 40 | 221 | — |
 | `src/lib/auth.ts` | lib | 1 | 35 | 368 | — |
 | `src/lib/campo.ts` | lib | 2 | 9 | 141 | — |
 | `src/lib/captura.ts` | lib | 5 | 2 | 83 | — |
-| `src/lib/formato.ts` | lib | 0 | 19 | 31 | — |
+| `src/lib/formato.ts` | lib | 0 | 21 | 31 | — |
 | `src/lib/horometro.ts` | lib | 2 | 3 | 42 | — |
-| `src/lib/inventario.ts` | lib | 2 | 5 | 114 | — |
+| `src/lib/inventario.ts` | lib | 2 | 6 | 114 | — |
 | `src/lib/offline-queue.ts` | lib | 4 | 6 | 378 | — |
 | `src/lib/operador.ts` | lib | 1 | 3 | 121 | — |
-| `src/lib/ordenes.ts` | lib | 4 | 10 | 227 | — |
-| `src/lib/prediccion.ts` | lib | 3 | 7 | 222 | — |
+| `src/lib/ordenes.ts` | lib | 4 | 11 | 227 | — |
+| `src/lib/paneles.ts` | lib | 2 | 2 | 255 | — |
+| `src/lib/prediccion.ts` | lib | 3 | 8 | 222 | — |
 | `src/lib/qr.ts` | lib | 0 | 4 | 60 | — |
 | `src/lib/sesion.ts` | lib | 3 | 2 | 98 | — |
 | `src/lib/sondeo.ts` | lib | 0 | 4 | 41 | — |
 | `src/lib/usuarios.ts` | lib | 2 | 1 | 41 | — |
-| `src/proxy.ts` | src | 0 | 0 | 95 | — |
+| `src/proxy.ts` | src | 0 | 0 | 138 | — |
 
 Diagramas: [backend](docs/diagramas/dependencias-backend.md) · [frontend](docs/diagramas/dependencias-frontend.md)
 <!-- graph:auto:end -->

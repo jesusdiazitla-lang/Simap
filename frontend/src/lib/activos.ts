@@ -30,6 +30,8 @@ export interface Activo {
   readonly url_qr: string;
   /** Horas acumuladas antes del último cambio o reinicio del horómetro (F3). */
   readonly horometro_offset?: number;
+  /** Desde cuándo se observa el equipo: inicio de sus horas de calendario (F5, decisión 8). */
+  readonly creado_en?: string | null;
   /** Tiene alguna orden de trabajo abierta. Derivado en el servidor. */
   readonly en_falla?: boolean;
   /** Solo en la ficha de un equipo: sus órdenes abiertas. Las ve cualquier rol. */
@@ -112,6 +114,18 @@ export async function crearActivo(
 
 export async function editarActivo(id: string, ficha: Partial<FichaActivo>): Promise<Activo> {
   return llamar<Activo>(`/activos/${encodeURIComponent(id)}`, { method: "PATCH", cuerpo: ficha });
+}
+
+/**
+ * Adelanta la fecha desde la que se observa el equipo (F5, decisión 8), para contar la historia de
+ * antes de usar SIMAP. El servidor rechaza posponerla o ponerla en el futuro.
+ */
+export async function adelantarObservacion(id: string, dia: string): Promise<Activo> {
+  // Medianoche de Santo Domingo (UTC−4, sin horario de verano): los días se cortan en esa zona.
+  return llamar<Activo>(`/activos/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    cuerpo: { observado_desde: `${dia}T00:00:00-04:00` },
+  });
 }
 
 export async function darDeBaja(id: string): Promise<Activo> {

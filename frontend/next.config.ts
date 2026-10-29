@@ -15,6 +15,8 @@ const nextConfig: NextConfig = {
   // segunda copia (para las pruebas e2e) sin pisar la que esté sirviendo `next start`: recompilar
   // encima de un servidor vivo deja la página sin estilos (pasó el 2026-10-07).
   distDir: process.env.NEXT_DIST_DIR ?? ".next",
+  // No anunciar el framework en cada respuesta (OWASP A02).
+  poweredByHeader: false,
   async rewrites() {
     return [
       { source: "/api/:ruta*", destination: `${API_ORIGEN}/api/:ruta*` },
@@ -34,6 +36,21 @@ const nextConfig: NextConfig = {
   },
   async headers() {
     return [
+      {
+        // Lo que no depende de la petición (08-fase5, 10.2). La CSP, con su nonce, la pone
+        // `src/proxy.ts` en cada página. La cámara se permite al propio sitio: el escáner de QR.
+        source: "/:ruta*",
+        headers: [
+          { key: "X-Content-Type-Options", value: "nosniff" },
+          { key: "X-Frame-Options", value: "DENY" },
+          { key: "Referrer-Policy", value: "no-referrer" },
+          { key: "Permissions-Policy", value: "camera=(self), microphone=(), geolocation=()" },
+          { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
+          ...(process.env.NODE_ENV === "production"
+            ? [{ key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains" }]
+            : []),
+        ],
+      },
       {
         // El service worker no se cachea nunca: si el navegador guardara una copia, una versión
         // nueva tardaría hasta un día en llegar a los teléfonos. `Service-Worker-Allowed` no hace

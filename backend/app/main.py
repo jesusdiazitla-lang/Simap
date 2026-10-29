@@ -7,24 +7,17 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from starlette.types import ASGIApp
 
 from app.api.v1.router import api_router
 from app.core import registro
 from app.core.config import get_settings
 from app.core.cursor import CursorInvalido
+from app.core.seguridad_http import CabecerasSeguridad
 
 #: Cabeceras de seguridad exigidas por 04-fase1-fundamentos.md, sección 6.4.
 #: HSTS solo tiene sentido sobre HTTPS, así que se añade únicamente cuando las cookies son `secure`
 #: (es decir, fuera de desarrollo local): enviarla por HTTP no hace nada y confunde al depurar.
-CABECERAS_SEGURIDAD = {
-    # Impide que el navegador adivine el tipo de contenido e interprete como script
-    # algo que no lo es.
-    "X-Content-Type-Options": "nosniff",
-    # La API no devuelve HTML: nada de esto deberia embeberse en un marco.
-    "X-Frame-Options": "DENY",
-    # No filtrar la URL completa (que puede llevar ids) a sitios de terceros.
-    "Referrer-Policy": "no-referrer",
-}
 
 
 #: Métodos que modifican datos. Son los únicos que un sitio ajeno podría querer forzar con la sesión
@@ -52,14 +45,34 @@ async def ciclo_de_vida(_app: FastAPI) -> AsyncIterator[None]:
             programador.shutdown(wait=False)
 
 
+class SimapAPI(FastAPI):
+    """FastAPI con las cabeceras de seguridad envolviendo la pila de middlewares **completa**.
+
+    Starlette pone `ServerErrorMiddleware` por fuera de todo lo registrado con `add_middleware`, así
+    que un 500 no controlado saldría sin cabeceras. Envolver aquí la pila ya construida lo evita sin
+    dejar de ser un `FastAPI` (las pruebas usan `dependency_overrides`). Ver `seguridad_http`.
+    """
+
+    def build_middleware_stack(self) -> ASGIApp:
+        return CabecerasSeguridad(
+            super().build_middleware_stack(), con_hsts=lambda: get_settings().cookie_secure
+        )
+
+
 def create_app() -> FastAPI:
     settings = get_settings()
     registro.configurar()
-    app = FastAPI(
+    # En producción no se publica la documentación interactiva (OWASP A02): el esquema se exporta
+    # como archivo del repositorio. `EXPONER_DOCS=false` la apaga.
+    docs = settings.exponer_docs
+    app = SimapAPI(
         title=settings.app_name,
         version=settings.app_version,
         debug=settings.debug,
         lifespan=ciclo_de_vida,
+        docs_url="/docs" if docs else None,
+        redoc_url="/redoc" if docs else None,
+        openapi_url="/openapi.json" if docs else None,
     )
 
     app.add_middleware(
@@ -121,22 +134,6 @@ def create_app() -> FastAPI:
         ):
             return JSONResponse(status_code=403, content={"detail": "Origen no permitido."})
         return await call_next(request)
-
-    @app.middleware("http")
-    async def cabeceras_de_seguridad(
-        request: Request, call_next: Callable[[Request], Awaitable[Response]]
-    ) -> Response:
-        response = await call_next(request)
-        for cabecera, valor in CABECERAS_SEGURIDAD.items():
-            response.headers.setdefault(cabecera, valor)
-        # Se relee la configuracion en cada peticion en lugar de capturarla al crear la aplicacion:
-        # `app` se construye al importar el modulo, asi que un valor capturado ignoraria cualquier
-        # cambio posterior del entorno (y haria imposible probar este comportamiento).
-        if get_settings().cookie_secure:
-            response.headers.setdefault(
-                "Strict-Transport-Security", "max-age=31536000; includeSubDomains"
-            )
-        return response
 
     @app.exception_handler(CursorInvalido)
     async def cursor_invalido(_request: Request, _exc: CursorInvalido) -> JSONResponse:

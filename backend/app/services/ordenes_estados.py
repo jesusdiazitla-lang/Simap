@@ -135,6 +135,19 @@ async def marcar_reparada(
     )
 
 
+def inicio_de_parada(orden: OrdenTrabajo) -> datetime:
+    """Desde cuándo el equipo está fuera de servicio por esta orden (08-fase5, decisiones 3 y 10).
+
+    Una falla, desde la falla. Una intervención predictiva, desde que el equipo entró al taller: la
+    orden puede esperar días su ventana de parada con el equipo produciendo, y contar esa espera
+    hundiría la disponibilidad de la empresa que mejor mantiene. Si por alguna razón no se registró
+    la entrada al taller, la fecha de la orden. Es la misma regla que `v_paradas`.
+    """
+    if orden.es_predictiva and orden.en_taller_en is not None:
+        return orden.en_taller_en
+    return orden.fecha_falla
+
+
 def minutos_fuera_de_servicio(fecha_falla: datetime, salida: datetime) -> int:
     """Tiempo de calendario de la falla a la autorización de salida (decisión 5, RF-15).
 
@@ -149,9 +162,10 @@ async def cerrar(
 ) -> OrdenTrabajo:
     """Reparada a Cerrada: autoriza la salida del taller (supervisor o administrador).
 
-    El tiempo fuera de servicio se calcula con la hora del servidor, no la del teléfono. Se lee
-    `fecha_falla` antes del UPDATE sin riesgo: solo la cambia la conversión en falla, y esa exige
-    una orden abierta.
+    El tiempo fuera de servicio se calcula con la hora del servidor, no la del teléfono, desde
+    `inicio_de_parada` (fase 5, decisión 10: en una predictiva, desde la entrada al taller). Se lee
+    antes del UPDATE sin riesgo: `fecha_falla` solo la cambia la conversión en falla y
+    `en_taller_en` la transición a taller, y las dos exigen una orden abierta, no una Reparada.
 
     Fase 4 (6.7), en la misma transacción corta: descuento de los repuestos (409
     `stock_insuficiente` revierte el cierre entero), alerta del sistema resuelta y marca durable de
@@ -159,7 +173,7 @@ async def cerrar(
     """
     previa = await obtener(session, orden_id)
     salida = ahora()
-    minutos = minutos_fuera_de_servicio(previa.fecha_falla, salida)
+    minutos = minutos_fuera_de_servicio(inicio_de_parada(previa), salida)
     orden = await _mover(
         session,
         actor,
@@ -363,6 +377,7 @@ __all__ = [
     "cerrar",
     "convertir_en_falla",
     "marcar_reparada",
+    "inicio_de_parada",
     "minutos_fuera_de_servicio",
     "rechazar_cierre",
 ]

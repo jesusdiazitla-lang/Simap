@@ -23,7 +23,7 @@ plugins = ["pydantic.mypy"]
 # Librerias sin stubs de tipos publicados. Se declara aqui en lugar de sembrar el codigo de
 # "type: ignore", para que la excepcion sea visible y revisable en un solo sitio.
 [[tool.mypy.overrides]]
-module = ["jose.*", "qrcode.*", "redis.*", "scipy.*", "apscheduler.*"]
+module = ["qrcode.*", "redis.*", "scipy.*", "apscheduler.*"]
 ignore_missing_imports = true
 
 # ---------------------------------------------------------------------------

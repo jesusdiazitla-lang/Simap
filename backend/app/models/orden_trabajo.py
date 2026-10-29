@@ -138,6 +138,19 @@ class OrdenTrabajo(IdUUID, Base):
             "numero",
             postgresql_where=text("estado = 'cerrada' AND NOT requiere_revision"),
         ),
+        # Paneles (F5, 6.2): órdenes cerradas en un periodo, y fallas reales por fecha.
+        Index(
+            "ix_ordenes_trabajo_cierre",
+            "empresa_id",
+            "fecha_salida_taller",
+            postgresql_where=text("estado = 'cerrada'"),
+        ),
+        Index(
+            "ix_ordenes_trabajo_falla_real",
+            "empresa_id",
+            "fecha_falla",
+            postgresql_where=text("estado <> 'cancelada' AND NOT es_predictiva"),
+        ),
         Index(
             "ix_ordenes_trabajo_una_abierta_por_componente",
             "empresa_id",

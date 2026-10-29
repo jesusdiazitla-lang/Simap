@@ -35,6 +35,8 @@
    - [5.6.2 Componentes del equipo, vida nominal y configuración](#562--componentes-del-equipo-vida-nominal-y-configuración-administrador)
    - [5.7 Gestionar el inventario de repuestos](#57--gestionar-el-inventario-de-repuestos)
    - [5.7.1 Repuestos usados en una orden](#571--repuestos-usados-en-una-orden)
+   - [5.8 Paneles por rol](#58--paneles-por-rol)
+   - [5.8.1 Desde cuándo se observa un equipo](#581--desde-cuándo-se-observa-un-equipo-administrador)
    - [5.9 Administrar el personal y el catálogo de componentes](#59--administrar-el-personal-y-el-catálogo-de-componentes)
    - [5.10 La consola del operador de SIMAP](#510--la-consola-del-operador-de-simap)
 6. [Cómo calcula SIMAP el riesgo de un equipo](#6-cómo-calcula-simap-el-riesgo-de-un-equipo)
@@ -437,11 +439,62 @@ cualquier momento, también con la orden cerrada. El **gerente** consulta las ó
   cantidad; si de verdad falta, se registra el ingreso en Inventario y se vuelve a autorizar.
 - Con la orden cerrada o cancelada, sus repuestos ya no cambian.
 
-### 5.8 ⏳ Paneles por rol
-- **Operario:** tus reportes recientes.
-- **Supervisor:** alertas pendientes de revisión y órdenes abiertas de tu planta. *(Las órdenes ya
-  están en **Mantenimiento → Órdenes de trabajo**; el panel con indicadores llega en la fase 5.)*
-- **Gerente:** disponibilidad, tiempo medio entre fallas (MTBF), costo de repuestos usados y equipos de mayor riesgo.
+### 5.8 ✅ Paneles por rol
+
+- **Objetivo:** ver de un vistazo lo que te toca hoy y, si diriges la planta, cómo va.
+- **Quién:** todos los roles; cada uno ve un panel distinto.
+- **Cómo llegar:** es la primera pantalla después de entrar (**Panel** en el menú).
+- **Qué ve cada rol:**
+
+| Rol | Título del panel | Secciones |
+|---|---|---|
+| Operario | Mi panel | **Mis lecturas recientes** y **Mis alertas** (lo que reportaste y en qué quedó) |
+| Técnico de taller | Panel del taller | **Cola del taller** (primero las fallas, la más antigua arriba) y **Mis trabajos recientes** |
+| Supervisor | Panel del supervisor | **Lo que espera tu revisión** (cuatro contadores), **Alertas de campo pendientes de revisión**, **Alertas del sistema por atender** y **Órdenes abiertas** |
+| Gerente | Panel del gerente | **Indicadores del periodo** con sus dos gráficas, **Equipos de mayor riesgo** y **Repuestos que más costaron** |
+| Administrador | Panel del administrador | Lo del supervisor, lo del gerente y **Estado de la plataforma** |
+
+- **Filtros (supervisor, gerente y administrador):** arriba, **Planta**, y para quien ve
+  indicadores también **Desde** y **Hasta** → **Aplicar**. Sin fechas se muestran los últimos 12
+  meses; el periodo no puede pasar de 24. Los filtros quedan en la dirección de la página, así que
+  puedes guardarla o enviarla y se abre igual. **El filtro de planta ordena la vista; no cambia lo
+  que tu usuario puede ver.**
+- **Cómo leer los indicadores del gerente:**
+  - **Disponibilidad:** de todas las horas del periodo (24 por día, desde que SIMAP observa cada
+    equipo), qué parte no estuvo parado. Debajo, la misma cifra sin contar los cambios planificados
+    y la **utilización** (horas que de verdad trabajó, según el horómetro). Una planta que trabaja un
+    turno tendrá una utilización baja aunque nunca falle: eso no es un problema.
+  - **Tiempo medio entre fallas (MTBF):** horas de operación entre una falla y la siguiente. Siempre
+    va con su rango (con 90 % de confianza): con pocas fallas el rango es ancho y la cifra sola
+    engañaría. Si no hubo fallas, SIMAP no inventa un número: da solo el mínimo que se puede afirmar.
+  - **Tiempo medio de reparación (MTTR):** de la falla a la salida del taller, en las fallas que se
+    cerraron en el periodo.
+  - **Costo de repuestos:** lo consumido al cerrar órdenes, al precio de ese momento, separado entre
+    trabajo planificado y fallas.
+  - Las gráficas muestran la disponibilidad y el costo **mes a mes**. Pasa el cursor o el foco del
+    teclado por un mes para ver su detalle; **Ver como tabla** muestra las mismas cifras en filas.
+- **Resultado:** si una sección no pudo cargarse, aparece su aviso y el resto del panel sigue
+  funcionando; vuelve a cargar la página en un momento.
+- **Errores habituales:**
+  - *«Ese periodo no es válido»* → la fecha **Desde** es posterior a **Hasta**, o el periodo pasa de
+    24 meses. Acórtalo.
+  - *Disponibilidad muy alta en una planta nueva* → SIMAP solo cuenta desde que se registró cada
+    equipo. Si cargaste historia de antes, el administrador puede adelantar esa fecha (5.8.1).
+  - *Aviso de fallas con el horómetro por confirmar* → esas fallas todavía no cuentan en el MTBF;
+    confírmalas en la bandeja de alertas (5.3.2).
+
+#### 5.8.1 ✅ Desde cuándo se observa un equipo (administrador)
+
+- **Objetivo:** que la disponibilidad cuente desde la fecha correcta cuando cargas en SIMAP
+  historia de antes de usarlo (fallas u órdenes antiguas).
+- **Quién:** administrador.
+- **Cómo llegar:** **Equipos → Todos los equipos** → el equipo → **Editar** → panel **Desde cuándo
+  se observa**.
+- **Pasos:** elige la **Nueva fecha** → **Adelantar**.
+- **Resultado:** *«Fecha actualizada.»* Las horas de calendario del equipo cuentan desde ese día.
+- **Errores habituales:** la fecha solo se puede **adelantar**, nunca atrasar ni poner en el futuro.
+  Atrasarla escondería horas en las que el equipo existía y subiría la disponibilidad sin que nada
+  hubiera mejorado.
 
 ### 5.0 ✅ Entrar a SIMAP y ver el panel de tu turno
 
@@ -451,9 +504,8 @@ cualquier momento, también con la orden cerrada. El **gerente** consulta las ó
 - **Cómo llegar:** la dirección de SIMAP en el navegador.
 - **Pasos:** escribe tu correo → escribe tu contraseña (puedes pulsar **Ver** para comprobar que la
   escribiste bien) → **Entrar**.
-- **Resultado:** el panel de tu turno, con tu nombre firmado arriba y la lista de lo que puedes
-  hacer. Lo que todavía no está construido aparece en gris con la fase en la que llegará, para que
-  sepas qué esperar y no busques algo que aún no existe.
+- **Resultado:** el panel de tu rol, con tu nombre arriba y lo que te toca hoy (ver 5.8). El
+  menú lateral lleva a todo lo demás que tu rol puede hacer.
 - **Errores habituales:**
   - *«Correo o contraseña incorrectos»* → revisa ambos; SIMAP no dice cuál falló, a propósito
     (ver 3.3).
@@ -648,14 +700,20 @@ En `http://<servidor>:8000/api/v1/health` aparece `"version"`.
 | Orden predictiva | Orden para cambiar una pieza antes de que falle («Cambio planificado»). |
 | Libro de movimientos | Registro de cada entrada y salida de un repuesto. Solo se agrega; no se modifica. |
 | Reorden | Aviso de que un repuesto quedó por debajo de su stock mínimo. |
-| MTBF | Tiempo medio entre fallas. |
-| Disponibilidad | Porcentaje del tiempo en que el equipo estuvo operativo. |
+| MTBF | Tiempo medio entre fallas: horas de operación (horómetro) divididas por el número de fallas no planificadas. |
+| MTTR | Tiempo medio de reparación: de la falla a la salida del taller. |
+| Intervalo de confianza del 90 % | El rango en el que, con los datos que hay, está el valor real nueve de cada diez veces. Con pocas fallas es ancho. |
+| Horas de calendario | Todas las horas del periodo, 24 por día, desde que SIMAP observa el equipo. |
+| Disponibilidad | Parte de las horas de calendario en que el equipo no estuvo parado por una falla o un cambio planificado. |
+| Utilización | Parte de las horas de calendario en que el equipo trabajó, según su horómetro. |
+| Parada planificada | El tiempo de una orden predictiva: cuenta desde que el equipo entra al taller. |
 | API | Servicio que la interfaz usa para leer y guardar datos. |
 
 ## 10. Historial de cambios
 
 | Fecha | Versión | Cambios |
 |---|---|---|
+| 2026-10-28 | 0.10.0 | **Fase 5: paneles por rol.** Cada rol entra a su propio panel (5.8): el operario ve sus lecturas y alertas; el técnico, la cola del taller; el supervisor, lo que espera su revisión; el gerente, **disponibilidad, MTBF con su rango, MTTR y costo de repuestos** mes a mes, equipos de mayor riesgo y repuestos que más costaron; el administrador, además, el estado de la plataforma. Filtros de planta y periodo. El administrador puede adelantar desde cuándo se observa un equipo (5.8.1). Una orden predictiva cuenta su tiempo fuera de servicio desde que el equipo entra al taller. Protección reforzada del navegador y de la API, y una auditoría que recorre todas las pantallas comprobando que ninguna empresa ve datos de otra. Glosario ampliado. |
 | 2026-09-17 | 0.1.0 | Creación del proyecto: estructura base, página inicial y API de salud. |
 | 2026-09-17 | 0.1.0 | Manual reescrito a partir de la Especificación Funcional y los Casos de Uso: roles, 9 funcionalidades previstas, explicación del riesgo, FAQ y glosario. |
 | 2026-09-25 | 0.2.0 | Fase 1 en marcha: construido el aislamiento de datos entre empresas y el manejo seguro de contraseñas y sesiones. Sin cambios visibles todavía; se amplía la sección 1.3. |

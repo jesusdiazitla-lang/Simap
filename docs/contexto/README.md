@@ -13,6 +13,9 @@ comportamiento del código ya escrito.
 | `05-fase2-activos-y-campo.md` | El **alcance de F2**: activos, QR, horómetro, alertas, sin conexión; anexo con la implementación |
 | `06-fase3-ordenes-de-trabajo.md` | El **alcance de F3**: órdenes de trabajo, máquina de estados, historial, reinicio del horómetro; las ocho decisiones confirmadas y anexo con la implementación |
 | `07-fase4-prediccion-e-inventario.md` | El **alcance de F4**: modelo Weibull con censura, riesgo, alertas del sistema, orden predictiva, inventario con libro; las trece decisiones confirmadas y anexo con la implementación y sus desviaciones |
+| `08-fase5-dashboard-y-cierre.md` | El **alcance de F5**: paneles por rol, indicadores del gerente (disponibilidad, MTBF con IC, MTTR, costos), auditoría de aislamiento, OWASP, cierre; las catorce decisiones confirmadas y anexo con las desviaciones |
+| `anexos/owasp-top10-2025.md` | Checklist OWASP Top 10:2025 punto por punto, con su evidencia y lo pendiente |
+| `anexos/matriz-trazabilidad.md` | Cada requerimiento, la fase que lo construyó y dónde está su evidencia |
 | `anexos/experimentos-fase4.md` | Resultados reproducidos de la validación con simulaciones (F4, sección 14), generados por `tools/experimentos_fase4.py` |
 
 El DDL y las políticas RLS están copiados tal cual en `backend/db/schema.sql` y

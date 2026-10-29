@@ -19,6 +19,8 @@ class Settings(BaseSettings):
     app_name: str = "SIMAP API"
     app_version: str = "0.1.0"
     debug: bool = False
+    #: `/docs`, `/redoc` y `/openapi.json`. Apagado en producción (08-fase5, OWASP A02).
+    exponer_docs: bool = True
     api_v1_prefix: str = "/api/v1"
     # Orígenes permitidos para CORS (el frontend Next.js en desarrollo).
     # Lista blanca explícita: nunca "*", porque la sesión viaja en cookie.

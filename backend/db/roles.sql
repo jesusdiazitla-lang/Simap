@@ -103,3 +103,16 @@ $$;
 GRANT app_user TO job_user;
 GRANT CONNECT ON DATABASE simap TO job_user;
 GRANT USAGE ON SCHEMA public TO job_user;
+
+-- =============================================================================
+-- JIT apagado para los roles de la aplicacion (08-fase5, decision 13 y 9.2).
+--
+-- Con jit = on (lo de fabrica en PostgreSQL 16) las consultas de los indicadores
+-- superan el umbral de costo y PostgreSQL compila codigo nativo en cada una:
+-- ~1,3 s de CPU para consultas cuyo trabajo real es de decenas de ms. Para
+-- consultas cortas y repetidas solo estorba. Vive aqui porque simap_owner no
+-- puede alterar roles; solo afecta a las conexiones NUEVAS (reiniciar el pool).
+-- =============================================================================
+
+ALTER ROLE app_user SET jit = off;
+ALTER ROLE job_user SET jit = off;

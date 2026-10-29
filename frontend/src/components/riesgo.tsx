@@ -273,7 +273,8 @@ export function CurvaRiesgo({
     <figure className="flex flex-col gap-2">
       {/* El SVG va en posición absoluta para que su ancho no cuente en el del contenedor: si contara,
           la rejilla crecería hasta el ancho del SVG y la medida nunca bajaría. */}
-      <div ref={marco} className="relative w-full" style={{ height: alto }}>
+      {/* Altura fija con una clase y no con `style`: la CSP no admite atributos de estilo en línea. */}
+      <div ref={marco} className="relative h-[220px] w-full">
       <svg
         width={ancho}
         height={alto}

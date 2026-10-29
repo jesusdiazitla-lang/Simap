@@ -67,6 +67,14 @@
   --estado-ok: #1d6b39;
   --estado-aviso: #7a5200;
   --estado-falla: #a32015;
+
+  /* --- Series de las gráficas del panel (F5) ----------------------------------
+     Ni el azul de acción ni los colores de estado: una barra no se pulsa ni es
+     el estado de una máquina. Violeta y naranja, validados con el validador de
+     paletas (CVD ΔE 29 en claro, 26 en oscuro; contraste ≥ 3:1 en los dos). La
+     línea de disponibilidad es una sola serie y va en tinta (--texto). */
+  --serie-planificado: #6250d6;
+  --serie-falla: #eb6834;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -101,6 +109,9 @@
     --estado-ok: #5cc27f;
     --estado-aviso: #dfa33c;
     --estado-falla: #f0918a;
+
+    --serie-planificado: #9085e9;
+    --serie-falla: #d95926;
   }
 }
 
@@ -125,6 +136,8 @@
   --estado-ok: #5cc27f;
   --estado-aviso: #dfa33c;
   --estado-falla: #f0918a;
+  --serie-planificado: #9085e9;
+  --serie-falla: #d95926;
 }
 
 @theme inline {

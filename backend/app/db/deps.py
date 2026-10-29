@@ -87,6 +87,21 @@ async def sesion_de_empresa(empresa_id: UUID) -> AsyncIterator[AsyncSession]:
 
 
 @asynccontextmanager
+async def sesion_de_lectura(empresa_id: UUID) -> AsyncIterator[AsyncSession]:
+    """Transacción propia de un widget del panel (08-fase5, 8.3 y 8.6).
+
+    Solo lectura y con una foto fija de los datos, con el tenant de la sesión. Cada widget abre la
+    suya: si uno falla, PostgreSQL aborta solo esa transacción y los demás siguen (RNF-02).
+    """
+    estrategia = get_estrategia_tenant()
+    async with get_sessionmaker()() as session:
+        async with session.begin():
+            await estrategia.lectura_consistente(session)
+            await estrategia.fijar_empresa(session, empresa_id)
+            yield session
+
+
+@asynccontextmanager
 async def sesion_del_job() -> AsyncIterator[AsyncSession]:
     """Sesión del job nocturno, con `job_user` y **sin** tenant: no ve ninguna fila de empresa.
 

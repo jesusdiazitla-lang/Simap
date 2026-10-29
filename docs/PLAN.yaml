@@ -244,14 +244,34 @@ milestones:
   - name: "F5 - Dashboard y cierre (semanas 13-16)"
     rf: [RF-27, RF-28, RNF-01, RNF-02, RNF-04]
     done_when: "Los tres paneles muestran datos reales; las pruebas de aislamiento entre tenants pasan sin excepción."
+    # Guía: docs/contexto/08-fase5-dashboard-y-cierre.md. Las 14 decisiones confirmadas el 2026-10-28.
     tasks:
-      - name: "Endpoints de indicadores: disponibilidad, MTBF, costo de repuestos, activos de mayor riesgo"
-        modules: [app.services.indicadores, app.api.v1.routes.dashboard]
-      - name: "Frontend: panel de operario, supervisor y gerente según rol"
-        modules: [src/app/dashboard/page.tsx]
+      - name: "Migración 0011: activos.creado_en, horas_acumuladas con trigger, v_paradas, índices, JIT apagado"
+        status: done
+        # tests/test_paneles.py (trigger, vista, RLS de v_paradas, privilegios).
+      - name: "Indicadores: disponibilidad, utilización, MTBF con IC 90 %, MTTR, costos por mes (RF-28)"
+        modules: [app.services.paneles.indicadores]
+        # tests/test_indicadores.py: casos a mano y 80 flotas contra una implementación independiente.
+      - name: "Widgets por rol con ensamblador aislado (timeout, degradación, RNF-02) y endpoints /panel, /indicadores, /plantas (RF-27)"
+        modules: [app.services.paneles.ensamblador, app.services.paneles.consultas, app.services.paneles.widgets, app.api.v1.routes.paneles]
+        # El plan original decía app.services.indicadores y routes.dashboard; se agrupó en paneles.
+      - name: "Frontend: panel de cada rol con filtros, gráficas accesibles y tabla"
+        modules: [src/app/panel/page.tsx, src/components/graficas.tsx, src/lib/paneles.ts]
+        # La ruta es /panel (la de F1), no /dashboard.
+      - name: "Adelantar desde cuándo se observa un equipo (decisión 8)"
+        status: done
+        # test_rf28_el_administrador_solo_puede_adelantar_desde_cuando_se_observa.
       - name: "Auditoría de aislamiento entre tenants automatizada + pruebas e2e (Playwright) de flujos críticos"
-        status: pending
+        status: done
+        # tests/test_auditoria_aislamiento.py (C1-C13 y recorrido de rutas); frontend/e2e/fase5.spec.ts.
       - name: "Checklist OWASP Top 10 y verificación de secretos"
-        status: pending
+        status: done
+        # docs/contexto/anexos/owasp-top10-2025.md; gitleaks y Dependabot en .github/.
+      - name: "Cabeceras de seguridad de la API y CSP con nonce en la web"
+        modules: [app.core.seguridad_http, src/proxy.ts]
       - name: "Documentación técnica y manual de usuario finales"
+        status: done
+        # Matriz de trazabilidad: docs/contexto/anexos/matriz-trazabilidad.md.
+      - name: "Auditoría de aislamiento contra staging y RNF-04 con latencia real"
         status: pending
+        # Requiere desplegar; el usuario no quiere desplegar todavía.

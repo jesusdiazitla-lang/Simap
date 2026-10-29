@@ -70,6 +70,8 @@ class Alerta(IdUUID, Base):
             "fecha",
             postgresql_where=text("estado = 'pendiente'"),
         ),
+        # Panel del operario (F5, 6.2): sus propias alertas.
+        Index("ix_alertas_usuario", "empresa_id", "reportado_por", text("capturado_en DESC")),
     )
 
     empresa_id: Mapped[UUID] = mapped_column(Uuid, ForeignKey("empresas.id"), nullable=False)

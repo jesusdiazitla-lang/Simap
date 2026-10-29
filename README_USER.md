@@ -113,8 +113,19 @@ al nombre de quien tenga la sesión abierta.
 | Órdenes de trabajo: reportar una falla, taller, autorizar el cierre | 3 | ✅ Disponible |
 | Riesgo de falla por equipo, alertas del sistema y orden predictiva | 4 | ✅ Disponible |
 | Inventario de repuestos con libro, ingresos, conteos y reorden | 4 | ✅ Disponible |
-| Paneles por rol | 5 | ⏳ Pendiente |
+| Paneles por rol: lo del turno e indicadores del gerente | 5 | ✅ Disponible |
 | API en funcionamiento (`/api/v1/health`) | — | ✅ Disponible |
+
+**La fase 5 está construida.** Al entrar, cada persona ve **su** panel: el operario, sus lecturas
+y alertas y en qué quedaron; el técnico, la cola del taller; el supervisor, lo que espera su
+revisión. El gerente ve cómo va la planta: **disponibilidad**, **tiempo medio entre fallas** (siempre
+con su rango, para no fiarse de una cifra con pocas fallas detrás), **tiempo medio de reparación** y
+**costo de repuestos**, mes a mes y con su tabla, más los equipos de mayor riesgo. Se filtra por
+planta y por periodo, y si una sección falla, el resto del panel sigue funcionando. Ver la sección
+5.8 del manual.
+
+Con las cuentas de demostración, los indicadores salen de **datos simulados**; con datos reales
+hacen falta unas semanas de uso para que digan algo.
 
 **La fase 4 está construida.** SIMAP calcula, para cada pieza de cada equipo, la probabilidad de
 que falle en las próximas horas de operación, y la enseña siempre con cuántas fallas la respaldan y

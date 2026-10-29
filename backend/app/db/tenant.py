@@ -77,6 +77,15 @@ class EstrategiaTenant(ABC):
         """Tiempo máximo de cada sentencia en esta transacción. Sin soporte, no hace nada."""
         return None
 
+    async def lectura_consistente(self, session: AsyncSession) -> None:
+        """Transacción de solo lectura con una foto fija de los datos (08-fase5, 8.6).
+
+        Los cuatro cálculos de los indicadores deben ver los mismos datos: sin esto, una orden
+        cerrada entre una consulta y otra haría que las fallas y las horas no cuadren. Tiene que ser
+        lo primero de la transacción. Sin soporte del motor, no hace nada (y la garantía se pierde).
+        """
+        return None
+
     async def permitir_correccion(self, session: AsyncSession) -> None:
         """Deja modificar una orden cerrada durante esta transacción (corrección administrativa).
 
@@ -169,6 +178,10 @@ class RowLevelSecurityPostgres(EstrategiaTenant):
             text("SELECT set_config('statement_timeout', :valor, true)"),
             {"valor": str(int(milisegundos))},
         )
+
+    async def lectura_consistente(self, session: AsyncSession) -> None:
+        # Sentencia de transacción sin equivalente en el ORM; debe ir antes de cualquier consulta.
+        await session.execute(text("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY"))
 
 
 class FiltradoEnAplicacion(EstrategiaTenant):

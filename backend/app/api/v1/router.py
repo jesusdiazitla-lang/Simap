@@ -12,6 +12,7 @@ from app.api.v1.routes import (
     lecturas,
     operador,
     ordenes,
+    paneles,
     prediccion,
     repuestos,
     usuarios,
@@ -39,3 +40,6 @@ api_router.include_router(ordenes.router)
 # Fase 4: predicción de fallas e inventario de repuestos.
 api_router.include_router(prediccion.router)
 api_router.include_router(repuestos.router)
+
+# Fase 5: paneles por rol e indicadores del gerente (solo lectura).
+api_router.include_router(paneles.router)

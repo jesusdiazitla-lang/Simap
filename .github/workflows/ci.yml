@@ -12,6 +12,10 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+# Permisos minimos (08-fase5, 13.1; OWASP A03): este flujo solo lee el codigo.
+permissions:
+  contents: read
+
 jobs:
   backend:
     runs-on: ubuntu-latest
@@ -130,6 +134,22 @@ jobs:
       - name: Auditoria de dependencias (npm audit)
         working-directory: frontend
         run: npm audit --audit-level=high || echo "::warning::npm audit encontro vulnerabilidades"
+
+  secretos:
+    # Ningun secreto en el repositorio, en TODO el historial (08-fase5, 15.3; OWASP A02). Una clave
+    # borrada en un commit posterior sigue en el historial: por eso fetch-depth 0.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Las pruebas de punta a punta (frontend/e2e) no corren aqui todavia: necesitan el backend, la base
+  # y la compilacion de Next levantados a la vez y las cuentas de demostracion por variables de
+  # entorno. Se corren a mano antes de cada entrega (ver README, «Revision de interfaz»).
 
   grafo:
     runs-on: ubuntu-latest

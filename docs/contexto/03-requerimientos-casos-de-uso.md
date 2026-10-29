@@ -66,9 +66,9 @@
 | ID | Requerimiento | Categoría |
 |---|---|---|
 | RNF-01 | Ningún usuario debe poder acceder a datos de otra empresa, verificado en BD y en aplicación. | Seguridad |
-| RNF-02 | Registro de reportes y consulta de activos disponibles aunque falle el cálculo de riesgo. *Se diseña y mide en F4 (`07-fase4…` §9.2); la Fase 5 lo verifica.* | Disponibilidad |
+| RNF-02 | Registro de reportes y consulta de activos disponibles aunque falle el cálculo de riesgo. *Se diseña y mide en F4 (`07-fase4…` §9.2); la Fase 5 lo verifica: cada widget del panel corre aislado y solo se degrada el que falla (`08-fase5…` §8.3).* | Disponibilidad |
 | RNF-03 | El flujo de reporte desde el QR hasta el envío no excede tres pasos para el operario. | Usabilidad |
-| RNF-04 | El cálculo de riesgo de un activo no tarda más de dos segundos. *Se diseña y mide en F4 (`07-fase4…` §9.4: 123 ms con 60.000 órdenes); la Fase 5 lo verifica.* | Rendimiento |
+| RNF-04 | El cálculo de riesgo de un activo no tarda más de dos segundos. *Se diseña y mide en F4 (`07-fase4…` §9.4: 123 ms con 60.000 órdenes); la Fase 5 lo verifica; queda medirlo en staging.* | Rendimiento |
 | RNF-05 | Accesible desde cualquier navegador móvil moderno, sin instalación. | Portabilidad |
 | RNF-06 | Toda acción sobre una orden queda registrada con usuario y marca de tiempo. | Auditabilidad |
 | RNF-07 | La arquitectura permite aumentar empresas y activos sin rediseño. | Escalabilidad |
@@ -151,7 +151,7 @@ Operario · Supervisor · Técnico de Taller · Gerente/Stakeholder · Administr
 | 2. Activos y registro de campo | 3–6 | RF-04..10, RNF-03, 05 | Un operario escanea el QR y registra horómetro o alerta; el reporte llega aunque se hiciera offline. |
 | 3. Órdenes de trabajo | 7–8 | RF-11..16, RNF-06 | Una falla sigue su ciclo completo hasta cerrarse, con cada responsable visible en el historial. |
 | 4. Predicción e inventario | 9–12 | RF-17..26 | Al cerrar una orden real el modelo se reajusta; un activo con fallas frecuentes muestra riesgo visiblemente mayor. |
-| 5. Dashboard y cierre | 13–16 | RF-27, 28, RNF-01, 02, 04 | Los tres paneles muestran datos reales; las pruebas de aislamiento entre tenants pasan sin excepción. |
+| 5. Dashboard y cierre | 13–16 | RF-27, 28, RNF-01, 02, 04 | Los tres paneles muestran datos reales; las pruebas de aislamiento entre tenants pasan sin excepción. *[Actualizado en F5, `08-fase5-dashboard-y-cierre.md` §22.]* El «dato real» se cumple con semanas de uso, no con la semilla; si no lo hay, la tesis declara que se evaluó con datos simulados. |
 
 ### Features por fase
 **Fase 1:** repo + estructura + CI/CD; tablas Empresa y Usuario; registro/login con Argon2id y JWT+refresh; RLS

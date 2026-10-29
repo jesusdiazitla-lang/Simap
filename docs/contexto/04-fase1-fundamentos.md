@@ -114,7 +114,10 @@ alcance por omisión.
 - Columna `empresa_id` en `usuarios` y en toda tabla que se agregue en fases posteriores.
 - RLS activa sobre `usuarios` desde el primer commit.
 - Dependencia `get_db` unificada: valida el JWT, abre una transacción, ejecuta
-  `SET LOCAL app.empresa_id` y solo entonces entrega la sesión a la ruta.
+  `SET LOCAL app.empresa_id` y solo entonces entrega la sesión a la ruta. *[Actualizado en F5, `08-fase5-dashboard-y-cierre.md` §22.]* En la práctica es
+  `SELECT set_config('app.empresa_id', :empresa_id, true)`: el mismo efecto que `SET LOCAL` (dura la
+  transacción), pero admite un parámetro enlazado; `SET` no lo admite y armarlo con texto abriría una
+  inyección con el contenido del token. Así lo hace `app.db.tenant` desde la fase 1.
 - Prueba automatizada desde esta fase: dos empresas con un usuario cada una, verificar que ninguna
   puede leer los datos de la otra ni forzando el request manualmente.
 
@@ -143,7 +146,8 @@ alcance por omisión.
 2. Backend valida y emite JWT — Argon2id + JWT con rol y `empresa_id`.
 3. Cliente guarda el token — cookie httpOnly, Secure, SameSite.
 4. Cada request incluye el JWT — el backend valida firma y expiración.
-5. Backend fija el tenant — `SET LOCAL app.empresa_id = :eid`.
+5. Backend fija el tenant — `SELECT set_config('app.empresa_id', :eid, true)` (equivale a `SET LOCAL`
+   y admite parámetro). *[Actualizado en F5, `08-fase5-dashboard-y-cierre.md` §22.]*
 6. PostgreSQL aplica RLS — la consulta solo ve filas de esa empresa.
 
 ## 6. Consideraciones de seguridad

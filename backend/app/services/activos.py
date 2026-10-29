@@ -171,9 +171,25 @@ async def listar(
     return filas[:limite], Cursor(ultima.nombre, ultima.id)
 
 
+class ObservacionInvalida(ValueError):
+    """`observado_desde` posterior a la fecha actual de observación o en el futuro."""
+
+
 async def editar(session: AsyncSession, activo_id: UUID, cambios: dict[str, Any]) -> Activo:
-    """Cambia la ficha técnica. `cambios` ya viene validado y sin `qr_code` ni `empresa_id`."""
+    """Cambia la ficha técnica. `cambios` ya viene validado y sin `qr_code` ni `empresa_id`.
+
+    `observado_desde` (F5, decisión 8) solo puede adelantar `creado_en`, nunca posponerlo ni
+    ponerlo en el futuro: lo contrario escondería horas de calendario a la disponibilidad.
+    """
     activo = await obtener(session, activo_id)
+    if "observado_desde" in cambios:
+        desde = cambios.pop("observado_desde")
+        if desde > _ahora() or desde > activo.creado_en:
+            raise ObservacionInvalida(
+                "La fecha desde la que se observa el equipo solo se puede adelantar, y no puede"
+                " estar en el futuro."
+            )
+        activo.creado_en = desde
     for campo, valor in cambios.items():
         setattr(activo, campo, valor)
     await session.flush()

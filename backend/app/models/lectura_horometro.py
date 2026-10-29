@@ -61,6 +61,21 @@ class LecturaHorometro(IdUUID, Base):
             "offset_resultante IS NULL OR es_reinicio OR resolucion = 'reinicio'",
             name="offset_solo_en_reinicio",
         ),
+        CheckConstraint("horas_acumuladas >= 0", name="horas_acumuladas"),
+        # Paneles (F5, 6.2): «última lectura válida antes de t» por equipo, y las del operario.
+        Index(
+            "ix_lecturas_horometro_acumuladas",
+            "empresa_id",
+            "activo_id",
+            text("capturado_en DESC"),
+            postgresql_where=text("horas_acumuladas IS NOT NULL"),
+        ),
+        Index(
+            "ix_lecturas_horometro_usuario",
+            "empresa_id",
+            "registrado_por",
+            text("capturado_en DESC"),
+        ),
         ForeignKeyConstraint(
             ["empresa_id", "revisada_por"],
             ["usuarios.empresa_id", "usuarios.id"],
@@ -112,6 +127,10 @@ class LecturaHorometro(IdUUID, Base):
     #: que dejó. Las horas acumuladas en un instante usan el offset vigente **entonces**, no el de
     #: hoy (F3, 5.1; revisión 0008). `None` en un reinicio anterior a la 0008 que no fue el último.
     offset_resultante: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    #: Horas acumuladas del equipo en esta lectura (offset de su momento + dial). La mantiene el
+    #: trigger `lectura_horas_acumuladas` (revisión 0011); nunca la escribe la aplicación. `None` si
+    #: la lectura no es válida (pendiente o descartada): una lectura dudosa no aporta horas.
+    horas_acumuladas: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     def __repr__(self) -> str:
         return f"<LecturaHorometro {self.valor_horometro} @ {self.capturado_en}>"

@@ -161,6 +161,8 @@ async def editar(
         activo = await servicio.editar(session, activo_id, datos.model_dump(exclude_unset=True))
     except servicio.ActivoNoEncontrado as exc:
         raise _no_encontrado(exc) from exc
+    except servicio.ObservacionInvalida as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
     return salida(activo)
 
 

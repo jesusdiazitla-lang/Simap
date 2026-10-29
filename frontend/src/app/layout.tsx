@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
+import { connection } from "next/server";
 import "./globals.css";
 
 import { RegistroServiceWorker } from "@/components/registro-sw";
@@ -59,7 +60,13 @@ export const viewport: Viewport = {
   ],
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+/**
+ * Todas las páginas se renderizan por petición: la CSP lleva un nonce nuevo en cada una (ver
+ * `src/proxy.ts`) y Next solo puede ponérselo a sus scripts al renderizar. Una página estática
+ * saldría sin nonce y el navegador bloquearía sus propios scripts (08-fase5, 10.2).
+ */
+export default async function RootLayout({ children }: LayoutProps<"/">) {
+  await connection();
   return (
     <html lang="es" className={`${inter.variable} h-full`}>
       <body className="flex min-h-full flex-col font-sans">

@@ -333,6 +333,23 @@ v_vidas = Table(
     Column("exposicion", Double),
 )
 
+#: Una fila por parada de equipo (F5, 6.2): una falla desde que ocurre; una intervención predictiva
+#: desde que el equipo entra al taller. `fin` nulo = sigue parado. Las canceladas no cuentan.
+v_paradas = Table(
+    "v_paradas",
+    VISTAS,
+    Column("empresa_id", Uuid),
+    Column("orden_id", Uuid),
+    Column("numero", Integer),
+    Column("activo_id", Uuid),
+    Column("componente_id", Uuid),
+    Column("planificada", Boolean),
+    Column("inicio", DateTime(timezone=True)),
+    Column("fin", DateTime(timezone=True)),
+    Column("estado", Text),
+    Column("requiere_revision", Boolean),
+)
+
 #: Riesgo del equipo = el de su componente más riesgoso (CU-04).
 v_riesgo_activo = Table(
     "v_riesgo_activo",

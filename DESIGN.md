@@ -28,6 +28,10 @@ colors:
   texto-oscuro: "#e7eaed"
   texto-suave-oscuro: "#a6b0ba"
   texto-tenue-oscuro: "#8a949e"
+  serie-planificado: "#6250d6"
+  serie-falla: "#eb6834"
+  serie-planificado-oscuro: "#9085e9"
+  serie-falla-oscuro: "#d95926"
   accion-oscuro: "#74a9ee"
   accion-relleno-oscuro: "#1e5da8"
   accion-viva-oscuro: "#9cc4f5"
@@ -238,6 +242,11 @@ Neutros grises sin tinte, un azul de acción y tres colores de estado de máquin
 
 **The Neutral Criticality Rule.** La criticidad de un equipo es importancia, no estado: va siempre en insignia neutra. Un equipo crítico que funciona bien nunca se pinta de rojo.
 
+**The Third Vocabulary Rule.** Las gráficas tienen sus propios colores de serie (`serie-planificado`
+violeta, `serie-falla` naranja), validados con el validador de paletas en los dos temas (diferencia
+con daltonismo y contraste contra la superficie). No son ni el azul de acción ni los colores de
+estado: una columna de «por falla» no es una máquina en falla. Una sola serie va en tinta (`texto`).
+
 **The Both Themes Rule.** Claro y oscuro son de primera clase. Ningún valor se decide en un tema y se deriva en el otro sin auditar su contraste.
 
 ## Typography
@@ -343,6 +352,29 @@ El riesgo es el estado de una máquina, no una acción: usa los colores de estad
 - **Bajo el mínimo:** insignia `aviso` con icono; el stock en la fila sigue en `texto` (la insignia ya lo dice).
 - **Libro:** tabla con movimiento, cambio con signo (`+14`, `−2`) en 600 y el stock que queda en `texto-suave`; en móvil se apila. No hay acciones por fila: el libro no se edita.
 - **Repuestos de la orden (`RepuestosOrden`):** búsqueda con campo de 48 px y resultados como filas-botón de 48 px con nombre, código en monoespaciada y «N en almacén» a la derecha; al elegir uno, una caja `superficie-alterna` con la cantidad y «Añadir». El aviso de faltantes (`SinStock`) es un aviso con borde `estado-aviso`, icono, la lista «nombre (código): hay X, la orden pide Y» y quién puede resolverlo.
+
+### Paneles por rol y gráficas (F5)
+- **Medidas del periodo (`Medida`):** lista de definición en cuatro columnas (dos en tableta, una en
+  móvil) separadas por bordes de 1 px; el nombre en Caption `texto-suave`, la cifra en Title 600 con
+  cifras tabulares y debajo su nota (rango del MTBF, utilización, reparto del costo). Una cifra sin
+  datos dice por qué («Ninguna falla cerrada en el periodo»), nunca un 0.
+- **Filtros:** un panel con Planta, Desde y Hasta en cajas de 48 px y «Aplicar», que nace apagado
+  (One Live Blue). Debajo, en Caption, que la planta ordena la vista y no limita el acceso.
+- **Sección degradada:** si un widget vuelve con error o tiempo agotado, su panel conserva el título
+  y en lugar del contenido muestra un icono `estado-aviso` y la frase «Esta información no está
+  disponible en este momento…»; bajo el título de la página, un `role="status"` cuenta cuántas
+  secciones faltan. El resto se pinta normal.
+- **Gráficas (`GraficaDisponibilidad`, `GraficaCosto`):** SVG propio. La disponibilidad es una línea
+  de 2 px en `texto` con puntos de 8 px; el costo, columnas apiladas con un hueco de 2 px entre
+  planificado y falla y la punta redondeada. Rejilla de 1 px `borde`, texto siempre a 12 px en
+  `texto-suave`, nunca del color de la serie. Leyenda con muestras cuadradas y palabra. El SVG mide
+  su contenedor (`ResizeObserver`, mínimo 260 px). Cada mes es una zona enfocable más ancha que la
+  marca; el detalle sale en una línea `aria-live` encima de la gráfica, sin tapar nada. «Ver como
+  tabla» (`details`) da las mismas cifras. Sin consumos, la gráfica de costo no se dibuja: estado
+  vacío con su frase.
+- **Tablas del panel:** cabeceras y números de orden sin cortes de línea; la tabla se desplaza dentro
+  de su panel y la rejilla usa `min-w-0` en sus hijos para que una tabla ancha nunca ensanche la
+  página (RNF-05, 390 px sin desplazamiento horizontal).
 
 ### Control segmentado (`Segmento`)
 Vistas de una bandeja (Riesgo/Reorden, Vigentes/Historial, Todos/Bajo el mínimo): radios nativos ocultos dentro de un `fieldset` con leyenda, presentados como cajas de 48 px en una tira con divisores de 1 px `borde-fuerte`; la elegida en `accion-halo` con texto `accion`. Se navega con flechas. Es una elección del usuario, por eso azul.

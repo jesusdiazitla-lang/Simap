@@ -3,8 +3,8 @@
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
+import jwt
 import pytest
-from jose import jwt
 
 from app.core.config import get_settings
 from app.core.security import (
