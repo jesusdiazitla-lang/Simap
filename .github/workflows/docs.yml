@@ -83,7 +83,7 @@ jobs:
           fi
 
       - name: Publicar snapshot del grafo como artefacto
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: graph-${{ github.sha }}
           path: .graph/graph.json
