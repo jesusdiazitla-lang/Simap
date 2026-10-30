@@ -10,7 +10,7 @@ python-dotenv==1.2.2
 # Base de datos: SQLAlchemy 2.0 async + asyncpg + migraciones
 sqlalchemy[asyncio]==2.0.36
 asyncpg==0.30.0
-alembic==1.14.0
+alembic==1.20.1
 
 # Seguridad: JWT y hash de contrasenas Argon2id
 # PyJWT y no python-jose: esta tenia avisos de seguridad sin version corregida (08-fase5, A03).
