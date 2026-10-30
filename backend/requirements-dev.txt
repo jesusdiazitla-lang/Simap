@@ -7,7 +7,7 @@ httpx==0.28.1
 
 # --- Calidad de codigo
 ruff==0.8.6
-mypy==1.14.1
+mypy==2.4.0
 
 # --- Grafo de dependencias (analisis estatico de imports)
 grimp==3.5                # construye y permite CONSULTAR el grafo de imports
