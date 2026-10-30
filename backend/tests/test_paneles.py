@@ -399,3 +399,57 @@ def test_rf28_el_administrador_solo_puede_adelantar_desde_cuando_se_observa(
         ).status_code
         == 403
     )
+
+
+def test_reinicio_resuelto_despues_recalcula_las_lecturas_posteriores(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Revisión del 2026-10-29: un equipo en 100 h se reinicia; llegan 5 h y 20 h, las dos marcadas.
+    Se confirma primero la de 20 h (todavía sin reinicio: 20) y después la de 5 h se registra como
+    reinicio (offset 95). La de 20 h tiene que pasar a 115; antes se quedaba en 20 y el mes perdía
+    horas que el siguiente ganaba."""
+    planta = montar_planta(client, monkeypatch, "Planta")
+    activo = planta.nuevo_activo("Prensa", horometro_inicial=100)
+    cinco = planta.lectura(activo["id"], 5).json()["lectura"]
+    veinte = planta.lectura(activo["id"], 20).json()["lectura"]
+    assert cinco["requiere_revision"] and veinte["requiere_revision"]
+    ruta = "/lecturas/{}"
+    r = planta.pedir(
+        planta.supervisor, "PATCH", ruta.format(veinte["id"]), json={"resolucion": "confirmada"}
+    )
+    assert r.status_code == 200, r.text
+    r = planta.pedir(
+        planta.admin, "PATCH", ruta.format(cinco["id"]), json={"resolucion": "reinicio"}
+    )
+    assert r.status_code == 200, r.text
+    sql = "SELECT id::text, horas_acumuladas FROM lecturas_horometro WHERE activo_id = :a"
+    horas = dict(_super([(sql, {"a": activo["id"]})])[0])
+    assert horas[cinco["id"]] == 100
+    assert horas[veinte["id"]] == 115
+
+
+def test_dato_anterior_al_alta_adelanta_desde_cuando_se_observa(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Revisión del 2026-10-29 (decisión 8): la API acepta lecturas y fallas de hasta 14 días atrás
+    en un equipo recién dado de alta. La observación empieza con el primer dato conocido; si no,
+    las horas operadas caen fuera de las de calendario y la parada de la falla se recorta."""
+    planta = montar_planta(client, monkeypatch, "Planta")
+    activo = planta.nuevo_activo("Bomba", horometro_inicial=10)
+
+    def observado() -> datetime:
+        datos = planta.pedir(planta.admin, "GET", f"/activos/{activo['id']}").json()
+        return datetime.fromisoformat(datos["creado_en"])
+
+    alta = observado()
+    lectura = datetime.now(UTC) - timedelta(days=10)
+    r = planta.lectura(activo["id"], 12, capturado_en=lectura.isoformat())
+    assert r.status_code in (200, 201), r.text
+    assert observado() == lectura < alta
+    falla = datetime.now(UTC) - timedelta(days=12)
+    r = planta.falla(activo["id"], horometro=11, capturado_en=falla.isoformat())
+    assert r.status_code == 201, r.text
+    assert observado() == falla
+    # Un dato posterior no la mueve.
+    planta.lectura(activo["id"], 30)
+    assert observado() == falla

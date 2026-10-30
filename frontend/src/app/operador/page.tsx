@@ -21,6 +21,7 @@ import { Boton } from "@/components/boton";
 import { Campo } from "@/components/campo";
 import { EtiquetaConsola, FechaHora, Marco, Panel } from "@/components/marco";
 import { ErrorApi } from "@/lib/api";
+import { ZONA } from "@/lib/formato";
 import {
   altaEmpresa,
   cambiarEstado,
@@ -582,6 +583,7 @@ function Bitacora({ asientos }: { readonly asientos: readonly AsientoBitacora[] 
                   year: "numeric",
                   hour: "2-digit",
                   minute: "2-digit",
+                  timeZone: ZONA,
                 })}
               </time>
               <span className="shrink-0 text-[0.8125rem] font-medium text-texto sm:w-48">

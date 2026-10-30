@@ -733,6 +733,19 @@ hace lo mismo sobre datos sembrados en PostgreSQL.
   usuario. JIT apagado para `app_user` y `job_user` (`roles.sql`; en una base existente, aplicarlo
   como en F4).
 
+**Revisión 0012** (correcciones de la revisión del 2026-10-29):
+
+- **Un reinicio resuelto después recalcula las lecturas siguientes.** El trigger de la 0011 solo
+  recalculaba la fila que cambiaba: si se confirmaba una lectura posterior y después la anterior se
+  registraba como reinicio, la posterior se quedaba con las horas de la escala vieja (20 en vez de
+  115) y el mes perdía horas que el siguiente ganaba. `lectura_reinicio_propaga` (AFTER) vuelve a
+  pasar por el trigger las lecturas válidas desde el reinicio hasta el siguiente, sin SECURITY
+  DEFINER (`test_reinicio_resuelto_despues_recalcula_las_lecturas_posteriores`).
+- **La observación empieza con el primer dato.** La API acepta lecturas y fallas de hasta 14 días
+  atrás; un trigger baja `activos.creado_en` al `capturado_en` o a la `fecha_falla` anteriores, por
+  cualquier camino (`test_dato_anterior_al_alta_adelanta_desde_cuando_se_observa`). Sin esto la
+  utilización podía pasar del 100 % y la parada de una falla se recortaba.
+
 ### Endpoints
 
 | Ruta | Roles |
@@ -749,7 +762,10 @@ vista, no es frontera de seguridad** (decisión 1).
 - **Auditoría de aislamiento** (`tests/test_auditoria_aislamiento.py`): controles de catálogo C1–C13
   (RLS forzada, políticas con `app_empresa_id()`, roles sin privilegios, nada para PUBLIC, vistas
   sin escritura, tablas de solo agregar) y un recorrido de **todas** las rutas de la API: sin sesión
-  401; con un usuario de otra empresa, la misma respuesta que para un id que no existe.
+  401; con un usuario de otra empresa, la misma respuesta que para un id que no existe. Las
+  escrituras llevan un cuerpo válido por ruta (`CUERPOS`); con `{}` la validación respondía 422 con
+  los dos ids y la prueba no llegaba a intentar la escritura. Una ruta nueva con cuerpo sin entrada
+  en `CUERPOS` hace fallar la auditoría.
 - **Cabeceras de la API** (`app.core.seguridad_http`): middleware ASGI que envuelve toda la pila,
   así también los 500 las llevan. `/docs`, `/redoc` y `/openapi.json` se apagan con
   `EXPONER_DOCS=false` (en producción).
@@ -1016,6 +1032,11 @@ Next ponga el nonce en sus scripts. El resto de cabeceras fijas está en `next.c
 (`Permissions-Policy`, HSTS solo en producción). Lo comprueba
 `e2e/fase5.spec.ts` (`test_csp_con_nonce_por_peticion_y_script_inyectado_no_se_ejecuta`).
 
+La 404 es propia (`src/app/not-found.tsx`): la de Next trae `style="…"` y un `<style>` sin nonce, que
+la CSP bloquea, y en producción salía sin estilos (`test_10_2_pagina_404_propia_sin_violaciones_de_csp`).
+Las fechas se escriben siempre en hora de Santo Domingo (`ZONA` en `src/lib/formato.ts`), no en la
+del navegador.
+
 ### Service worker (`public/sw.js`)
 
 Hace que la aplicación **abra sin cobertura**. Precarga el cascarón de la pantalla del equipo
@@ -1179,7 +1200,7 @@ npm run lint ; npm run graph:check
 <!-- graph:auto:start -->
 _Sección generada por `python tools/graph/graph.py docs`. No editar a mano; se sobrescribe en cada push a `main`._
 
-Última actualización: 2026-10-29 02:53 UTC
+Última actualización: 2026-10-30 00:43 UTC
 
 ### Estado del proyecto
 
@@ -1190,9 +1211,9 @@ _Sección generada por `python tools/graph/graph.py docs`. No editar a mano; se 
   con test: 55/77   stubs/vacíos: 0
   por capa: api=15, cli=1, core=9, db=3, jobs=3, main=1, models=11, schemas=9, services=25
 
-[frontend]  módulos: 70   LOC: 13726   TODO/FIXME: 0
-  con test: 0/70   stubs/vacíos: 0
-  por capa: app=27, components=24, lib=18, src=1
+[frontend]  módulos: 71   LOC: 13763   TODO/FIXME: 0
+  con test: 0/71   stubs/vacíos: 0
+  por capa: app=28, components=24, lib=18, src=1
 
 ciclos de importación: 0
 
@@ -1275,7 +1296,7 @@ ciclos de importación: 0
     [x] Riesgo sin conexión como último valor conocido (10.2)  <done>
     [ ] Despliegue del job como cron de Railway  <pending>
 
-  F5 - Dashboard y cierre (semanas 13-16)  (9/10, 90%)
+  F5 - Dashboard y cierre (semanas 13-16)  (10/11, 90%)
     cubre: RF-27, RF-28, RNF-01, RNF-02, RNF-04
     hecho cuando: Los tres paneles muestran datos reales; las pruebas de aislamiento entre tenants pasan sin excepción.
     [x] Migración 0011: activos.creado_en, horas_acumuladas con trigger, v_paradas, índices, JIT apagado  <done>
@@ -1287,9 +1308,10 @@ ciclos de importación: 0
     [x] Checklist OWASP Top 10 y verificación de secretos  <done>
     [x] Cabeceras de seguridad de la API y CSP con nonce en la web  <done (auto)>
     [x] Documentación técnica y manual de usuario finales  <done>
+    [x] Correcciones de la revisión del 2026-10-29: reinicio que propaga horas, observación desde el primer dato, 404 propia, cuerpos válidos en la auditoría, zona horaria  <done>
     [ ] Auditoría de aislamiento contra staging y RNF-04 con latencia real  <pending>
 
-AVANCE GLOBAL: 64/69 tareas (92%)
+AVANCE GLOBAL: 65/70 tareas (92%)
 ```
 
 ### Módulos del backend
@@ -1396,8 +1418,9 @@ AVANCE GLOBAL: 64/69 tareas (92%)
 | `src/app/inventario/page.tsx` | app | 10 | 0 | 247 | — |
 | `src/app/layout.tsx` | app | 2 | 0 | 73 | — |
 | `src/app/login/page.tsx` | app | 7 | 0 | 185 | — |
+| `src/app/not-found.tsx` | app | 1 | 0 | 28 | — |
 | `src/app/operador/clave/page.tsx` | app | 3 | 0 | 60 | — |
-| `src/app/operador/page.tsx` | app | 5 | 0 | 566 | — |
+| `src/app/operador/page.tsx` | app | 6 | 0 | 568 | — |
 | `src/app/ordenes/[id]/page.tsx` | app | 13 | 0 | 241 | — |
 | `src/app/ordenes/page.tsx` | app | 8 | 0 | 201 | — |
 | `src/app/page.tsx` | app | 2 | 0 | 44 | — |
@@ -1423,7 +1446,7 @@ AVANCE GLOBAL: 64/69 tareas (92%)
 | `src/components/iconos.tsx` | components | 0 | 19 | 137 | — |
 | `src/components/indicador-cola.tsx` | components | 2 | 1 | 77 | — |
 | `src/components/lecturas-por-revisar.tsx` | components | 6 | 1 | 139 | — |
-| `src/components/marco.tsx` | components | 0 | 22 | 209 | — |
+| `src/components/marco.tsx` | components | 1 | 23 | 210 | — |
 | `src/components/pantalla.tsx` | components | 7 | 21 | 121 | — |
 | `src/components/registro-sw.tsx` | components | 0 | 1 | 28 | — |
 | `src/components/repuestos-orden.tsx` | components | 5 | 1 | 321 | — |
@@ -1435,13 +1458,13 @@ AVANCE GLOBAL: 64/69 tareas (92%)
 | `src/lib/auth.ts` | lib | 1 | 35 | 368 | — |
 | `src/lib/campo.ts` | lib | 2 | 9 | 141 | — |
 | `src/lib/captura.ts` | lib | 5 | 2 | 83 | — |
-| `src/lib/formato.ts` | lib | 0 | 21 | 31 | — |
+| `src/lib/formato.ts` | lib | 0 | 24 | 37 | — |
 | `src/lib/horometro.ts` | lib | 2 | 3 | 42 | — |
 | `src/lib/inventario.ts` | lib | 2 | 6 | 114 | — |
 | `src/lib/offline-queue.ts` | lib | 4 | 6 | 378 | — |
 | `src/lib/operador.ts` | lib | 1 | 3 | 121 | — |
 | `src/lib/ordenes.ts` | lib | 4 | 11 | 227 | — |
-| `src/lib/paneles.ts` | lib | 2 | 2 | 255 | — |
+| `src/lib/paneles.ts` | lib | 3 | 2 | 255 | — |
 | `src/lib/prediccion.ts` | lib | 3 | 8 | 222 | — |
 | `src/lib/qr.ts` | lib | 0 | 4 | 60 | — |
 | `src/lib/sesion.ts` | lib | 3 | 2 | 98 | — |

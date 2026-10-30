@@ -272,6 +272,9 @@ milestones:
       - name: "Documentación técnica y manual de usuario finales"
         status: done
         # Matriz de trazabilidad: docs/contexto/anexos/matriz-trazabilidad.md.
+      - name: "Correcciones de la revisión del 2026-10-29: reinicio que propaga horas, observación desde el primer dato, 404 propia, cuerpos válidos en la auditoría, zona horaria"
+        status: done
+        # Revisión 0012; versión 0.10.1.
       - name: "Auditoría de aislamiento contra staging y RNF-04 con latencia real"
         status: pending
         # Requiere desplegar; el usuario no quiere desplegar todavía.

@@ -11,6 +11,11 @@ cubierta sola:
      **indistinguible** de la que da un identificador que no existe (mismo estado, nunca 2xx) y no
      contener ninguna marca de los datos de B. Un 403 que solo aparece con el recurso de B
      confirmaría que existe; uno de rol, igual para los dos, no.
+   - Las escrituras llevan un **cuerpo válido** (`CUERPOS`): con `{}` la validación respondía 422
+     tanto con el recurso de B como con uno inexistente y la prueba pasaba sin llegar a intentar la
+     escritura (revisión del 2026-10-29). Una ruta con cuerpo que no esté en `CUERPOS` hace fallar
+     `test_toda_escritura_con_cuerpo_tiene_uno_valido_en_la_auditoria`, y un 422 con el recurso
+     inexistente es un hallazgo: el cuerpo dejó de ser válido.
 
 El plano de control (`/operador`) no es de ningún tenant: tiene sus propias pruebas.
 """
@@ -19,6 +24,8 @@ from __future__ import annotations
 
 import asyncio
 import re
+from collections.abc import Callable
+from datetime import UTC, datetime
 from typing import Any
 from uuid import uuid4
 
@@ -285,6 +292,87 @@ def _recursos_de_b(b: Planta, marca: str) -> dict[str, str]:
     }
 
 
+Cuerpo = Callable[[str], dict[str, Any]]
+
+
+def _ahora() -> str:
+    return datetime.now(UTC).isoformat()
+
+
+#: Un cuerpo válido para cada escritura con parámetros (recibe un componente de la empresa A, para
+#: que lo único ajeno sea el recurso de la ruta). Las rutas sin cuerpo o con cuerpo opcional van
+#: con `{}`, que también es válido para ellas.
+CUERPOS: dict[tuple[str, str], Cuerpo] = {
+    ("PATCH", "/api/v1/activos/{activo_id}"): lambda c: {"marca": "Auditoría"},
+    ("POST", "/api/v1/activos/{activo_id}/alertas"): lambda c: {
+        "cliente_id": str(uuid4()),
+        "capturado_en": _ahora(),
+        "sintoma": "ruido",
+    },
+    ("PUT", "/api/v1/activos/{activo_id}/componentes/{componente_id}"): lambda c: {
+        "horas_instalacion_inicial": 0
+    },
+    ("POST", "/api/v1/activos/{activo_id}/fallas"): lambda c: {
+        "cliente_id": str(uuid4()),
+        "capturado_en": _ahora(),
+        "componente_id": c,
+        "horometro": 120,
+        "descripcion": "Se detuvo durante la auditoría",
+    },
+    ("POST", "/api/v1/activos/{activo_id}/lecturas"): lambda c: {
+        "cliente_id": str(uuid4()),
+        "capturado_en": _ahora(),
+        "valor": 120,
+    },
+    ("POST", "/api/v1/activos/{activo_id}/reinicio-horometro"): lambda c: {"nuevo": 0},
+    ("POST", "/api/v1/alertas-sistema/{alerta_id}/descartar"): lambda c: {"nota": "Auditoría"},
+    ("PATCH", "/api/v1/alertas/{alerta_id}"): lambda c: {"estado": "revisada"},
+    ("PATCH", "/api/v1/componentes/{componente_id}"): lambda c: {"descripcion": "Auditoría"},
+    ("PATCH", "/api/v1/lecturas/{lectura_id}"): lambda c: {"resolucion": "confirmada"},
+    ("PATCH", "/api/v1/ordenes/{orden_id}"): lambda c: {"descripcion": "Revisada en la auditoría"},
+    ("POST", "/api/v1/ordenes/{orden_id}/cancelar"): lambda c: {"motivo": "Prueba de auditoría"},
+    ("POST", "/api/v1/ordenes/{orden_id}/convertir-en-falla"): lambda c: {
+        "horometro": 120,
+        "fecha_falla": _ahora(),
+    },
+    ("POST", "/api/v1/ordenes/{orden_id}/correccion"): lambda c: {
+        "nota": "Corrección de auditoría"
+    },
+    ("POST", "/api/v1/ordenes/{orden_id}/notas"): lambda c: {"nota": "Auditoría"},
+    ("POST", "/api/v1/ordenes/{orden_id}/rechazar-cierre"): lambda c: {
+        "nota": "Falta revisar el trabajo"
+    },
+    ("POST", "/api/v1/ordenes/{orden_id}/reparada"): lambda c: {
+        "trabajo_realizado": "Cambio del rodamiento",
+        "tipo_intervencion": "reparacion",
+    },
+    ("PUT", "/api/v1/ordenes/{orden_id}/repuestos/{repuesto_id}"): lambda c: {"cantidad": 1},
+    ("PATCH", "/api/v1/repuestos/{repuesto_id}"): lambda c: {"stock_minimo": 1},
+    ("POST", "/api/v1/repuestos/{repuesto_id}/ajuste"): lambda c: {"conteo": 1, "nota": "Conteo"},
+    ("POST", "/api/v1/repuestos/{repuesto_id}/ingresos"): lambda c: {"cantidad": 1},
+    ("PATCH", "/api/v1/usuarios/{usuario_id}"): lambda c: {"nombre": "Nombre de auditoría"},
+}
+
+
+def _cuerpo_obligatorio(ruta: APIRoute) -> bool:
+    campo = ruta.body_field
+    return campo is not None and campo.field_info.is_required()
+
+
+def test_toda_escritura_con_cuerpo_tiene_uno_valido_en_la_auditoria() -> None:
+    faltan = [
+        (metodo, r.path)
+        for r in app.routes
+        if isinstance(r, APIRoute)
+        and PARAMETRO.search(r.path)
+        and not r.path.startswith("/api/v1/operador")
+        and _cuerpo_obligatorio(r)
+        for metodo in r.methods
+        if metodo not in ("GET", "HEAD", "OPTIONS") and (metodo, r.path) not in CUERPOS
+    ]
+    assert faltan == []
+
+
 def _url(ruta: str, ids: dict[str, str]) -> str:
     def poner(m: re.Match[str]) -> str:
         nombre = m.group(1)
@@ -304,15 +392,21 @@ def test_rnf01_ninguna_ruta_distingue_un_recurso_de_otra_empresa_de_uno_inexiste
     de_b = _recursos_de_b(b, marca)
     inexistentes = {k: ("ZZZZ2345" if k == "codigo" else str(uuid4())) for k in de_b}
     personas = [a.admin, a.supervisor, a.operario, a.gerente, a.tecnico]
+    componente_a = a.componente("Motor")
     hallazgos = []
     for metodo, ruta in _rutas():
         if not PARAMETRO.search(ruta) or ruta.startswith("/api/v1/operador"):
             continue
+        cuerpo = CUERPOS.get((metodo, ruta))
         for persona in personas:
-            con_b = a.pedir(persona, metodo, _url(ruta, de_b).removeprefix("/api/v1"), json={})
+            datos = cuerpo(componente_a) if cuerpo is not None else {}
+            con_b = a.pedir(persona, metodo, _url(ruta, de_b).removeprefix("/api/v1"), json=datos)
+            datos = cuerpo(componente_a) if cuerpo is not None else {}
             sin = a.pedir(
-                persona, metodo, _url(ruta, inexistentes).removeprefix("/api/v1"), json={}
+                persona, metodo, _url(ruta, inexistentes).removeprefix("/api/v1"), json=datos
             )
+            if metodo != "GET" and sin.status_code == 422:
+                hallazgos.append((metodo, ruta, "cuerpo_invalido", sin.status_code, 0))
             if con_b.status_code != sin.status_code or 200 <= con_b.status_code < 300:
                 hallazgos.append(
                     (metodo, ruta, persona.correo.split("-")[0], con_b.status_code, sin.status_code)

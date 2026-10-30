@@ -6,6 +6,13 @@
 const LOCAL = "es-DO";
 
 /**
+ * Zona de la plataforma (08-fase5, 10.3). Toda fecha se escribe en hora de Santo Domingo, no en la
+ * del navegador: un supervisor de viaje o un aparato mal configurado verían, si no, otra hora que
+ * la del parte y otro día que el de los indicadores, que se cortan en esta misma zona.
+ */
+export const ZONA = "America/Santo_Domingo";
+
+/**
  * 4821 → «4,821 h». Con el separador de miles de `es-DO` (coma, como en República Dominicana), que
  * evita leer mal un dígito de más.
  */
@@ -15,11 +22,11 @@ export function horas(valor: number): string {
 
 export function fechaHora(iso: string): string {
   const d = new Date(iso);
-  return `${d.toLocaleDateString(LOCAL, { day: "2-digit", month: "2-digit", year: "numeric" })} · ${d.toLocaleTimeString(LOCAL, { hour: "2-digit", minute: "2-digit" })}`;
+  return `${d.toLocaleDateString(LOCAL, { day: "2-digit", month: "2-digit", year: "numeric", timeZone: ZONA })} · ${d.toLocaleTimeString(LOCAL, { hour: "2-digit", minute: "2-digit", timeZone: ZONA })}`;
 }
 
 export function fecha(iso: string): string {
-  return new Date(iso).toLocaleDateString(LOCAL, { day: "2-digit", month: "2-digit", year: "numeric" });
+  return new Date(iso).toLocaleDateString(LOCAL, { day: "2-digit", month: "2-digit", year: "numeric", timeZone: ZONA });
 }
 
 /**

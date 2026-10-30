@@ -23,6 +23,7 @@ graph LR
     src_app_layout_tsx["app/layout.tsx"]
     src_app_globals_css["app/globals.css"]
     src_app_login_page_tsx["app/login/page.tsx"]
+    src_app_not_found_tsx["app/not-found.tsx"]
     src_app_operador_clave_page_tsx["app/operador/clave/page.tsx"]
     src_app_operador_page_tsx["app/operador/page.tsx"]
     src_app_ordenes__id__page_tsx["app/ordenes/[id]/page.tsx"]
@@ -60,11 +61,11 @@ graph LR
     src_components_graficas_tsx["components/graficas.tsx"]
   end
   subgraph lib[lib]
+    src_lib_formato_ts["lib/formato.ts"]
     src_lib_auth_ts["lib/auth.ts"]
     src_lib_api_ts["lib/api.ts"]
     src_lib_campo_ts["lib/campo.ts"]
     src_lib_activos_ts["lib/activos.ts"]
-    src_lib_formato_ts["lib/formato.ts"]
     src_lib_offline_queue_ts["lib/offline-queue.ts"]
     src_lib_ordenes_ts["lib/ordenes.ts"]
     src_lib_sesion_ts["lib/sesion.ts"]
@@ -93,6 +94,7 @@ graph LR
   src_app_activos__id__componentes_page_tsx --> src_lib_formato_ts
   src_app_activos__id__componentes_page_tsx --> src_lib_prediccion_ts
   src_components_estado_tsx --> src_components_iconos_tsx
+  src_components_marco_tsx --> src_lib_formato_ts
   src_components_pantalla_tsx --> src_components_arbol_navegacion_tsx
   src_components_pantalla_tsx --> src_components_avisos_cola_tsx
   src_components_pantalla_tsx --> src_components_barra_sesion_tsx
@@ -323,6 +325,7 @@ graph LR
   src_lib_acceso_ts --> src_lib_auth_ts
   src_lib_acceso_ts --> src_lib_operador_ts
   src_lib_operador_ts --> src_lib_api_ts
+  src_app_not_found_tsx --> src_components_marco_tsx
   src_app_operador_clave_page_tsx --> src_components_formulario_clave_tsx
   src_app_operador_clave_page_tsx --> src_components_marco_tsx
   src_app_operador_clave_page_tsx --> src_lib_operador_ts
@@ -333,6 +336,7 @@ graph LR
   src_app_operador_page_tsx --> src_components_campo_tsx
   src_app_operador_page_tsx --> src_components_marco_tsx
   src_app_operador_page_tsx --> src_lib_api_ts
+  src_app_operador_page_tsx --> src_lib_formato_ts
   src_app_operador_page_tsx --> src_lib_operador_ts
   src_app_ordenes__id__page_tsx --> src_components_acciones_orden_tsx
   src_app_ordenes__id__page_tsx --> src_components_estado_tsx
@@ -391,6 +395,7 @@ graph LR
   src_app_panel_page_tsx --> src_lib_prediccion_ts
   src_components_graficas_tsx --> src_lib_paneles_ts
   src_lib_paneles_ts --> src_lib_api_ts
+  src_lib_paneles_ts --> src_lib_formato_ts
   src_lib_paneles_ts --> src_lib_inventario_ts
   src_app_panel_usuarios_page_tsx --> src_components_boton_tsx
   src_app_panel_usuarios_page_tsx --> src_components_campo_tsx

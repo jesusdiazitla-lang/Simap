@@ -145,3 +145,24 @@ test("test_rnf05_panel_del_gerente_en_390_px_sin_desplazamiento_horizontal", asy
   await expect(page.getByText("Ver como tabla").first()).toBeVisible();
   await page.context().close();
 });
+
+test("test_10_2_pagina_404_propia_sin_violaciones_de_csp", async ({ browser }) => {
+  // La 404 de Next trae `style="…"` y un `<style>` sin nonce: con la CSP salía sin estilos y con
+  // errores en la consola (revisión del 2026-10-29). La propia usa solo clases.
+  // La 404 no llama a la API: basta la cookie-pista para que el proxy no desvíe al acceso (no es
+  // una sesión: la API la rechazaría). Así la prueba no gasta intentos del límite de acceso.
+  const contexto = await browser.newContext();
+  const base = new URL(test.info().project.use.baseURL ?? "http://localhost:3000");
+  await contexto.addCookies([{ name: "simap_sesion", value: "1", domain: base.hostname, path: "/" }]);
+  const page = await contexto.newPage();
+  const bloqueos: string[] = [];
+  page.on("console", (m) => {
+    if (/Content Security Policy/i.test(m.text())) bloqueos.push(m.text());
+  });
+  const respuesta = await page.goto("/esta-ruta-no-existe");
+  expect(respuesta?.status()).toBe(404);
+  await expect(page.getByRole("heading", { name: "Esta página no existe" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Ir a tu panel" })).toBeVisible();
+  expect(bloqueos).toEqual([]);
+  await page.context().close();
+});

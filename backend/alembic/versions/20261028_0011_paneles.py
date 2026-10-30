@@ -211,6 +211,8 @@ def upgrade() -> None:
 def downgrade() -> None:
     op.execute(
         "DO $$ BEGIN ALTER ROLE app_user RESET jit;"
+        " IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'job_user') THEN"
+        " ALTER ROLE job_user RESET jit; END IF;"
         " EXCEPTION WHEN insufficient_privilege THEN NULL; END $$"
     )
     op.execute("DROP VIEW v_paradas")

@@ -492,6 +492,7 @@ cualquier momento, también con la orden cerrada. El **gerente** consulta las ó
   se observa**.
 - **Pasos:** elige la **Nueva fecha** → **Adelantar**.
 - **Resultado:** *«Fecha actualizada.»* Las horas de calendario del equipo cuentan desde ese día.
+  Si alguien registra una lectura o una falla con fecha anterior, SIMAP adelanta la fecha solo.
 - **Errores habituales:** la fecha solo se puede **adelantar**, nunca atrasar ni poner en el futuro.
   Atrasarla escondería horas en las que el equipo existía y subiría la disponibilidad sin que nada
   hubiera mejorado.
@@ -713,6 +714,7 @@ En `http://<servidor>:8000/api/v1/health` aparece `"version"`.
 
 | Fecha | Versión | Cambios |
 |---|---|---|
+| 2026-10-29 | 0.10.1 | Correcciones de los indicadores del gerente (5.8). Si una lectura se confirma y después otra anterior se registra como reinicio del horómetro, las horas de la primera se recalculan: antes un mes podía perder horas y el siguiente ganarlas. Una lectura o una falla anotada con fecha anterior al alta del equipo adelanta sola desde cuándo se observa (5.8.1), así la utilización no pasa del 100 %. Las fechas y horas se muestran siempre en hora de Santo Domingo, aunque el aparato esté en otra zona. Una dirección que no existe muestra su propia página, «Esta página no existe», con un enlace al panel. |
 | 2026-10-28 | 0.10.0 | **Fase 5: paneles por rol.** Cada rol entra a su propio panel (5.8): el operario ve sus lecturas y alertas; el técnico, la cola del taller; el supervisor, lo que espera su revisión; el gerente, **disponibilidad, MTBF con su rango, MTTR y costo de repuestos** mes a mes, equipos de mayor riesgo y repuestos que más costaron; el administrador, además, el estado de la plataforma. Filtros de planta y periodo. El administrador puede adelantar desde cuándo se observa un equipo (5.8.1). Una orden predictiva cuenta su tiempo fuera de servicio desde que el equipo entra al taller. Protección reforzada del navegador y de la API, y una auditoría que recorre todas las pantallas comprobando que ninguna empresa ve datos de otra. Glosario ampliado. |
 | 2026-09-17 | 0.1.0 | Creación del proyecto: estructura base, página inicial y API de salud. |
 | 2026-09-17 | 0.1.0 | Manual reescrito a partir de la Especificación Funcional y los Casos de Uso: roles, 9 funcionalidades previstas, explicación del riesgo, FAQ y glosario. |

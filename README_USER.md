@@ -124,6 +124,9 @@ con su rango, para no fiarse de una cifra con pocas fallas detrás), **tiempo me
 planta y por periodo, y si una sección falla, el resto del panel sigue funcionando. Ver la sección
 5.8 del manual.
 
+Las fechas y horas se muestran siempre en hora de Santo Domingo, aunque el teléfono o la
+computadora estén configurados en otra zona.
+
 Con las cuentas de demostración, los indicadores salen de **datos simulados**; con datos reales
 hacen falta unas semanas de uso para que digan algo.
 

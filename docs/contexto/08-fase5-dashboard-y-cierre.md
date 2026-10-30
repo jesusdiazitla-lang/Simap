@@ -458,9 +458,20 @@ predictiva desde el taller). Hecho en este repositorio con la marca *[Actualizad
 | Dependencias | — | `python-jose` sustituido por **PyJWT 2.15.0** y `python-dotenv` 1.2.2; `npm audit fix` (zod, fast-uri) | `pip-audit` y `npm audit` encontraron avisos; `python-jose` tenía avisos sin versión corregida |
 | Fronteras de módulos | `fronteras.py` con `ast` | `import-linter` (capas) en el backend y `dependency-cruiser` en el frontend, ya en CI desde la fase 1 | Misma garantía, ya existente |
 
+### Correcciones de la revisión del 2026-10-29 (revisión 0012, versión 0.10.1)
+
+| Hallazgo | Corrección | Prueba |
+|---|---|---|
+| Un reinicio resuelto después de confirmar una lectura posterior dejaba esa lectura con las horas de la escala vieja | Trigger AFTER `lectura_reinicio_propaga`: recalcula las lecturas válidas hasta el reinicio siguiente; el trigger de horas recalcula en todo UPDATE | `test_reinicio_resuelto_despues_recalcula_las_lecturas_posteriores` |
+| `activos.creado_en` podía quedar después de lecturas o fallas capturadas hasta 14 días atrás (224 y 97 equipos en la base de desarrollo) | Trigger `activo_observado_desde` en lecturas y órdenes; relleno en la migración (0 y 0 después) | `test_dato_anterior_al_alta_adelanta_desde_cuando_se_observa` |
+| La 404 de Next trae estilos en línea que la CSP bloquea (10.2) | `src/app/not-found.tsx` solo con clases | `test_10_2_pagina_404_propia_sin_violaciones_de_csp` |
+| El recorrido de rutas mandaba `{}`: 422 con los dos ids sin intentar la escritura (11.3) | `CUERPOS` con un cuerpo válido por ruta y prueba guardiana; un 422 con el id inexistente es hallazgo | Sabotaje: sin RLS en `ordenes_trabajo`, el recorrido falla |
+| `fechaHora` usaba la zona del navegador (10.3) | `ZONA` en `src/lib/formato.ts`, también en el reloj del marco y la bitácora del operador | Revisión de código |
+| El downgrade de la 0011 no restablecía el JIT de `job_user` | `ALTER ROLE job_user RESET jit` si el rol existe | Migraciones bajadas y subidas |
+
 ### Dónde está cada cosa
 
-- Migración: `backend/alembic/versions/20261028_0011_paneles.py`; JIT: `backend/db/roles.sql`.
+- Migración: `backend/alembic/versions/20261028_0011_paneles.py` y `20261029_0012_horas_y_observacion_coherentes.py`; JIT: `backend/db/roles.sql`.
 - Cálculo: `app/services/paneles/indicadores.py`; ensamblador: `ensamblador.py`; consultas:
   `consultas.py`; widgets por rol: `widgets.py`; rutas: `app/api/v1/routes/paneles.py`.
 - Cabeceras: `app/core/seguridad_http.py`; corrección del cierre: `ordenes_estados.inicio_de_parada`.

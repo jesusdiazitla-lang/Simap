@@ -14,8 +14,10 @@
 
 import { useSyncExternalStore, type ReactNode } from "react";
 
+import { ZONA } from "@/lib/formato";
+
 /** Versión que se muestra en la barra de estado. Coincide con la del manual de usuario. */
-const VERSION = "0.10.0";
+const VERSION = "0.10.1";
 
 interface MarcoProps {
   /** Lo que el usuario tiene delante. */
@@ -208,9 +210,9 @@ export function FechaHora() {
   const ahora = new Date(minuto * 60_000);
   return (
     <span className="hidden min-w-[9.5rem] text-right text-[0.8125rem] text-texto-tenue md:block">
-      {ahora.toLocaleDateString("es-DO", { day: "2-digit", month: "2-digit", year: "numeric" })}
+      {ahora.toLocaleDateString("es-DO", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: ZONA })}
       {" · "}
-      {ahora.toLocaleTimeString("es-DO", { hour: "2-digit", minute: "2-digit" })}
+      {ahora.toLocaleTimeString("es-DO", { hour: "2-digit", minute: "2-digit", timeZone: ZONA })}
     </span>
   );
 }

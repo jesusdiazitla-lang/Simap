@@ -8,6 +8,7 @@
  */
 
 import { llamar } from "@/lib/api";
+import { ZONA } from "@/lib/formato";
 import { dinero } from "@/lib/inventario";
 
 export type EstadoWidget = "ok" | "degradado";
@@ -214,7 +215,6 @@ export function listarPlantas(signal?: AbortSignal): Promise<readonly string[]> 
 // --- Formato (10.3) -------------------------------------------------------------------------------
 
 const LOCAL = "es-DO";
-const ZONA = "America/Santo_Domingo";
 export const VACIO = "—";
 
 /** 0.9972 → «99.7 %». Una razón sin denominador no es 100 %: «sin datos». */
